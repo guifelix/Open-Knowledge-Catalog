@@ -301,7 +301,7 @@ impl RepositoryIndex {
         }
 
         if let Some(types) = types {
-            if types.first().is_some() {
+            if !types.is_empty() {
                 let placeholders: Vec<String> = (0..types.len())
                     .map(|i| format!("?{}", param_values.len() + 1 + i))
                     .collect();

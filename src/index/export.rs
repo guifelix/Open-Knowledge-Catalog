@@ -11,6 +11,7 @@ impl RepositoryIndex {
     ///
     /// Each entry contains: path, title, type, description, tags,
     /// headings, body_text, links, and front-matter custom fields.
+    #[allow(dead_code)]
     pub fn export_to_json(&self) -> Result<serde_json::Value, anyhow::Error> {
         let mut stmt = self.conn.prepare(
             "SELECT path, title, type, description, body_text, file_size, modified_at, parse_status
@@ -67,9 +68,8 @@ impl RepositoryIndex {
                 })?
                 .filter_map(|r| r.ok())
                 .collect();
-            doc.as_object_mut().map(|m| {
-                m.insert("headings".to_string(), serde_json::json!(headings))
-            });
+            doc.as_object_mut()
+                .map(|m| m.insert("headings".to_string(), serde_json::json!(headings)));
 
             // Attach metadata custom fields
             let mut m_stmt = self.conn.prepare(
@@ -81,13 +81,15 @@ impl RepositoryIndex {
                 .query_map(params![&path], |r| {
                     let key: String = r.get(0)?;
                     let val: String = r.get(1)?;
-                    Ok((key, serde_json::from_str(&val).unwrap_or(serde_json::Value::String(val))))
+                    Ok((
+                        key,
+                        serde_json::from_str(&val).unwrap_or(serde_json::Value::String(val)),
+                    ))
                 })?
                 .filter_map(|r| r.ok())
                 .collect();
-            doc.as_object_mut().map(|m| {
-                m.insert("custom".to_string(), serde_json::Value::Object(custom))
-            });
+            doc.as_object_mut()
+                .map(|m| m.insert("custom".to_string(), serde_json::Value::Object(custom)));
 
             // Attach links
             let mut l_stmt = self.conn.prepare(
@@ -107,9 +109,8 @@ impl RepositoryIndex {
                 })?
                 .filter_map(|r| r.ok())
                 .collect();
-            doc.as_object_mut().map(|m| {
-                m.insert("links".to_string(), serde_json::json!(links))
-            });
+            doc.as_object_mut()
+                .map(|m| m.insert("links".to_string(), serde_json::json!(links)));
 
             docs.push(doc);
         }

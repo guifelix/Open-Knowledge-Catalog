@@ -94,8 +94,7 @@ impl RepositoryIndex {
                         ))
                     },
                 )
-                .ok()
-                .map(|(t, c)| (t, c));
+                .ok();
 
             let (title, ctype) = title.unwrap_or((None, None));
 
@@ -133,16 +132,14 @@ impl RepositoryIndex {
                     params![current_path, (effective_max_nodes - visited.len()) as i64],
                     |row| row.get::<_, String>(0),
                 ) {
-                    for row in rows {
-                        if let Ok(target) = row {
-                            if !visited.contains(&target) {
-                                edges.push(GraphEdge {
-                                    source: current_path.clone(),
-                                    target: target.clone(),
-                                    relation: "links_to".to_string(),
-                                });
-                                queue.push_back((target, depth + 1));
-                            }
+                    for target in rows.flatten() {
+                        if !visited.contains(&target) {
+                            edges.push(GraphEdge {
+                                source: current_path.clone(),
+                                target: target.clone(),
+                                relation: "links_to".to_string(),
+                            });
+                            queue.push_back((target, depth + 1));
                         }
                     }
                 }
@@ -158,16 +155,14 @@ impl RepositoryIndex {
                     params![current_path, (effective_max_nodes - visited.len()) as i64],
                     |row| row.get::<_, String>(0),
                 ) {
-                    for row in rows {
-                        if let Ok(source) = row {
-                            if !visited.contains(&source) {
-                                edges.push(GraphEdge {
-                                    source: source.clone(),
-                                    target: current_path.clone(),
-                                    relation: "linked_from".to_string(),
-                                });
-                                queue.push_back((source, depth + 1));
-                            }
+                    for source in rows.flatten() {
+                        if !visited.contains(&source) {
+                            edges.push(GraphEdge {
+                                source: source.clone(),
+                                target: current_path.clone(),
+                                relation: "linked_from".to_string(),
+                            });
+                            queue.push_back((source, depth + 1));
                         }
                     }
                 }

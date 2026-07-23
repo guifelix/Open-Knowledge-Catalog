@@ -39,11 +39,13 @@ impl GraphStore for SqliteGraphStore {
 
     fn store_links(&self, source_path: &str, links: &[Link]) -> Result<()> {
         let mut conn = self.conn.lock().unwrap();
-        let source_id = conn.query_row(
-            "SELECT id FROM documents WHERE path = ?1",
-            params![source_path],
-            |row| row.get::<_, i64>(0),
-        ).optional()?;
+        let source_id = conn
+            .query_row(
+                "SELECT id FROM documents WHERE path = ?1",
+                params![source_path],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()?;
 
         let Some(source_id) = source_id else {
             return Ok(());
@@ -168,8 +170,7 @@ impl GraphStore for SqliteGraphStore {
                         ))
                     },
                 )
-                .ok()
-                .map(|(t, c)| (t, c));
+                .ok();
 
             let (title, ctype) = title.unwrap_or((None, None));
 
@@ -198,16 +199,14 @@ impl GraphStore for SqliteGraphStore {
                 params![current_path, (max_nodes - visited.len()) as i64],
                 |row| row.get::<_, String>(0),
             ) {
-                for row in rows {
-                    if let Ok(target) = row {
-                        if !visited.contains(&target) {
-                            edges.push(GraphEdge {
-                                source: current_path.clone(),
-                                target: target.clone(),
-                                relation: "links_to".to_string(),
-                            });
-                            queue.push_back((target, depth + 1));
-                        }
+                for target in rows.flatten() {
+                    if !visited.contains(&target) {
+                        edges.push(GraphEdge {
+                            source: current_path.clone(),
+                            target: target.clone(),
+                            relation: "links_to".to_string(),
+                        });
+                        queue.push_back((target, depth + 1));
                     }
                 }
             }
@@ -221,10 +220,13 @@ impl GraphStore for SqliteGraphStore {
                 LIMIT ?2
                 "#,
             )?;
-            let rows: Vec<String> = stmt.query_map(
-                params![current_path, (max_nodes - visited.len()) as i64],
-                |row| row.get::<_, String>(0),
-            )?.filter_map(|r| r.ok()).collect();
+            let rows: Vec<String> = stmt
+                .query_map(
+                    params![current_path, (max_nodes - visited.len()) as i64],
+                    |row| row.get::<_, String>(0),
+                )?
+                .filter_map(|r| r.ok())
+                .collect();
 
             for source in rows {
                 if !visited.contains(&source) {
@@ -273,9 +275,8 @@ impl GraphStore for SqliteGraphStore {
         }
 
         // Scan errors
-        let mut stmt = conn.prepare(
-            "SELECT path, stage, message, line FROM scan_errors ORDER BY path"
-        )?;
+        let mut stmt =
+            conn.prepare("SELECT path, stage, message, line FROM scan_errors ORDER BY path")?;
         for row in stmt.query_map([], |row| {
             Ok(ValidationIssue {
                 path: row.get(0)?,

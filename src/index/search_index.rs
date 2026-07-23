@@ -54,10 +54,7 @@ impl SearchIndex for SqliteSearchIndex {
 
     fn remove_document(&self, path: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "DELETE FROM document_search WHERE path = ?1",
-            params![path],
-        )?;
+        conn.execute("DELETE FROM document_search WHERE path = ?1", params![path])?;
         Ok(())
     }
 
@@ -68,11 +65,12 @@ impl SearchIndex for SqliteSearchIndex {
             "SELECT ds.path, ds.title, d.type, ds.rank, ds.body
              FROM document_search ds
              JOIN documents d ON d.path = ds.path
-             WHERE document_search MATCH ?1"
+             WHERE document_search MATCH ?1",
         );
 
         let mut conditions = Vec::new();
-        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(escaped.clone())];
+        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> =
+            vec![Box::new(escaped.clone())];
 
         if let Some(prefix) = &filters.path_prefix {
             if !prefix.is_empty() {
@@ -170,26 +168,13 @@ impl SearchIndex for SqliteSearchIndex {
 
     fn stats(&self) -> Result<IndexStats> {
         let conn = self.conn.lock().unwrap();
-        let doc_count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM documents",
-            [],
-            |row| row.get(0),
-        )?;
-        let error_count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM scan_errors",
-            [],
-            |row| row.get(0),
-        )?;
-        let link_count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM links",
-            [],
-            |row| row.get(0),
-        )?;
-        let heading_count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM headings",
-            [],
-            |row| row.get(0),
-        )?;
+        let doc_count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM documents", [], |row| row.get(0))?;
+        let error_count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM scan_errors", [], |row| row.get(0))?;
+        let link_count: i64 = conn.query_row("SELECT COUNT(*) FROM links", [], |row| row.get(0))?;
+        let heading_count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM headings", [], |row| row.get(0))?;
 
         Ok(IndexStats {
             document_count: doc_count as usize,

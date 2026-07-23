@@ -31,9 +31,7 @@ const SIZES: &[usize] = &[10, 50, 200];
 // ---------------------------------------------------------------------------
 
 fn generate_docs(root: &Path, count: usize) {
-    let types = [
-        "Metric", "Policy", "Dataset", "Glossary", "Guide",
-    ];
+    let types = ["Metric", "Policy", "Dataset", "Glossary", "Guide"];
     let tag_sets: &[&[&str]] = &[
         &["finance", "executive"],
         &["security", "compliance"],
@@ -42,9 +40,21 @@ fn generate_docs(root: &Path, count: usize) {
         &["product", "design"],
     ];
     let words = [
-        "metric", "revenue", "policy", "compliance", "dataset", "glossary",
-        "architecture", "design", "performance", "security", "optimization",
-        "analysis", "report", "dashboard", "workflow",
+        "metric",
+        "revenue",
+        "policy",
+        "compliance",
+        "dataset",
+        "glossary",
+        "architecture",
+        "design",
+        "performance",
+        "security",
+        "optimization",
+        "analysis",
+        "report",
+        "dashboard",
+        "workflow",
     ];
 
     for i in 0..count {
@@ -52,9 +62,7 @@ fn generate_docs(root: &Path, count: usize) {
         let tags = tag_sets[i % tag_sets.len()];
         let title = format!("{} {}", ct, i);
 
-        let link_indices: Vec<usize> = (0..3)
-            .map(|j| (i + j + 1) % count)
-            .collect();
+        let link_indices: Vec<usize> = (0..3).map(|j| (i + j + 1) % count).collect();
 
         let mut content = String::new();
         content.push_str("---\n");
@@ -71,10 +79,7 @@ fn generate_docs(root: &Path, count: usize) {
         content.push_str(&format!("priority: \"P{}\"\n", i % 5 + 1));
         content.push_str("---\n\n");
         content.push_str(&format!("# {}\n\n", title));
-        content.push_str(&format!(
-            "This is the definition of {}. ",
-            ct
-        ));
+        content.push_str(&format!("This is the definition of {}. ", ct));
         content.push_str(&format!(
             "Every {} has associated {} metrics and {} analysis. ",
             ct,
@@ -102,10 +107,7 @@ fn generate_docs(root: &Path, count: usize) {
         }
 
         content.push_str("\n## Notes\n\n");
-        content.push_str(&format!(
-            "Additional notes for {}. ",
-            title
-        ));
+        content.push_str(&format!("Additional notes for {}. ", title));
         content.push_str("See the architecture document for more details.\n");
 
         let filename = format!("doc_{}.md", i);
@@ -215,26 +217,16 @@ fn bench_search(c: &mut Criterion) {
         let setup = setup_scanned(size);
 
         // Full-text term search -- "dashboard" appears in every doc
-        group.bench_with_input(
-            BenchmarkId::new("term_dashboard", size),
-            &size,
-            |b, &_| {
-                b.iter(|| {
-                    black_box(
-                        setup
-                            .service
-                            .search(
-                                black_box("dashboard"),
-                                None,
-                                None,
-                                None,
-                                black_box(100),
-                            )
-                            .expect("search"),
-                    );
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("term_dashboard", size), &size, |b, &_| {
+            b.iter(|| {
+                black_box(
+                    setup
+                        .service
+                        .search(black_box("dashboard"), None, None, None, black_box(100))
+                        .expect("search"),
+                );
+            });
+        });
 
         // Search with type filter
         let metric = "Metric".to_string();
@@ -262,26 +254,22 @@ fn bench_search(c: &mut Criterion) {
 
         // Search with tag filter
         let tags = vec!["security".to_string(), "compliance".to_string()];
-        group.bench_with_input(
-            BenchmarkId::new("term_tag_filter", size),
-            &size,
-            |b, &_| {
-                b.iter(|| {
-                    black_box(
-                        setup
-                            .service
-                            .search(
-                                black_box("dashboard"),
-                                None,
-                                None,
-                                Some(black_box(&tags)),
-                                black_box(100),
-                            )
-                            .expect("search"),
-                    );
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("term_tag_filter", size), &size, |b, &_| {
+            b.iter(|| {
+                black_box(
+                    setup
+                        .service
+                        .search(
+                            black_box("dashboard"),
+                            None,
+                            None,
+                            Some(black_box(&tags)),
+                            black_box(100),
+                        )
+                        .expect("search"),
+                );
+            });
+        });
     }
     group.finish();
 }
@@ -295,46 +283,33 @@ fn bench_document(c: &mut Criterion) {
         let doc_path = &setup.first_doc;
 
         // get_document with metadata + headings only
-        let includes: Vec<String> =
-            vec!["metadata".to_string(), "headings".to_string()];
-        group.bench_with_input(
-            BenchmarkId::new("get_document", size),
-            &size,
-            |b, &_| {
-                b.iter(|| {
-                    black_box(
-                        setup
-                            .service
-                            .get_document(
-                                black_box(doc_path),
-                                black_box(&includes),
-                                black_box(5000),
-                            )
-                            .expect("get_document"),
-                    );
-                });
-            },
-        );
+        let includes: Vec<String> = vec!["metadata".to_string(), "headings".to_string()];
+        group.bench_with_input(BenchmarkId::new("get_document", size), &size, |b, &_| {
+            b.iter(|| {
+                black_box(
+                    setup
+                        .service
+                        .get_document(black_box(doc_path), black_box(&includes), black_box(5000))
+                        .expect("get_document"),
+                );
+            });
+        });
 
         // get_section for "Key Metrics"
-        group.bench_with_input(
-            BenchmarkId::new("get_section", size),
-            &size,
-            |b, &_| {
-                b.iter(|| {
-                    black_box(
-                        setup
-                            .service
-                            .get_section(
-                                black_box(doc_path),
-                                black_box("Key Metrics"),
-                                black_box(2000),
-                            )
-                            .expect("get_section"),
-                    );
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("get_section", size), &size, |b, &_| {
+            b.iter(|| {
+                black_box(
+                    setup
+                        .service
+                        .get_section(
+                            black_box(doc_path),
+                            black_box("Key Metrics"),
+                            black_box(2000),
+                        )
+                        .expect("get_section"),
+                );
+            });
+        });
     }
     group.finish();
 }
@@ -348,58 +323,46 @@ fn bench_graph(c: &mut Criterion) {
         let doc_path = &setup.first_doc;
 
         // get_links
-        group.bench_with_input(
-            BenchmarkId::new("get_links", size),
-            &size,
-            |b, &_| {
-                b.iter(|| {
-                    black_box(
-                        setup
-                            .service
-                            .get_links(black_box(doc_path))
-                            .expect("get_links"),
-                    );
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("get_links", size), &size, |b, &_| {
+            b.iter(|| {
+                black_box(
+                    setup
+                        .service
+                        .get_links(black_box(doc_path))
+                        .expect("get_links"),
+                );
+            });
+        });
 
         // get_backlinks
-        group.bench_with_input(
-            BenchmarkId::new("get_backlinks", size),
-            &size,
-            |b, &_| {
-                b.iter(|| {
-                    black_box(
-                        setup
-                            .service
-                            .get_backlinks(black_box(doc_path), black_box(50))
-                            .expect("get_backlinks"),
-                    );
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("get_backlinks", size), &size, |b, &_| {
+            b.iter(|| {
+                black_box(
+                    setup
+                        .service
+                        .get_backlinks(black_box(doc_path), black_box(50))
+                        .expect("get_backlinks"),
+                );
+            });
+        });
 
         // traverse_graph with default relations
         let relations: Vec<String> = vec!["*".to_string()];
-        group.bench_with_input(
-            BenchmarkId::new("traverse", size),
-            &size,
-            |b, &_| {
-                b.iter(|| {
-                    black_box(
-                        setup
-                            .service
-                            .traverse(
-                                black_box(doc_path),
-                                black_box(&relations),
-                                black_box(3),
-                                black_box(50),
-                            )
-                            .expect("traverse"),
-                    );
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("traverse", size), &size, |b, &_| {
+            b.iter(|| {
+                black_box(
+                    setup
+                        .service
+                        .traverse(
+                            black_box(doc_path),
+                            black_box(&relations),
+                            black_box(3),
+                            black_box(50),
+                        )
+                        .expect("traverse"),
+                );
+            });
+        });
     }
     group.finish();
 }
@@ -443,15 +406,11 @@ fn bench_export(c: &mut Criterion) {
     for &size in SIZES {
         let setup = setup_scanned(size);
 
-        group.bench_with_input(
-            BenchmarkId::new("export_to_json", size),
-            &size,
-            |b, &_| {
-                b.iter(|| {
-                    black_box(setup.service.export_to_json().expect("export"));
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("export_to_json", size), &size, |b, &_| {
+            b.iter(|| {
+                black_box(setup.service.export_to_json().expect("export"));
+            });
+        });
     }
     group.finish();
 }

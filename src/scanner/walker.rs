@@ -34,7 +34,7 @@ impl Scanner {
                 }
 
                 let root_clone = root.clone();
-                let _ = builder.build_parallel().run(|| {
+                builder.build_parallel().run(|| {
                     let tx = tx.clone();
                     let root_clone = root_clone.clone();
                     Box::new(move |entry| {

@@ -18,7 +18,7 @@ use crate::scanner::walker::Scanner;
 pub struct RepositoryIndex {
     pub(crate) conn: Connection,
     pub(crate) graph_store: Option<SqliteGraphStore>,
-    pub(crate)     config: OkcConfig,
+    pub(crate) config: OkcConfig,
 }
 
 impl RepositoryIndex {
@@ -340,7 +340,6 @@ impl RepositoryIndex {
             .collect::<Result<Vec<_>, _>>()?;
         Ok(records)
     }
-
 }
 
 fn parse_status_to_str(status: &ParseStatus) -> &'static str {

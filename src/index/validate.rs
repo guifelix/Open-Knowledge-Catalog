@@ -65,7 +65,12 @@ impl RepositoryIndex {
         let mut seen_concepts: HashMap<(String, String), String> = HashMap::new();
 
         for path in &paths {
-            let abs_path = self.config.roots.iter().map(|root| root.join(path)).find(|p| p.exists());
+            let abs_path = self
+                .config
+                .roots
+                .iter()
+                .map(|root| root.join(path))
+                .find(|p| p.exists());
 
             let abs_path = match abs_path {
                 Some(p) => p,
