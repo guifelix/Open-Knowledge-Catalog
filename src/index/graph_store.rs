@@ -297,8 +297,7 @@ impl GraphStore for SqliteGraphStore {
 
         let mut graph: std::collections::HashMap<String, Vec<String>> =
             std::collections::HashMap::new();
-        let mut nodes: std::collections::HashSet<String> =
-            std::collections::HashSet::new();
+        let mut nodes: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         let mut stmt = conn.prepare(
             "SELECT d.path, l.target_path
@@ -311,7 +310,10 @@ impl GraphStore for SqliteGraphStore {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })? {
             let (source, target) = row?;
-            graph.entry(source.clone()).or_default().push(target.clone());
+            graph
+                .entry(source.clone())
+                .or_default()
+                .push(target.clone());
             nodes.insert(source);
             nodes.insert(target);
         }
@@ -350,8 +352,8 @@ impl GraphStore for SqliteGraphStore {
                     }
                     1 => {
                         if let Some(cycle_start) = path.iter().position(|n| *n == neighbor) {
-                            let cycle: Vec<&str> = path[cycle_start..]
-                                .iter().map(|s| s.as_str()).collect();
+                            let cycle: Vec<&str> =
+                                path[cycle_start..].iter().map(|s| s.as_str()).collect();
                             issues.push(ValidationIssue {
                                 path: node.clone(),
                                 severity: "warning".to_string(),

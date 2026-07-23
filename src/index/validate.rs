@@ -71,7 +71,10 @@ impl RepositoryIndex {
         let checks: Vec<CheckResult> = CHECKS
             .iter()
             .map(|name| {
-                let count = issues.iter().filter(|i| i.category.as_str() == *name).count();
+                let count = issues
+                    .iter()
+                    .filter(|i| i.category.as_str() == *name)
+                    .count();
                 CheckResult {
                     check_name: name.to_string(),
                     status: if count == 0 {
@@ -287,8 +290,6 @@ impl RepositoryIndex {
                     .or_default()
                     .push(path.clone());
             }
-
-
         }
 
         for (hash, dup_paths) in &seen_hashes {
@@ -334,10 +335,9 @@ impl RepositoryIndex {
             Err(_) => return self.validate_files(),
         };
 
-        let current: HashMap<String, String> = match stmt
-            .query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            }) {
+        let current: HashMap<String, String> = match stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        }) {
             Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
             Err(_) => return self.validate_files(),
         };
