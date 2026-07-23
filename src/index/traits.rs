@@ -68,6 +68,7 @@ pub trait GraphStore: Send + Sync {
     fn get_backlinks(&self, path: &str, limit: usize) -> Result<Vec<LinkInfo>>;
     fn traverse(&self, start: &str, relations: &[String], max_depth: usize, max_nodes: usize) -> Result<TraverseResponse>;
     fn validate_links(&self) -> Result<Vec<ValidationIssue>>;
+    fn detect_circular_references(&self) -> Result<Vec<ValidationIssue>>;
 }
 
 #[derive(Debug, Clone)]

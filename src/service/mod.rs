@@ -92,6 +92,10 @@ impl OkcService {
         self.index.validate()
     }
 
+    pub fn validate_report(&self) -> Result<ValidationReport, anyhow::Error> {
+        self.index.validate_report()
+    }
+
     #[allow(dead_code)]
     pub fn get_recently_modified(
         &self,
