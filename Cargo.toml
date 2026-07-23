@@ -1,0 +1,55 @@
+[package]
+name = "open-knowledge-catalog"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Filesystem traversal
+ignore = "0.4"
+
+# Front-matter boundary detection
+memchr = "2"
+
+# Serialization / YAML
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+saphyr = "0.0.11"
+
+# Markdown parsing
+pulldown-cmark = { version = "0.13", default-features = false }
+
+# Storage
+rusqlite = { version = "0.34", features = ["bundled"] }
+
+# Content hashing
+blake3 = "1"
+
+# MCP / Async
+rmcp = { version = "0.1", features = ["server", "transport-child-process", "macros"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "process"] }
+tokio-util = "0.7"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Schema generation for MCP
+schemars = { version = "1", features = ["preserve_order"] }
+
+# Path handling
+camino = "1"
+
+[dev-dependencies]
+tempfile = "3"
+proptest = "1"
+libfuzzer-sys = "0.4"
+
+# Fuzz targets moved to `cargo fuzz` workflow (run with `cargo fuzz run`)
+# fuzz/frontmatter_extraction.rs, fuzz/yaml_parsing.rs, fuzz/path_normalization.rs
