@@ -1,1023 +1,517 @@
+# Open Knowledge Catalog (OKF)
 
-# Open Knowledge Catalog
+A local-first tool that allows AI agents to safely browse, parse, search, and reason over an Open Knowledge Format (OKF) repository.
 
-Here is a practical implementation plan.
+## Overview
 
-Implementation Plan: OKF Repository Tool for AI Agents
+The Open Knowledge Catalog transforms a filesystem-based collection of Markdown documents with YAML front matter into a structured, searchable knowledge base that AI agents can query through a small set of deterministic operations.
 
-1. Objective
+### Why This Tool?
 
-Build a local-first tool that allows an AI agent to safely browse, parse, search, and reason over an Open Knowledge Format repository.
+OKF gives knowledge a portable, human-readable representation, but it doesn't provide fast retrieval, structured querying, validation, or an AI tool interface. Without a dedicated tool, an AI agent would need to:
 
-The tool will treat an OKF repository as a collection of Markdown documents containing:
+- Recursively inspect the filesystem
+- Open many files individually
+- Repeatedly parse front matter
+- Search raw Markdown text
+- Resolve relative links
+- Infer directory structure
+- Manage its own context limits
 
-- YAML front matter
-- Markdown content
-- directory hierarchy
-- links between documents
-- optional directory-level "index.md" files
+This tool moves those responsibilities into deterministic software, giving the AI a controlled view:
 
-The tool will convert this filesystem-based knowledge into a structured, searchable representation that an AI can query through a small set of deterministic operations.
+```
+OKF files → scanner & parser → structured index → bounded AI tool calls → relevant source context → AI answer
+```
 
-The tool is not intended to generate answers itself. Its purpose is to retrieve accurate, bounded, source-backed context that an AI model can use to answer questions.
+### Benefits
 
-2. What the Tool Does
+- **Performance**: Repository parsed once, updated incrementally; unchanged files skipped
+- **Accuracy**: YAML metadata queried as structured data, not plain text search
+- **Context Efficiency**: AI receives only relevant metadata, headings, excerpts, or sections
+- **Navigability**: Directory hierarchy supports progressive disclosure; document graph supports link-following
+- **Safety**: Restricts accessible directories, file types, sizes, traversal depth, output size
+- **Source Traceability**: Every result includes repository path and source location
 
-The tool will:
+## Features
 
-1. Walk one or more approved repository directories.
-2. Discover Markdown files.
-3. Extract and parse YAML front matter.
-4. Parse Markdown headings and links.
-5. Build a directory hierarchy.
-6. Build a graph of relationships between documents.
-7. Index metadata and textual content.
-8. Detect changed, added, and deleted files.
-9. Expose repository operations to AI agents.
-10. Return compact results with source paths and relevant excerpts.
+### Core Operations (9 AI-facing tools)
 
-The resulting system should support both deterministic queries and exploratory retrieval.
+| Operation | Purpose |
+|-----------|---------|
+| `browse_directory` | Inspect one area of the OKF hierarchy |
+| `get_document` | Retrieve one known concept with metadata, headings, and/or body |
+| `get_section` | Extract a specific Markdown section without the full document |
+| `search_documents` | Full-text search with optional path/type/tag filters |
+| `query_metadata` | Exact structured filtering on front-matter fields |
+| `get_links` | Outgoing links from a document |
+| `get_backlinks` | Documents referencing a concept |
+| `traverse_graph` | Explore related concepts via graph edges |
+| `validate_repository` | Report structural problems (broken links, malformed YAML, missing index files) |
 
-Examples of deterministic queries:
+### Supported OKF Format
 
-- Find all concepts with "type: Metric".
-- Find documents tagged "security".
-- List documents with malformed front matter.
-- Find broken Markdown links.
-- Return all backlinks to a concept.
-- List recently modified documents.
+Each document is a Markdown file with YAML front matter:
 
-Examples of exploratory queries:
-
-- Find documentation related to OAuth retries.
-- Locate the definition of monthly recurring revenue.
-- Find concepts connected to the customer orders dataset.
-- Identify the most relevant section explaining deployment rollback.
-
-3. Why This Helps in an OKF and AI Setup
-
-OKF gives knowledge a portable, human-readable representation, but it does not by itself provide fast retrieval, structured querying, validation, or an AI tool interface.
-
-Without a dedicated tool, an AI agent would need to:
-
-- recursively inspect the filesystem;
-- open many files individually;
-- repeatedly parse front matter;
-- search raw Markdown text;
-- resolve relative links;
-- infer directory structure;
-- manage its own context limits.
-
-That approach is slow, expensive, inconsistent, and difficult to secure.
-
-The proposed tool moves those responsibilities into deterministic software.
-
-Instead of asking the AI to understand the entire repository directly, the tool gives the AI a controlled view of it:
-
-OKF files
-    ↓
-scanner and parser
-    ↓
-structured index
-    ↓
-bounded AI tool calls
-    ↓
-relevant source context
-    ↓
-AI answer
-
-This improves the setup in several ways.
-
-Performance
-
-The repository is parsed once and updated incrementally. Unchanged files do not need to be reparsed for every AI request.
-
-Accuracy
-
-YAML metadata is queried as structured data instead of searched as plain text.
-
-For example, a query for:
-
-status: draft
-
-will match the actual front-matter field, not prose or examples containing the same text.
-
-Context efficiency
-
-The AI receives only relevant metadata, headings, excerpts, or sections rather than complete files or the entire repository.
-
-Navigability
-
-The directory hierarchy supports progressive browsing, while the document graph supports link-following and relationship reasoning.
-
-Safety
-
-The tool can restrict accessible directories, file types, file sizes, traversal depth, output size, and symlink handling.
-
-Source traceability
-
-Every result includes its repository path and relevant source location, allowing the AI to cite or reopen the original document.
-
-4. Core Architecture
-
-The system should have five main layers.
-
-1. Filesystem layer
-2. Parsing layer
-3. Repository model
-4. Index and storage layer
-5. AI tool interface
-
-5. Filesystem Layer
-
-The filesystem layer discovers repository files.
-
-Responsibilities:
-
-- recursively walk approved roots;
-- include Markdown files;
-- optionally respect ".gitignore";
-- skip hidden or excluded directories;
-- normalize paths;
-- enforce symlink policy;
-- collect file size and modification time;
-- detect added, changed, and deleted files.
-
-Recommended Rust libraries:
-
-- "ignore" for repository traversal and ignore-file support;
-- "notify" for filesystem watching in a long-running process.
-
-The initial implementation does not need a watcher. A scan-on-start strategy with incremental comparison is sufficient.
-
-Each discovered file should produce a record similar to:
-
-{
-  "path": "metrics/monthly-revenue.md",
-  "absolute_path": "/repository/metrics/monthly-revenue.md",
-  "size": 4821,
-  "modified_at": 1784214000
-}
-
-The absolute path should remain internal. AI-facing responses should normally use repository-relative paths.
-
-6. Parsing Layer
-
-6.1 Front-Matter Extraction
-
-Read only the beginning of each Markdown file until the closing front-matter delimiter is found.
-
-Expected format:
-
+```markdown
 ---
 type: Metric
 title: Monthly Revenue
+description: Recognized recurring revenue for the month
 tags:
   - finance
   - executive
+owner: Finance Analytics
+status: published
 ---
 
 # Definition
 
-The extractor should:
+Monthly Revenue represents...
 
-- support UTF-8 BOMs;
-- recognize the opening delimiter only at the beginning;
-- support "\n" and "\r\n";
-- enforce a maximum front-matter size;
-- report missing closing delimiters;
-- preserve the raw YAML for diagnostics.
+# Calculation
 
-Do not parse the entire Markdown body merely to find front matter.
+Revenue is recognized when...
+```
 
-6.2 YAML Parsing
+### Repository Structure
 
-Parse the extracted front matter into structured values.
-
-The parser should preserve custom OKF fields rather than requiring a fixed schema.
-
-A normalized document record might contain:
-
-{
-  "type": "Metric",
-  "title": "Monthly Revenue",
-  "description": "Recognized recurring revenue for the month.",
-  "tags": ["finance", "executive"],
-  "custom": {
-    "owner": "Finance Analytics",
-    "status": "published"
-  }
-}
-
-Standard fields may be promoted into dedicated columns. Unknown fields should remain available as a generic map.
-
-6.3 Markdown Parsing
-
-Parse the body only for information needed by the index.
-
-Initially extract:
-
-- headings and heading levels;
-- links;
-- plain searchable text;
-- section boundaries;
-- optional code-block exclusion.
-
-Recommended library:
-
-- "pulldown-cmark" for event-based Markdown parsing.
-
-Avoid building a full Markdown AST unless document transformation becomes a requirement.
-
-6.4 Link Resolution
-
-Resolve relative links against the source document path.
-
-For example:
-
-[Customer orders](../datasets/customer-orders.md)
-
-should become:
-
-datasets/customer-orders.md
-
-Store:
-
-- the raw link;
-- the normalized target;
-- whether the target exists;
-- optional anchor fragments;
-- external versus internal status.
-
-7. Repository Model
-
-The repository model should contain both a hierarchy and a graph.
-
-7.1 Directory Tree
-
-The tree represents filesystem containment.
-
+```
 /
-├── datasets/
+├── metrics/
 │   ├── index.md
-│   └── customer-orders.md
-└── metrics/
+│   ├── monthly-revenue.md
+│   └── customer-count.md
+└── datasets/
     ├── index.md
-    └── monthly-revenue.md
+    └── customer-orders.md
+```
 
-Use it for:
+- `index.md` files provide directory summaries (optional, configurable)
+- Relative links between documents are resolved and validated
+- Custom front-matter fields are preserved as generic metadata
 
-- browsing;
-- progressive disclosure;
-- reading directory summaries;
-- limiting searches to a subtree;
-- answering “what is under this area?” questions.
+## Installation
 
-Each directory node may include:
+### Prerequisites
 
-{
-  "path": "metrics",
-  "index_document": "metrics/index.md",
-  "child_directories": [],
-  "documents": [
-    "metrics/monthly-revenue.md"
-  ]
-}
+- Rust 1.75+ (install via [rustup](https://rustup.rs/))
+- SQLite3 development headers (usually `libsqlite3-dev` on Linux)
 
-7.2 Document Graph
+### Build from Source
 
-The graph represents relationships between concepts.
+```bash
+git clone https://github.com/your-org/open-knowledge-catalog
+cd open-knowledge-catalog
+cargo build --release
+```
 
-Initial edge types:
+The binary will be at `target/release/okf`.
 
-- "contains"
-- "parent"
-- "links_to"
-- "linked_from"
+### Install
 
-Later edge types may be derived from front matter:
+```bash
+cargo install --path .
+```
 
-- "depends_on"
-- "owned_by"
-- "implements"
-- "uses"
-- "related_to"
+Or copy the binary to your PATH:
 
-Do not infer semantic relationship types from prose in the first version. Start with explicit Markdown links and explicit metadata fields.
+```bash
+cp target/release/okf ~/.local/bin/
+```
 
-A graph edge should look like:
+## Quick Start
 
-{
-  "source": "metrics/monthly-revenue.md",
-  "target": "datasets/customer-orders.md",
-  "relation": "links_to"
-}
+### 1. Create an OKF Repository
 
-The tree and graph should coexist. The directory hierarchy should remain a first-class API even if containment is also represented as graph edges.
+```bash
+mkdir -p my-knowledge/{metrics,datasets}
+```
 
-8. Storage and Indexing
+Create `my-knowledge/metrics/monthly-revenue.md`:
 
-Use SQLite as the first storage engine.
+```markdown
+---
+type: Metric
+title: Monthly Revenue
+description: Recognized recurring revenue for the month
+tags: [finance, executive]
+owner: Finance Analytics
+status: published
+---
 
-SQLite is suitable because it provides:
+# Definition
 
-- structured metadata storage;
-- transactions;
-- incremental updates;
-- indexes;
-- JSON support;
-- full-text search through FTS5;
-- simple deployment;
-- no external service requirement.
+Monthly Revenue represents the total recognized revenue for a calendar month.
 
-Suggested tables:
+# Recognition Rules
 
-documents
-directories
-document_tags
-headings
-links
-metadata_fields
-scan_errors
+Revenue is recognized when:
+1. Service is delivered
+2. Payment is reasonably assured
+3. Amount is measurable
+```
 
-A simplified schema:
+Create `my-knowledge/datasets/customer-orders.md`:
 
-CREATE TABLE documents (
-    id INTEGER PRIMARY KEY,
-    path TEXT NOT NULL UNIQUE,
-    parent_path TEXT NOT NULL,
-    title TEXT,
-    type TEXT,
-    description TEXT,
-    body_text TEXT,
-    file_size INTEGER NOT NULL,
-    modified_at INTEGER NOT NULL,
-    content_hash TEXT,
-    parse_status TEXT NOT NULL
-);
+```markdown
+---
+type: Dataset
+title: Customer Orders
+description: Raw order data from the e-commerce platform
+tags: [sales, raw-data]
+owner: Data Engineering
+status: published
+---
 
-CREATE TABLE document_tags (
-    document_id INTEGER NOT NULL,
-    tag TEXT NOT NULL,
-    FOREIGN KEY(document_id) REFERENCES documents(id)
-);
+# Schema
 
-CREATE TABLE headings (
-    document_id INTEGER NOT NULL,
-    level INTEGER NOT NULL,
-    title TEXT NOT NULL,
-    anchor TEXT,
-    position INTEGER,
-    FOREIGN KEY(document_id) REFERENCES documents(id)
-);
+| Column | Type | Description |
+|--------|------|-------------|
+| order_id | string | Unique order identifier |
+| customer_id | string | Customer identifier |
+| order_date | date | Date of order |
+| amount | decimal | Order total in USD |
+```
 
-CREATE TABLE links (
-    source_document_id INTEGER NOT NULL,
-    target_path TEXT,
-    target_anchor TEXT,
-    external_url TEXT,
-    exists_in_repository INTEGER NOT NULL,
-    FOREIGN KEY(source_document_id) REFERENCES documents(id)
-);
+### 2. Scan the Repository
 
-Use an FTS5 table for searchable text:
-
-CREATE VIRTUAL TABLE document_search USING fts5(
-    path,
-    title,
-    description,
-    headings,
-    body
-);
-
-Search ranking should prioritize fields roughly as follows:
-
-title        highest weight
-description
-headings
-body         lowest weight
-
-SIMDJSON is not needed. It parses JSON quickly but does not provide search or indexing.
-
-9. Incremental Indexing
-
-The first scan processes every Markdown file.
-
-Subsequent scans should compare:
-
-- repository-relative path;
-- modification time;
-- file size.
-
-If these values are unchanged, skip parsing.
-
-For stronger correctness, calculate a content hash only when modification time or size changes.
-
-Incremental update process:
-
-discover current files
-    ↓
-compare with stored file records
-    ↓
-parse new and modified files
-    ↓
-delete records for removed files
-    ↓
-rebuild affected links and search entries
-
-Do not rebuild the complete database after every change.
-
-10. AI Tool Interface
-
-Expose a small number of high-level operations.
-
-The AI should not receive unrestricted shell or filesystem access through this tool.
-
-10.1 "browse_directory"
-
-Purpose: Inspect one area of the OKF hierarchy.
-
-Input:
-
-{
-  "path": "metrics",
-  "depth": 1,
-  "limit": 50
-}
+```bash
+okf scan --root my-knowledge
+```
 
 Output:
+```
+Scan complete:
+  Total files: 2
+  Added: 2
+  Modified: 0
+  Deleted: 0
+  Parse failures: 0
+  Broken links: 0
+  Total links: 0
+  Duration: 0.01s
+```
 
-{
-  "path": "metrics",
-  "summary_document": "metrics/index.md",
-  "directories": [],
-  "documents": [
-    {
-      "path": "metrics/monthly-revenue.md",
-      "title": "Monthly Revenue",
-      "type": "Metric",
-      "description": "Recognized recurring revenue for the month."
-    }
-  ],
-  "truncated": false
-}
+This creates `okf_index.db` in the current directory (configurable via `--db-path`).
 
-10.2 "get_document"
+### 3. Query the Knowledge Base
 
-Purpose: Retrieve one known concept.
+```bash
+# Browse the hierarchy
+okf browse
 
-Input:
+# Browse a specific directory
+okf browse metrics --depth 1
 
-{
-  "path": "metrics/monthly-revenue.md",
-  "include": [
-    "metadata",
-    "headings",
-    "body"
-  ],
-  "max_body_chars": 12000
-}
+# Search for concepts
+okf search "revenue recognition"
 
-The response should clearly report truncation.
+# Get a document
+okf get metrics/monthly-revenue.md --include metadata,headings,body
 
-10.3 "search_documents"
+# Extract a specific section
+okf section metrics/monthly-revenue.md "Recognition Rules"
 
-Purpose: Search repository content.
+# Exact metadata query
+okf metadata --filter type=Metric --filter tags_contains=finance --select path,title,owner
 
-Input:
+# View links
+okf links metrics/monthly-revenue.md
+okf backlinks metrics/monthly-revenue.md
 
-{
-  "query": "revenue recognition",
-  "path_prefix": "metrics",
-  "types": ["Metric", "Policy"],
-  "tags": ["finance"],
-  "limit": 20
-}
+# Traverse the graph
+okf traverse metrics/monthly-revenue.md --max-depth 2
 
-Output:
+# Validate
+okf validate
 
-{
-  "results": [
-    {
-      "path": "metrics/monthly-revenue.md",
-      "title": "Monthly Revenue",
-      "type": "Metric",
-      "score": 12.48,
-      "matching_section": "Recognition rules",
-      "excerpt": "Revenue is recognized when..."
-    }
-  ],
-  "total_matches": 7,
-  "truncated": false
-}
+# Statistics
+okf stats
+```
 
-10.4 "query_metadata"
+## Configuration
 
-Purpose: Perform exact structured filtering.
+### Command-Line Options
 
-Input:
+```bash
+okf --help
+```
 
-{
-  "where": {
-    "type": "Metric",
-    "status": "published",
-    "tags_contains": "finance"
-  },
-  "select": [
-    "path",
-    "title",
-    "owner"
-  ],
-  "limit": 100
-}
+Global options:
+- `--root <PATH>` - Root directory to scan (can be specified multiple times)
+- `--db-path <PATH>` - SQLite database path (default: `okf_index.db`)
+- `--config <PATH>` - Configuration file (not yet implemented)
 
-This should not use full-text search.
+### Configuration File (Planned)
 
-10.5 "get_links"
+Future versions will support a TOML config file:
 
-Purpose: Retrieve outgoing links from a document.
+```toml
+[scanner]
+roots = ["./knowledge"]
+exclude_patterns = [".git/", "node_modules/", "target/", ".env*"]
+max_file_size = 2097152          # 2 MB
+max_front_matter_size = 65536    # 64 KB
+follow_symlinks = false
 
-Input:
+[indexer]
+max_scan_results = 1000
+max_graph_depth = 5
+max_graph_nodes = 100
+max_response_chars = 500000
 
-{
-  "path": "metrics/monthly-revenue.md"
-}
+[validation]
+require_index_files = false
+```
 
-10.6 "get_backlinks"
+## Architecture
 
-Purpose: Find documents that reference a concept.
+The system has five main layers:
 
-Input:
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    AI Tool Interface                        │
+│  browse │ get │ section │ search │ filter │ links │ graph  │
+│  backlinks │ traverse │ validate                           │
+└─────────────────────────┬───────────────────────────────────┘
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   Index & Storage Layer                     │
+│  SQLite: metadata indexes, FTS5 full-text search, graph    │
+└─────────────────────────┬───────────────────────────────────┘
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     Repository Model                        │
+│  Directory tree (hierarchy) + Document graph (relationships)│
+└─────────────────────────┬───────────────────────────────────┘
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      Parsing Layer                          │
+│  Front-matter extraction │ YAML parsing │ Markdown parsing │
+│  Heading extraction │ Link resolution │ Section boundaries  │
+└─────────────────────────┬───────────────────────────────────┘
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      Filesystem Layer                       │
+│  Parallel walk (ignore crate) │ ignore-file support │      │
+│  Symlink policy │ Size/mod-time tracking │ Change detection │
+└─────────────────────────────────────────────────────────────┘
+```
 
-{
-  "path": "datasets/customer-orders.md",
-  "limit": 50
-}
+### Technology Stack
 
-10.7 "traverse_graph"
+| Layer | Library | Purpose |
+|-------|---------|---------|
+| Filesystem | `ignore` | Parallel walk with `.gitignore` support |
+| Front-matter | `memchr` + custom | Fast boundary detection, size limits |
+| YAML | `saphyr` | Serde-compatible, panic-free, source spans |
+| Markdown | `pulldown-cmark` | Streaming event parser, no heavy AST |
+| Storage | `rusqlite` (SQLite) | Metadata, FTS5, graph edges, transactions |
+| Hashing | `blake3` | Content fingerprints for incremental scans |
+| CLI | `clap` | Command-line interface |
+| Serialization | `serde` + `serde_json` | Structured I/O |
+| MCP | `rmcp` | Model Context Protocol server (planned) |
 
-Purpose: Explore related concepts.
+## Development
 
-Input:
+### Running Tests
 
-{
-  "start": "metrics/monthly-revenue.md",
-  "relations": ["links_to"],
-  "max_depth": 2,
-  "max_nodes": 30
-}
+```bash
+# Unit tests
+cargo test
+```
 
-10.8 "get_section"
+### Test Fixtures
 
-Purpose: Retrieve a specific Markdown section without returning the complete document.
+The test suite uses fixture repositories with:
+- Nested directories
+- Valid and invalid documents
+- Circular and broken links
+- Duplicate titles
+- Custom metadata
+- Modified/deleted files for incremental scan testing
 
-Input:
+### Code Structure
 
-{
-  "path": "metrics/monthly-revenue.md",
-  "heading": "Recognition rules",
-  "max_chars": 8000
-}
+```
+src/
+├── main.rs                 # CLI entry point
+├── lib.rs                  # Module declarations
+├── config.rs               # Configuration types
+├── scanner/
+│   ├── mod.rs
+│   ├── walker.rs           # Parallel filesystem walker
+│   └── changes.rs          # Incremental change detection
+├── parser/
+│   ├── mod.rs
+│   ├── frontmatter.rs      # YAML front-matter boundary extraction
+│   ├── yaml.rs             # saphyr.rs           # YAML parsing with serde
+│   ├── markdown.rs         # Heading/link/section extraction
+│   └── links.rs            # Link resolution & existence checking
+├── model/
+│   ├── mod.rs
+│   ├── document.rs         # Document, front-matter, heading, link, section
+│   ├── directory.rs        # Directory tree types
+│   └── graph.rs            # Graph edge types
+├── index/
+│   ├── mod.rs
+│   ├── database.rs         # SQLite operations, all AI tool implementations
+│   └── migrations.rs       # Schema initialization
+├── service/
+│   └── mod.rs              # High-level service facade
+└── transport/
+    ├── mod.rs
+    ├── cli.rs              # CLI command definitions
+    └── mcp.rs              # MCP server (planned)
+```
 
-This operation is particularly useful for controlling AI context size.
+## Usage with AI Agents
 
-10.9 "validate_repository"
+The tool is designed for AI agents to use via the CLI or future MCP server. Example agent workflows:
 
-Purpose: Report structural problems.
-
-Checks should include:
-
-- invalid YAML;
-- missing required metadata;
-- duplicate concept identifiers;
-- broken internal links;
-- missing directory index files, when required by local policy;
-- unsupported encoding;
-- oversized front matter;
-- malformed Markdown links.
-
-11. How an AI Would Use the Tool
-
-The AI should combine deterministic retrieval with iterative navigation.
-
-Scenario 1: Direct concept lookup
-
-User asks:
-
-«What is monthly recurring revenue?»
-
-AI process:
-
+### Direct Concept Lookup
+```
+User: "What is monthly recurring revenue?"
+Agent:
 1. search_documents("monthly recurring revenue")
-2. inspect top results
-3. get_document(best match, metadata + headings)
-4. get_section("Definition")
-5. answer with the source path
+2. get_document(best_match, include=["metadata", "headings"])
+3. get_section("Definition")
+4. Answer with source path
+```
 
-Scenario 2: Hierarchical browsing
-
-User asks:
-
-«What metrics are available for customer engagement?»
-
-AI process:
-
+### Hierarchical Browsing
+```
+User: "What metrics are available for customer engagement?"
+Agent:
 1. browse_directory("/")
-2. identify "metrics" or "engagement"
+2. Identify "metrics" directory
 3. browse_directory("metrics/engagement")
-4. inspect concept titles and descriptions
-5. open only relevant documents
-6. summarize the available metrics
+4. get_document() for relevant concepts
+5. Summarize
+```
 
-This follows OKF's progressive-disclosure model.
-
-Scenario 3: Relationship reasoning
-
-User asks:
-
-«Which datasets are used to calculate monthly revenue?»
-
-AI process:
-
+### Relationship Reasoning
+```
+User: "Which datasets are used to calculate monthly revenue?"
+Agent:
 1. search_documents("monthly revenue")
-2. select metrics/monthly-revenue.md
-3. get_links(metrics/monthly-revenue.md)
-4. inspect linked dataset concepts
-5. optionally traverse_graph(depth = 2)
-6. answer with linked sources
+2. get_links("metrics/monthly-revenue.md")
+3. Filter for dataset-type targets
+4. get_document() on each dataset
+5. Answer with linked sources
+```
 
-Scenario 4: Exact metadata query
-
-User asks:
-
-«List all published finance metrics owned by Analytics.»
-
-AI process:
-
+### Exact Metadata Query
+```
+User: "List all published finance metrics owned by Analytics."
+Agent:
 1. query_metadata({
      type: "Metric",
      status: "published",
      tags_contains: "finance",
      owner: "Analytics"
    })
-2. return the matching concepts
+2. Return matching concepts
+```
 
-No semantic search or LLM interpretation is required for this step.
-
-Scenario 5: Repository validation
-
-User asks:
-
-«Are there broken references in this knowledge repository?»
-
-AI process:
-
+### Repository Validation
+```
+User: "Are there broken references in this knowledge repository?"
+Agent:
 1. validate_repository()
-2. group broken links by source document
-3. explain the affected concepts
-
-12. AI Usage Principles
-
-The tool contract should encourage the model to:
-
-1. Browse narrowly before reading broadly.
-2. Use metadata filters for exact conditions.
-3. Use text search for lexical discovery.
-4. Follow graph links for related concepts.
-5. Retrieve individual sections instead of entire documents.
-6. Include source paths in final answers.
-7. Stop traversal when evidence is sufficient.
-
-The tool should enforce limits even when the AI requests excessive output.
-
-13. Security and Resource Limits
-
-Required protections:
-
-- fixed allowed repository roots;
-- no ".." path escape;
-- no arbitrary absolute paths;
-- configurable symlink policy;
-- maximum file size;
-- maximum front-matter size;
-- maximum number of scan results;
-- maximum graph depth;
-- maximum graph nodes;
-- maximum response characters;
-- binary-file rejection;
-- excluded secret directories;
-- read-only operation by default.
-
-Suggested excluded paths:
-
-.git/
-node_modules/
-vendor/
-target/
-.env*
-secrets/
-credentials/
-
-The exclusion policy should be configurable because some repositories may intentionally document similarly named concepts.
-
-14. Error Handling
-
-Parsing failures should not stop the complete scan.
-
-Store errors as structured records:
-
-{
-  "path": "metrics/broken.md",
-  "stage": "yaml",
-  "message": "Unexpected scalar at line 4",
-  "line": 4
-}
-
-Documents with invalid metadata may still be indexed for path and body search, but their parse status must be visible.
-
-The tool should distinguish:
-
-- unreadable file;
-- invalid UTF-8;
-- malformed front matter;
-- invalid YAML;
-- malformed Markdown;
-- unresolved link;
-- truncated content.
-
-15. Observability
-
-Track at least:
-
-- number of discovered files;
-- number of parsed files;
-- number of unchanged files skipped;
-- number of parse failures;
-- number of broken links;
-- total scan duration;
-- parsing time;
-- database update time;
-- average tool-response size;
-- search latency.
-
-This will reveal whether the actual bottleneck is filesystem access, parsing, indexing, or AI consumption.
-
-16. Development Phases
-
-Phase 1: Minimal repository reader
-
-Implement:
-
-- approved-root configuration;
-- Markdown file traversal;
-- front-matter extraction;
-- YAML parsing;
-- normalized document records;
-- basic CLI output.
-
-Deliverable:
-
-scan repository → print parsed concepts and errors
-
-Phase 2: Markdown structure
-
-Add:
-
-- heading extraction;
-- internal link extraction;
-- relative-path resolution;
-- broken-link detection;
-- directory tree construction.
-
-Deliverable:
-
-repository tree + document graph
-
-Phase 3: Persistent index
-
-Add:
-
-- SQLite schema;
-- incremental file updates;
-- metadata indexes;
-- FTS5 search;
-- deleted-file handling.
-
-Deliverable:
-
-fast repeated metadata and text queries
-
-Phase 4: AI-facing operations
-
-Expose:
-
-- "browse_directory";
-- "get_document";
-- "get_section";
-- "search_documents";
-- "query_metadata";
-- "get_links";
-- "get_backlinks";
-- "traverse_graph";
-- "validate_repository".
-
-Transport options:
-
-- MCP server;
-- local HTTP API;
-- command-line JSON interface;
-- native function calls inside an existing agent runtime.
-
-MCP is a strong default when multiple AI clients need to use the tool.
-
-Phase 5: Continuous updates
-
-Add:
-
-- filesystem watcher;
-- debounced updates;
-- partial graph rebuilding;
-- index health reporting.
-
-Phase 6: Optional advanced retrieval
-
-Only add these after measuring real retrieval failures:
-
-- fuzzy filename matching;
-- trigram search;
-- semantic embeddings;
-- reranking;
-- generated directory summaries;
-- PageIndex-style hierarchical reasoning;
-- relationship extraction from custom metadata.
-
-17. Suggested Rust Project Structure
-
-src/
-├── main.rs
-├── config.rs
-├── scanner/
-│   ├── mod.rs
-│   ├── walker.rs
-│   └── changes.rs
-├── parser/
-│   ├── mod.rs
-│   ├── frontmatter.rs
-│   ├── yaml.rs
-│   ├── markdown.rs
-│   └── links.rs
-├── model/
-│   ├── mod.rs
-│   ├── document.rs
-│   ├── directory.rs
-│   └── graph.rs
-├── index/
-│   ├── mod.rs
-│   ├── database.rs
-│   ├── metadata.rs
-│   ├── fulltext.rs
-│   └── migrations.rs
-├── service/
-│   ├── browse.rs
-│   ├── search.rs
-│   ├── documents.rs
-│   ├── graph.rs
-│   └── validation.rs
-└── transport/
-    ├── mod.rs
-    ├── mcp.rs
-    ├── http.rs
-    └── cli.rs
-
-18. Recommended Initial Technology Stack
-
-Language:             Rust
-Filesystem traversal: ignore
-File watching:         notify, later
-YAML parsing:          Serde-compatible maintained YAML parser
-Markdown parsing:      pulldown-cmark
-Storage:               SQLite
-Full-text search:      SQLite FTS5
-Serialization:         serde + serde_json
-AI transport:          MCP or JSON-based local API
-
-"serde_json" is sufficient for request and response serialization. SIMDJSON is not necessary unless benchmarks later show that parsing very large JSON payloads is a meaningful bottleneck.
-
-19. Testing Strategy
-
-Unit tests
-
-Test:
-
-- valid front matter;
-- missing closing fence;
-- BOM handling;
-- Windows line endings;
-- malformed YAML;
-- nested YAML fields;
-- heading extraction;
-- relative link resolution;
-- anchors;
-- external links;
-- path normalization.
-
-Integration tests
-
-Create fixture repositories containing:
-
-- nested directories;
-- "index.md" files;
-- valid and invalid documents;
-- circular links;
-- broken links;
-- duplicate titles;
-- custom metadata;
-- deleted and modified files.
-
-Retrieval tests
-
-Define representative AI questions and verify that the tool returns the required evidence.
-
-Examples:
-
-Question: What calculates monthly revenue?
-Expected concepts:
-- metrics/monthly-revenue.md
-- datasets/customer-orders.md
-
-These tests should evaluate retrieval results, not the final wording generated by an AI model.
-
-Performance tests
-
-Measure:
-
-- cold full scan;
-- warm incremental scan;
-- metadata-filter latency;
-- full-text search latency;
-- graph traversal latency;
-- memory usage;
-- response size.
-
-20. Definition of the First Useful Release
-
-The first useful release should:
-
-- scan an OKF repository;
-- parse YAML front matter;
-- extract headings and internal links;
-- store documents in SQLite;
-- support incremental rescans;
-- provide metadata filtering;
-- provide FTS5 text search;
-- browse directories;
-- retrieve one document or section;
-- return outgoing and incoming links;
-- validate malformed metadata and broken links;
-- expose all operations through MCP or a JSON API;
-- enforce path and output limits.
-
-It should not initially include:
-
-- embeddings;
-- vector databases;
-- LLM-generated summaries;
-- semantic relationship extraction;
-- document mutation;
-- distributed indexing;
-- custom search infrastructure.
-
-21. Final Architecture
-
-OKF repository
-    ↓
-parallel filesystem walker
-    ↓
-front-matter and Markdown parsers
-    ↓
-normalized documents
-    ├── directory hierarchy
-    ├── metadata
-    ├── headings and sections
-    └── document-link graph
-    ↓
-SQLite
-    ├── metadata indexes
-    ├── FTS5 text index
-    └── graph edges
-    ↓
-bounded AI tools
-    ├── browse
-    ├── search
-    ├── filter
-    ├── read section
-    ├── follow links
-    └── validate
-    ↓
-AI-generated answer with source paths
-
-The core design principle is simple:
-
-«Use deterministic software to discover, parse, filter, and retrieve knowledge. Use the AI only to choose retrieval steps, combine evidence, and explain the result.»
-
-This keeps the OKF repository human-readable while making it efficient, safe, and useful for AI agents.
+2. Group broken links by source document
+3. Explain affected concepts
+```
+
+## Roadmap
+
+### Phase 1 (Current) - Minimal Repository Reader
+- ✅ Filesystem traversal with ignore support
+- ✅ Front-matter extraction & YAML parsing
+- ✅ Normalized document records
+- ✅ Basic CLI output
+
+### Phase 2 - Markdown Structure
+- ✅ Heading extraction
+- ✅ Internal link extraction & resolution
+- ✅ Broken link detection
+- ✅ Directory tree construction
+
+### Phase 3 - Persistent Index
+- ✅ SQLite schema with FTS5
+- ✅ Incremental file updates
+- ✅ Metadata indexes
+- ✅ Deleted file handling
+
+### Phase 4 - AI-Facing Operations
+- ✅ browse_directory
+- ✅ get_document / get_section
+- ✅ search_documents
+- ✅ query_metadata
+- ✅ get_links / get_backlinks
+- ✅ traverse_graph
+- ✅ validate_repository
+- 🔲 MCP server transport
+
+### Phase 5 - Continuous Updates (Planned)
+- Filesystem watcher (`notify`)
+- Debounced updates
+- Partial graph rebuilding
+- Index health reporting
+
+### Phase 6 - Advanced Retrieval (Future)
+- Fuzzy filename matching
+- Trigram search
+- Semantic embeddings
+- Reranking
+- Generated directory summaries
+- PageIndex-style hierarchical reasoning
+- Relationship extraction from custom metadata
+
+## References
+
+### OKF Specification
+- [Open Knowledge Format](https://github.com/open-knowledge-format/spec) - Human-readable, git-versionable knowledge representation
+
+### Key Libraries
+- [ignore](https://github.com/BurntSushi/ripgrep/tree/master/crates/ignore) - Filesystem traversal with `.gitignore` support
+- [saphyr](https://github.com/saphyr-rs/saphyr) - YAML 1.2 parser with Serde integration
+- [pulldown-cmark](https://github.com/raphlinus/pulldown-cmark) - Streaming CommonMark parser
+- [rusqlite](https://github.com/rusqlite/rusqlite) - SQLite wrapper with FTS5 support
+- [blake3](https://github.com/BLAKE3-team/BLAKE3) - Fast cryptographic hashing
+- [clap](https://github.com/clap-rs/clap) - Command-line argument parsing
+- [rmcp](https://github.com/modelcontextprotocol/rust-sdk) - Model Context Protocol SDK
+
+### Prior Art
+- [Ripgrep](https://github.com/BurntSushi/ripgrep) - Fast search with ignore support
+- [Tantivy](https://github.com/quickwit-oss/tantivy) - Full-text search engine
+- [sqlite-fts5](https://www.sqlite.org/fts5.html) - SQLite full-text search
+- [Model Context Protocol](https://modelcontextprotocol.io/) - Standard for AI tool interfaces
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+## Contributing
+
+Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+### Development Workflow
+
+1. Fork the repository
+2. Create a feature branch
+3. Make changes with tests
+4. Run `cargo test` and `cargo clippy`
+5. Submit a pull request
+
+### Code Style
+
+- Follow Rust standard style (`rustfmt`)
+- Add tests for new functionality
+- Update documentation for user-facing changes
+
+## Support
+
+- [Issues](https://github.com/your-org/open-knowledge-catalog/issues) - Bug reports and feature requests
+- [Discussions](https://github.com/your-org/open-knowledge-catalog/discussions) - Questions and community

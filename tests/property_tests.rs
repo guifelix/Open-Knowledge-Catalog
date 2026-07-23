@@ -41,7 +41,9 @@ fn prop_relative_path_resolution(dir1: String, dir2: String, file: String) -> Te
     let source = format!("{}/{}", dir1, file);
     let target = format!("{}/{}", dir2, file);
     let result = LinkResolver::resolve(&source, &target);
-    prop_assert_eq!(result, format!("{}/{}", dir2, file));
+    // Target is resolved relative to source's parent directory (dir1/)
+    let expected = format!("{}/{}/{}", dir1, dir2, file);
+    prop_assert_eq!(result, expected);
     Ok(())
 }
 
@@ -118,15 +120,13 @@ fn prop_windows_line_endings(yaml_lines: Vec<String>, body: String) -> TestCaseR
 }
 
 fn prop_nested_path_resolution(base: String, subdirs: Vec<String>, file: String) -> TestCaseResult {
-    let source = format!("{}/{}/{}.md", base, subdirs.join("/"), file);
+    let source = format!("{}/{}/{}", base, subdirs.join("/"), file);
     let target = format!("../../other/{}", file);
     let result = LinkResolver::resolve(&source, &target);
     
-    // From "base/subdir/file.md", going up 2 levels gives "base"
-    // Then "other/file.md" gives "base/other/file.md"
-    // Wait: from "base/subdir/file.md", ".." = "base/subdir", ".." = "base"
-    // Then "other/file.md" = "base/other/file.md"
-    let expected = format!("{}/other/{}", base, file);
+    let source_path = Path::new(&source);
+    let parent = source_path.parent().unwrap_or(Path::new(""));
+    let expected = normalize_path(&parent.join(&target)).replace('\\', "/");
     prop_assert_eq!(result, expected);
     Ok(())
 }
