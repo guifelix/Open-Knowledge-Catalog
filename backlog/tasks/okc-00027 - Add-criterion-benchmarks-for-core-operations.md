@@ -1,10 +1,11 @@
 ---
 id: OKC-00027
 title: Add criterion benchmarks for core operations
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@felix'
 created_date: '2026-07-23 19:04'
-updated_date: '2026-07-23 19:04'
+updated_date: '2026-07-23 20:18'
 labels:
   - quality
 dependencies: []

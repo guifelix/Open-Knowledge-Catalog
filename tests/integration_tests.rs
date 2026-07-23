@@ -37,8 +37,10 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result
 #[test]
 fn test_direct_concept_lookup() {
     let repo = setup_simple_repo();
-    let mut config = OkcConfig::default();
-    config.roots = vec![repo.path().to_path_buf()];
+    let config = OkcConfig {
+        roots: vec![repo.path().to_path_buf()],
+        ..Default::default()
+    };
 
     let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
@@ -70,8 +72,10 @@ fn test_direct_concept_lookup() {
 #[test]
 fn test_hierarchical_browsing() {
     let repo = setup_simple_repo();
-    let mut config = OkcConfig::default();
-    config.roots = vec![repo.path().to_path_buf()];
+    let config = OkcConfig {
+        roots: vec![repo.path().to_path_buf()],
+        ..Default::default()
+    };
 
     let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
@@ -103,8 +107,10 @@ fn test_hierarchical_browsing() {
 #[test]
 fn test_relationship_reasoning() {
     let repo = setup_simple_repo();
-    let mut config = OkcConfig::default();
-    config.roots = vec![repo.path().to_path_buf()];
+    let config = OkcConfig {
+        roots: vec![repo.path().to_path_buf()],
+        ..Default::default()
+    };
 
     let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
@@ -125,8 +131,10 @@ fn test_relationship_reasoning() {
 #[test]
 fn test_exact_metadata_query() {
     let repo = setup_simple_repo();
-    let mut config = OkcConfig::default();
-    config.roots = vec![repo.path().to_path_buf()];
+    let config = OkcConfig {
+        roots: vec![repo.path().to_path_buf()],
+        ..Default::default()
+    };
 
     let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
@@ -166,9 +174,11 @@ fn test_exact_metadata_query() {
 #[test]
 fn test_repository_validation() {
     let repo = setup_edge_cases_repo();
-    let mut config = OkcConfig::default();
-    config.roots = vec![repo.path().to_path_buf()];
-    config.require_index_files = false; // We don't have index.md in edge cases
+    let config = OkcConfig {
+        roots: vec![repo.path().to_path_buf()],
+        require_index_files: false,
+        ..Default::default()
+    };
 
     let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
@@ -194,7 +204,10 @@ fn test_repository_validation() {
         .iter()
         .filter(|i| i.category == "invalid_yaml" || i.category == "invalid_frontmatter")
         .collect();
-    assert!(!invalid_yaml.is_empty(), "Should find re-validated YAML errors");
+    assert!(
+        !invalid_yaml.is_empty(),
+        "Should find re-validated YAML errors"
+    );
 
     // Should find duplicate concept identifiers
     let duplicates: Vec<_> = issues
@@ -207,10 +220,12 @@ fn test_repository_validation() {
 #[test]
 fn test_validation_oversized_frontmatter() {
     let repo = setup_edge_cases_repo();
-    let mut config = OkcConfig::default();
-    config.roots = vec![repo.path().to_path_buf()];
-    config.max_front_matter_size = 10; // Very small limit to trigger oversized check
-    config.require_index_files = false;
+    let config = OkcConfig {
+        roots: vec![repo.path().to_path_buf()],
+        max_front_matter_size: 10,
+        require_index_files: false,
+        ..Default::default()
+    };
 
     let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
@@ -227,8 +242,10 @@ fn test_validation_oversized_frontmatter() {
 #[test]
 fn test_validation_missing_metadata() {
     let repo = setup_simple_repo();
-    let mut config = OkcConfig::default();
-    config.roots = vec![repo.path().to_path_buf()];
+    let config = OkcConfig {
+        roots: vec![repo.path().to_path_buf()],
+        ..Default::default()
+    };
 
     // Create a doc with missing required metadata
     let missing_path = repo.path().join("metrics/missing-meta.md");
@@ -253,8 +270,10 @@ fn test_validation_missing_metadata() {
 #[test]
 fn test_circular_links_handled() {
     let repo = setup_edge_cases_repo();
-    let mut config = OkcConfig::default();
-    config.roots = vec![repo.path().to_path_buf()];
+    let config = OkcConfig {
+        roots: vec![repo.path().to_path_buf()],
+        ..Default::default()
+    };
 
     let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
@@ -276,8 +295,10 @@ fn test_circular_links_handled() {
 #[test]
 fn test_get_document_with_metadata() {
     let repo = setup_simple_repo();
-    let mut config = OkcConfig::default();
-    config.roots = vec![repo.path().to_path_buf()];
+    let config = OkcConfig {
+        roots: vec![repo.path().to_path_buf()],
+        ..Default::default()
+    };
 
     let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
@@ -313,8 +334,10 @@ fn test_get_document_with_metadata() {
 #[test]
 fn test_get_section() {
     let repo = setup_simple_repo();
-    let mut config = OkcConfig::default();
-    config.roots = vec![repo.path().to_path_buf()];
+    let config = OkcConfig {
+        roots: vec![repo.path().to_path_buf()],
+        ..Default::default()
+    };
 
     let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
@@ -332,8 +355,10 @@ fn test_get_section() {
 #[test]
 fn test_search_with_filters() {
     let repo = setup_simple_repo();
-    let mut config = OkcConfig::default();
-    config.roots = vec![repo.path().to_path_buf()];
+    let config = OkcConfig {
+        roots: vec![repo.path().to_path_buf()],
+        ..Default::default()
+    };
 
     let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
@@ -393,8 +418,10 @@ fn test_search_with_filters() {
 #[test]
 fn test_backlinks() {
     let repo = setup_simple_repo();
-    let mut config = OkcConfig::default();
-    config.roots = vec![repo.path().to_path_buf()];
+    let config = OkcConfig {
+        roots: vec![repo.path().to_path_buf()],
+        ..Default::default()
+    };
 
     let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
@@ -422,10 +449,11 @@ fn test_backlinks() {
 #[test]
 fn test_stats() {
     let repo = setup_simple_repo();
-    let mut config = OkcConfig::default();
-    config.roots = vec![repo.path().to_path_buf()];
-    // Use in-memory database to ensure clean state
-    config.db_path = std::path::PathBuf::from(":memory:");
+    let config = OkcConfig {
+        roots: vec![repo.path().to_path_buf()],
+        db_path: std::path::PathBuf::from(":memory:"),
+        ..Default::default()
+    };
 
     let mut service = OkcService::open(&config).unwrap();
     let scan_result = service.scan().unwrap();

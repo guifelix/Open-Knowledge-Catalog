@@ -9,8 +9,8 @@ impl LinkResolver {
         let source = Path::new(source_path);
         let parent = source.parent().unwrap_or(Path::new(""));
 
-        let resolved = if target.starts_with('/') {
-            Path::new(&target[1..]).to_path_buf()
+        let resolved = if let Some(stripped) = target.strip_prefix('/') {
+            Path::new(stripped).to_path_buf()
         } else if target.starts_with("http://")
             || target.starts_with("https://")
             || target.starts_with("mailto:")

@@ -23,7 +23,9 @@ impl SqliteDocumentStore {
             "SELECT id FROM documents WHERE path = ?1",
             params![path],
             |row| row.get::<_, i64>(0),
-        ).optional().map_err(anyhow::Error::from)
+        )
+        .optional()
+        .map_err(anyhow::Error::from)
     }
 }
 
@@ -144,21 +146,23 @@ impl DocumentStore for SqliteDocumentStore {
             "SELECT id, path, parent_path, title, type, description, body_text, file_size, modified_at, content_hash, parse_status
              FROM documents WHERE path = ?1"
         )?;
-        let doc = stmt.query_row(params![path], |row| {
-            Ok(DocumentRecord {
-                id: row.get(0)?,
-                path: row.get(1)?,
-                parent_path: row.get(2)?,
-                title: row.get(3)?,
-                concept_type: row.get(4)?,
-                description: row.get(5)?,
-                body_text: row.get(6)?,
-                file_size: row.get::<_, i64>(7)? as u64,
-                modified_at: row.get(8)?,
-                content_hash: row.get(9)?,
-                parse_status: row.get(10)?,
+        let doc = stmt
+            .query_row(params![path], |row| {
+                Ok(DocumentRecord {
+                    id: row.get(0)?,
+                    path: row.get(1)?,
+                    parent_path: row.get(2)?,
+                    title: row.get(3)?,
+                    concept_type: row.get(4)?,
+                    description: row.get(5)?,
+                    body_text: row.get(6)?,
+                    file_size: row.get::<_, i64>(7)? as u64,
+                    modified_at: row.get(8)?,
+                    content_hash: row.get(9)?,
+                    parse_status: row.get(10)?,
+                })
             })
-        }).optional()?;
+            .optional()?;
         Ok(doc)
     }
 
@@ -168,7 +172,11 @@ impl DocumentStore for SqliteDocumentStore {
         Ok(())
     }
 
-    fn list_documents(&self, path_prefix: Option<&str>, limit: usize) -> Result<Vec<DocumentRecord>> {
+    fn list_documents(
+        &self,
+        path_prefix: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<DocumentRecord>> {
         let conn = self.conn.lock().unwrap();
         let mut sql = String::from(
             "SELECT id, path, parent_path, title, type, description, body_text, file_size, modified_at, content_hash, parse_status
@@ -186,29 +194,36 @@ impl DocumentStore for SqliteDocumentStore {
         sql.push_str(&format!(" ORDER BY path LIMIT ?{}", params_vec.len() + 1));
         params_vec.push(Box::new(limit as i64));
 
-        let params_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params_vec.iter().map(|p| p.as_ref()).collect();
         let mut stmt = conn.prepare(&sql)?;
-        let docs = stmt.query_map(params_refs.as_slice(), |row| {
-            Ok(DocumentRecord {
-                id: row.get(0)?,
-                path: row.get(1)?,
-                parent_path: row.get(2)?,
-                title: row.get(3)?,
-                concept_type: row.get(4)?,
-                description: row.get(5)?,
-                body_text: row.get(6)?,
-                file_size: row.get::<_, i64>(7)? as u64,
-                modified_at: row.get(8)?,
-                content_hash: row.get(9)?,
-                parse_status: row.get(10)?,
-            })
-        })?.filter_map(|r| r.ok()).collect();
+        let docs = stmt
+            .query_map(params_refs.as_slice(), |row| {
+                Ok(DocumentRecord {
+                    id: row.get(0)?,
+                    path: row.get(1)?,
+                    parent_path: row.get(2)?,
+                    title: row.get(3)?,
+                    concept_type: row.get(4)?,
+                    description: row.get(5)?,
+                    body_text: row.get(6)?,
+                    file_size: row.get::<_, i64>(7)? as u64,
+                    modified_at: row.get(8)?,
+                    content_hash: row.get(9)?,
+                    parse_status: row.get(10)?,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
         Ok(docs)
     }
 
     fn insert_tags(&self, doc_id: i64, tags: &[String]) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM document_tags WHERE document_id = ?1", params![doc_id])?;
+        conn.execute(
+            "DELETE FROM document_tags WHERE document_id = ?1",
+            params![doc_id],
+        )?;
         for tag in tags {
             conn.execute(
                 "INSERT OR IGNORE INTO document_tags (document_id, tag) VALUES (?1, ?2)",
@@ -221,20 +236,28 @@ impl DocumentStore for SqliteDocumentStore {
     fn get_tags(&self, doc_id: i64) -> Result<Vec<String>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT tag FROM document_tags WHERE document_id = ?1")?;
-        let tags = stmt.query_map(params![doc_id], |row| row.get::<_, String>(0))?
-            .filter_map(|r| r.ok()).collect();
+        let tags = stmt
+            .query_map(params![doc_id], |row| row.get::<_, String>(0))?
+            .filter_map(|r| r.ok())
+            .collect();
         Ok(tags)
     }
 
     fn delete_tags(&self, doc_id: i64) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM document_tags WHERE document_id = ?1", params![doc_id])?;
+        conn.execute(
+            "DELETE FROM document_tags WHERE document_id = ?1",
+            params![doc_id],
+        )?;
         Ok(())
     }
 
     fn insert_headings(&self, doc_id: i64, headings: &[HeadingInfo]) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM headings WHERE document_id = ?1", params![doc_id])?;
+        conn.execute(
+            "DELETE FROM headings WHERE document_id = ?1",
+            params![doc_id],
+        )?;
         for heading in headings {
             conn.execute(
                 "INSERT INTO headings (document_id, level, title, anchor, position) VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -247,27 +270,36 @@ impl DocumentStore for SqliteDocumentStore {
     fn get_headings(&self, doc_id: i64) -> Result<Vec<HeadingInfo>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT level, title, anchor FROM headings WHERE document_id = ?1 ORDER BY position"
+            "SELECT level, title, anchor FROM headings WHERE document_id = ?1 ORDER BY position",
         )?;
-        let headings = stmt.query_map(params![doc_id], |row| {
-            Ok(HeadingInfo {
-                level: row.get::<_, i32>(0)? as u32,
-                title: row.get(1)?,
-                anchor: row.get(2)?,
-            })
-        })?.filter_map(|r| r.ok()).collect();
+        let headings = stmt
+            .query_map(params![doc_id], |row| {
+                Ok(HeadingInfo {
+                    level: row.get::<_, i32>(0)? as u32,
+                    title: row.get(1)?,
+                    anchor: row.get(2)?,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
         Ok(headings)
     }
 
     fn delete_headings(&self, doc_id: i64) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM headings WHERE document_id = ?1", params![doc_id])?;
+        conn.execute(
+            "DELETE FROM headings WHERE document_id = ?1",
+            params![doc_id],
+        )?;
         Ok(())
     }
 
     fn insert_links(&self, doc_id: i64, links: &[LinkInfo]) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM links WHERE source_document_id = ?1", params![doc_id])?;
+        conn.execute(
+            "DELETE FROM links WHERE source_document_id = ?1",
+            params![doc_id],
+        )?;
         for link in links {
             let is_external = link.external_url.is_some();
             conn.execute(
@@ -292,26 +324,39 @@ impl DocumentStore for SqliteDocumentStore {
         let mut stmt = conn.prepare(
             "SELECT target_path, target_anchor, external_url, exists_in_repository FROM links WHERE source_document_id = ?1"
         )?;
-        let links = stmt.query_map(params![doc_id], |row| {
-            Ok(LinkInfo {
-                target_path: row.get(0)?,
-                target_anchor: row.get(1)?,
-                external_url: row.get(2)?,
-                exists_in_repository: row.get::<_, i32>(3)? != 0,
-            })
-        })?.filter_map(|r| r.ok()).collect();
+        let links = stmt
+            .query_map(params![doc_id], |row| {
+                Ok(LinkInfo {
+                    target_path: row.get(0)?,
+                    target_anchor: row.get(1)?,
+                    external_url: row.get(2)?,
+                    exists_in_repository: row.get::<_, i32>(3)? != 0,
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
         Ok(links)
     }
 
     fn delete_links(&self, doc_id: i64) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM links WHERE source_document_id = ?1", params![doc_id])?;
+        conn.execute(
+            "DELETE FROM links WHERE source_document_id = ?1",
+            params![doc_id],
+        )?;
         Ok(())
     }
 
-    fn insert_metadata_fields(&self, doc_id: i64, fields: &BTreeMap<String, serde_json::Value>) -> Result<()> {
+    fn insert_metadata_fields(
+        &self,
+        doc_id: i64,
+        fields: &BTreeMap<String, serde_json::Value>,
+    ) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM metadata_fields WHERE document_id = ?1", params![doc_id])?;
+        conn.execute(
+            "DELETE FROM metadata_fields WHERE document_id = ?1",
+            params![doc_id],
+        )?;
         for (key, value) in fields {
             let val_str = serde_json::to_string(value).unwrap_or_default();
             conn.execute(
@@ -324,9 +369,8 @@ impl DocumentStore for SqliteDocumentStore {
 
     fn get_metadata_fields(&self, doc_id: i64) -> Result<BTreeMap<String, serde_json::Value>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT key, value FROM metadata_fields WHERE document_id = ?1"
-        )?;
+        let mut stmt =
+            conn.prepare("SELECT key, value FROM metadata_fields WHERE document_id = ?1")?;
         let mut fields = BTreeMap::new();
         for row in stmt.query_map(params![doc_id], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
@@ -341,7 +385,10 @@ impl DocumentStore for SqliteDocumentStore {
 
     fn delete_metadata_fields(&self, doc_id: i64) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM metadata_fields WHERE document_id = ?1", params![doc_id])?;
+        conn.execute(
+            "DELETE FROM metadata_fields WHERE document_id = ?1",
+            params![doc_id],
+        )?;
         Ok(())
     }
 
@@ -359,16 +406,18 @@ impl DocumentStore for SqliteDocumentStore {
 
     fn get_scan_errors(&self, path: &str) -> Result<Vec<ParseError>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT stage, message, line FROM scan_errors WHERE path = ?1"
-        )?;
-        let errors = stmt.query_map(params![path], |row| {
-            Ok(ParseError {
-                stage: row.get(0)?,
-                message: row.get(1)?,
-                line: row.get::<_, Option<i64>>(2)?.map(|l| l as usize),
-            })
-        })?.filter_map(|r| r.ok()).collect();
+        let mut stmt =
+            conn.prepare("SELECT stage, message, line FROM scan_errors WHERE path = ?1")?;
+        let errors = stmt
+            .query_map(params![path], |row| {
+                Ok(ParseError {
+                    stage: row.get(0)?,
+                    message: row.get(1)?,
+                    line: row.get::<_, Option<i64>>(2)?.map(|l| l as usize),
+                })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
         Ok(errors)
     }
 
@@ -378,7 +427,12 @@ impl DocumentStore for SqliteDocumentStore {
         Ok(())
     }
 
-    fn query_metadata(&self, _filters: &HashMap<String, String>, _select: &[String], _limit: usize) -> Result<MetadataQueryResponse> {
+    fn query_metadata(
+        &self,
+        _filters: &HashMap<String, String>,
+        _select: &[String],
+        _limit: usize,
+    ) -> Result<MetadataQueryResponse> {
         // Simplified implementation
         Ok(MetadataQueryResponse {
             results: vec![],
@@ -389,10 +443,13 @@ impl DocumentStore for SqliteDocumentStore {
 
     fn get_stats(&self) -> Result<IndexStats> {
         let conn = self.conn.lock().unwrap();
-        let doc_count: i64 = conn.query_row("SELECT COUNT(*) FROM documents", [], |row| row.get(0))?;
-        let error_count: i64 = conn.query_row("SELECT COUNT(*) FROM scan_errors", [], |row| row.get(0))?;
+        let doc_count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM documents", [], |row| row.get(0))?;
+        let error_count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM scan_errors", [], |row| row.get(0))?;
         let link_count: i64 = conn.query_row("SELECT COUNT(*) FROM links", [], |row| row.get(0))?;
-        let heading_count: i64 = conn.query_row("SELECT COUNT(*) FROM headings", [], |row| row.get(0))?;
+        let heading_count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM headings", [], |row| row.get(0))?;
 
         Ok(IndexStats {
             document_count: doc_count as usize,

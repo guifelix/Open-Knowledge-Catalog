@@ -93,11 +93,9 @@ impl MarkdownParser {
                         exists_in_repository: false,
                     });
                 }
-                Event::SoftBreak | Event::HardBreak => {
-                    if !in_code_block {
-                        searchable_text.push(' ');
-                        current_section_content.push(' ');
-                    }
+                Event::SoftBreak | Event::HardBreak if !in_code_block => {
+                    searchable_text.push(' ');
+                    current_section_content.push(' ');
                 }
                 _ => {}
             }

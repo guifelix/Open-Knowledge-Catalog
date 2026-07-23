@@ -1,6 +1,6 @@
+use crate::config::OkcConfig;
 use clap::Parser;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-use crate::config::OkcConfig;
 
 use crate::service::OkcService;
 use crate::transport::cli::{Cli, Command};

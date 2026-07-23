@@ -107,4 +107,9 @@ impl OkcService {
     pub fn get_stats(&self) -> Result<IndexStats, anyhow::Error> {
         self.index.get_stats()
     }
+
+    #[allow(dead_code)]
+    pub fn export_to_json(&self) -> Result<serde_json::Value, anyhow::Error> {
+        self.index.export_to_json()
+    }
 }

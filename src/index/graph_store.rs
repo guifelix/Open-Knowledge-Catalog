@@ -39,11 +39,13 @@ impl GraphStore for SqliteGraphStore {
 
     fn store_links(&self, source_path: &str, links: &[Link]) -> Result<()> {
         let mut conn = self.conn.lock().unwrap();
-        let source_id = conn.query_row(
-            "SELECT id FROM documents WHERE path = ?1",
-            params![source_path],
-            |row| row.get::<_, i64>(0),
-        ).optional()?;
+        let source_id = conn
+            .query_row(
+                "SELECT id FROM documents WHERE path = ?1",
+                params![source_path],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()?;
 
         let Some(source_id) = source_id else {
             return Ok(());
@@ -168,8 +170,7 @@ impl GraphStore for SqliteGraphStore {
                         ))
                     },
                 )
-                .ok()
-                .map(|(t, c)| (t, c));
+                .ok();
 
             let (title, ctype) = title.unwrap_or((None, None));
 
@@ -198,16 +199,14 @@ impl GraphStore for SqliteGraphStore {
                 params![current_path, (max_nodes - visited.len()) as i64],
                 |row| row.get::<_, String>(0),
             ) {
-                for row in rows {
-                    if let Ok(target) = row {
-                        if !visited.contains(&target) {
-                            edges.push(GraphEdge {
-                                source: current_path.clone(),
-                                target: target.clone(),
-                                relation: "links_to".to_string(),
-                            });
-                            queue.push_back((target, depth + 1));
-                        }
+                for target in rows.flatten() {
+                    if !visited.contains(&target) {
+                        edges.push(GraphEdge {
+                            source: current_path.clone(),
+                            target: target.clone(),
+                            relation: "links_to".to_string(),
+                        });
+                        queue.push_back((target, depth + 1));
                     }
                 }
             }
@@ -221,10 +220,13 @@ impl GraphStore for SqliteGraphStore {
                 LIMIT ?2
                 "#,
             )?;
-            let rows: Vec<String> = stmt.query_map(
-                params![current_path, (max_nodes - visited.len()) as i64],
-                |row| row.get::<_, String>(0),
-            )?.filter_map(|r| r.ok()).collect();
+            let rows: Vec<String> = stmt
+                .query_map(
+                    params![current_path, (max_nodes - visited.len()) as i64],
+                    |row| row.get::<_, String>(0),
+                )?
+                .filter_map(|r| r.ok())
+                .collect();
 
             for source in rows {
                 if !visited.contains(&source) {
@@ -273,9 +275,8 @@ impl GraphStore for SqliteGraphStore {
         }
 
         // Scan errors
-        let mut stmt = conn.prepare(
-            "SELECT path, stage, message, line FROM scan_errors ORDER BY path"
-        )?;
+        let mut stmt =
+            conn.prepare("SELECT path, stage, message, line FROM scan_errors ORDER BY path")?;
         for row in stmt.query_map([], |row| {
             Ok(ValidationIssue {
                 path: row.get(0)?,
@@ -288,90 +289,6 @@ impl GraphStore for SqliteGraphStore {
             issues.push(row?);
         }
 
-        Ok(issues)
-    }
-
-    fn detect_circular_references(&self) -> Result<Vec<ValidationIssue>> {
-        let conn = self.conn.lock().unwrap();
-
-        // Build adjacency list from internal links
-        let mut graph: std::collections::HashMap<String, Vec<String>> =
-            std::collections::HashMap::new();
-        let mut nodes: std::collections::HashSet<String> =
-            std::collections::HashSet::new();
-
-        let mut stmt = conn.prepare(
-            "SELECT d.path, l.target_path
-             FROM links l
-             JOIN documents d ON d.id = l.source_document_id
-             WHERE l.target_path IS NOT NULL AND l.external_url IS NULL AND l.exists_in_repository = 1"
-        )?;
-
-        for row in stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })? {
-            let (source, target) = row?;
-            graph.entry(source.clone()).or_default().push(target.clone());
-            nodes.insert(source);
-            nodes.insert(target);
-        }
-
-        // 3-color DFS to detect cycles
-        // WHITE = 0 (unvisited), GRAY = 1 (in current DFS path), BLACK = 2 (fully explored)
-
-        let mut color: std::collections::HashMap<String, u8> =
-            nodes.iter().map(|n| (n.clone(), 0)).collect();
-        let mut issues = Vec::new();
-
-        for start in &nodes {
-            if color[start] != 0 {
-                continue;
-            }
-
-            color.insert(start.clone(), 1);
-            // Each stack entry: (current_node, next_neighbor_index, path_snapshot)
-            // path_snapshot is the entire ancestor chain when we entered this node
-            let mut stack: Vec<(String, usize, Vec<String>)> =
-                vec![(start.clone(), 0, vec![start.clone()])];
-
-            while let Some((node, idx, path)) = stack.last_mut() {
-                let neighbors = graph.get(node).cloned().unwrap_or_default();
-
-                if *idx >= neighbors.len() {
-                    color.insert(node.clone(), 2);
-                    stack.pop();
-                    continue;
-                }
-
-                let neighbor = neighbors[*idx].clone();
-                *idx += 1;
-
-                match color.get(&neighbor).copied().unwrap_or(2) {
-                    0 => {
-                        color.insert(neighbor.clone(), 1);
-                        let mut new_path = path.clone();
-                        new_path.push(neighbor.clone());
-                        stack.push((neighbor.clone(), 0, new_path));
-                    }
-                    1 => {
-                        if let Some(cycle_start) = path.iter().position(|n| *n == neighbor) {
-                            let cycle: Vec<&str> = path[cycle_start..]
-                                .iter().map(|s| s.as_str()).collect();
-                            issues.push(ValidationIssue {
-                                path: node.clone(),
-                                severity: "warning".to_string(),
-                                category: "circular_reference".to_string(),
-                                message: format!("Circular reference: {}", cycle.join(" -> ")),
-                                line: None,
-                            });
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        issues.dedup_by(|a, b| a.message == b.message);
         Ok(issues)
     }
 }

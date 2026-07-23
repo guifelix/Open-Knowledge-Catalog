@@ -1,12 +1,12 @@
 //! Property-based tests using proptest
 
-use open_knowledge_catalog::parser::frontmatter::FrontMatterExtractor;
-use open_knowledge_catalog::parser::links::{LinkResolver, normalize_path};
-use open_knowledge_catalog::parser::yaml::YamlParser;
 use open_knowledge_catalog::model::Link as ModelLink;
-use std::path::Path;
+use open_knowledge_catalog::parser::frontmatter::FrontMatterExtractor;
+use open_knowledge_catalog::parser::links::{normalize_path, LinkResolver};
+use open_knowledge_catalog::parser::yaml::YamlParser;
 use proptest::prelude::*;
 use proptest::test_runner::TestCaseResult;
+use std::path::Path;
 
 fn prop_frontmatter_extractor_never_panics(input: Vec<u8>) -> TestCaseResult {
     let extractor = FrontMatterExtractor::new(4096);
@@ -67,8 +67,10 @@ fn prop_path_normalization_dots(segments: Vec<String>, dots: Vec<String>) -> Tes
     let path_str = path_parts.join("/");
     let path = Path::new(&path_str);
     let normalized = normalize_path(path);
-    
-    let has_dots = normalized.split('/').any(|s| s == "." || (s == ".." && !normalized.starts_with("../")));
+
+    let has_dots = normalized
+        .split('/')
+        .any(|s| s == "." || (s == ".." && !normalized.starts_with("../")));
     prop_assert!(!has_dots);
     Ok(())
 }
@@ -76,7 +78,7 @@ fn prop_path_normalization_dots(segments: Vec<String>, dots: Vec<String>) -> Tes
 fn prop_link_anchor_handling(base: String, anchor: String) -> TestCaseResult {
     let source = format!("{}.md", base);
     let target = format!("{}.md#{}", base, anchor);
-    
+
     let link = ModelLink {
         raw: target.clone(),
         target: target.clone(),
@@ -84,7 +86,7 @@ fn prop_link_anchor_handling(base: String, anchor: String) -> TestCaseResult {
         is_external: false,
         exists_in_repository: true,
     };
-    
+
     let resolved = LinkResolver::resolve_links(&source, &[link], &[]);
     prop_assert_eq!(resolved.len(), 1);
     prop_assert_eq!(&resolved[0].target_anchor, &Some(anchor));
@@ -94,14 +96,17 @@ fn prop_link_anchor_handling(base: String, anchor: String) -> TestCaseResult {
 fn prop_utf8_validation_in_frontmatter(invalid_utf8: Vec<u8>) -> TestCaseResult {
     // Only use bytes that are NEVER valid UTF-8
     // 0xFF is never valid in UTF-8
-    let invalid_bytes: Vec<u8> = invalid_utf8.iter().map(|b| if *b == 0xFF { *b } else { 0xFF }).collect();
+    let invalid_bytes: Vec<u8> = invalid_utf8
+        .iter()
+        .map(|b| if *b == 0xFF { *b } else { 0xFF })
+        .collect();
     let mut input = b"---\n".to_vec();
     input.extend_from_slice(&invalid_bytes);
     input.extend_from_slice(b"\n---\nBody");
-    
+
     let extractor = FrontMatterExtractor::new(4096);
     let result = extractor.extract(&input);
-    
+
     prop_assert!(result.is_err());
     Ok(())
 }
@@ -111,7 +116,7 @@ fn prop_windows_line_endings(yaml_lines: Vec<String>, body: String) -> TestCaseR
     let input = format!("---\r\n{}\r\n---\r\n{}", yaml, body);
     let extractor = FrontMatterExtractor::new(4096);
     let result = extractor.extract(input.as_bytes());
-    
+
     prop_assert!(result.is_ok());
     if let Ok(Some((_, extracted))) = result {
         prop_assert!(extracted.contains(&yaml_lines[0]));
@@ -123,7 +128,7 @@ fn prop_nested_path_resolution(base: String, subdirs: Vec<String>, file: String)
     let source = format!("{}/{}/{}", base, subdirs.join("/"), file);
     let target = format!("../../other/{}", file);
     let result = LinkResolver::resolve(&source, &target);
-    
+
     let source_path = Path::new(&source);
     let parent = source_path.parent().unwrap_or(Path::new(""));
     let expected = normalize_path(&parent.join(&target)).replace('\\', "/");
@@ -139,11 +144,16 @@ fn prop_link_existence_check(files: Vec<String>, target: String) -> TestCaseResu
 }
 
 fn prop_yaml_tags_sequence(tags: Vec<String>) -> TestCaseResult {
-    let yaml = format!("tags:\n{}\n", tags.iter().map(|t| format!("  - {}", t)).collect::<Vec<_>>().join("\n"));
+    let yaml = format!(
+        "tags:\n{}\n",
+        tags.iter()
+            .map(|t| format!("  - {}", t))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
     let result = YamlParser::parse(&yaml);
-    
-    if result.is_ok() {
-        let fm = result.unwrap();
+
+    if let Ok(fm) = result {
         prop_assert_eq!(fm.tags, tags);
     }
     Ok(())
@@ -152,9 +162,8 @@ fn prop_yaml_tags_sequence(tags: Vec<String>) -> TestCaseResult {
 fn prop_custom_fields_preserved(key: String, value: String) -> TestCaseResult {
     let yaml = format!("{}:\n  {}\n", key, value);
     let result = YamlParser::parse(&yaml);
-    
-    if result.is_ok() {
-        let fm = result.unwrap();
+
+    if let Ok(fm) = result {
         if !["type", "title", "description", "tags"].contains(&key.as_str()) {
             prop_assert!(fm.custom.contains_key(&key));
         }
@@ -168,7 +177,7 @@ fn prop_size_limit_enforcement(yaml_content: Vec<String>, body: String) -> TestC
     let input = format!("---\n{}\n---\n{}", large_yaml, body);
     let extractor = FrontMatterExtractor::new(100);
     let result = extractor.extract(input.as_bytes());
-    
+
     prop_assert!(result.is_err());
     Ok(())
 }
@@ -181,10 +190,10 @@ fn prop_bom_handling(yaml_content: String, body: String) -> TestCaseResult {
     input.extend_from_slice(yaml_content.as_bytes());
     input.extend_from_slice(b"\n---\n");
     input.extend_from_slice(body.as_bytes());
-    
+
     let extractor = FrontMatterExtractor::new(4096);
     let result = extractor.extract(&input);
-    
+
     prop_assert!(result.is_ok());
     if let Ok(Some((_, extracted))) = result {
         prop_assert!(extracted.contains(yaml_content.trim_start_matches('\n')));
@@ -196,7 +205,7 @@ fn prop_multiple_delimiters(content1: String, content2: String, body: String) ->
     let input = format!("---\n{}\n---\n{}\n---\n{}", content1, content2, body);
     let extractor = FrontMatterExtractor::new(4096);
     let result = extractor.extract(input.as_bytes());
-    
+
     prop_assert!(result.is_ok());
     if let Ok(Some((_, extracted))) = result {
         prop_assert!(extracted.contains(content1.trim_start_matches('\n')));
@@ -209,28 +218,28 @@ proptest! {
     fn frontmatter_extractor_never_panics(input in any::<Vec<u8>>()) {
         prop_frontmatter_extractor_never_panics(input)?;
     }
-    
+
     #[test]
     fn frontmatter_extractor_small_limit(input in any::<Vec<u8>>()) {
         prop_frontmatter_extractor_small_limit(input)?;
     }
-    
+
     // YAML parser: use printable ASCII to avoid slow saphyr paths on unicode
     #[test]
     fn yaml_parser_never_panics(input in "[a-zA-Z0-9 ]{0,100}") {
         prop_yaml_parser_never_panics(input)?;
     }
-    
+
     #[test]
     fn link_resolution_never_panics(source in ".{0,100}", target in ".{0,100}") {
         prop_link_resolution_never_panics(source, target)?;
     }
-    
+
     #[test]
     fn external_urls_unchanged(url in "https?://[a-zA-Z0-9./?=_%:-]*") {
         prop_external_urls_unchanged(url)?;
     }
-    
+
     #[test]
     fn relative_path_resolution(
         dir1 in "[a-z]+",
@@ -239,17 +248,17 @@ proptest! {
     ) {
         prop_relative_path_resolution(dir1, dir2, file)?;
     }
-    
+
     #[test]
     fn parent_directory_traversal(file in "[a-z]+\\.md") {
         prop_parent_directory_traversal(file)?;
     }
-    
+
     #[test]
     fn path_normalization_never_panics(input in ".{0,200}") {
         prop_path_normalization_never_panics(input)?;
     }
-    
+
     #[test]
     fn path_normalization_dots(
         segments in prop::collection::vec("[a-z]+", 1..5),
@@ -257,7 +266,7 @@ proptest! {
     ) {
         prop_path_normalization_dots(segments, dots)?;
     }
-    
+
     #[test]
     fn link_anchor_handling(
         base in "[a-z/]+",
@@ -265,12 +274,12 @@ proptest! {
     ) {
         prop_link_anchor_handling(base, anchor)?;
     }
-    
+
     #[test]
     fn utf8_validation_in_frontmatter(invalid_utf8 in prop::collection::vec(0xFFu8..=0xFFu8, 1..100)) {
         prop_utf8_validation_in_frontmatter(invalid_utf8)?;
     }
-    
+
     #[test]
     fn windows_line_endings(
         yaml_lines in prop::collection::vec("[a-z: ]+", 1..5),
@@ -278,7 +287,7 @@ proptest! {
     ) {
         prop_windows_line_endings(yaml_lines, body)?;
     }
-    
+
     #[test]
     fn nested_path_resolution(
         base in "[a-z]+",
@@ -287,7 +296,7 @@ proptest! {
     ) {
         prop_nested_path_resolution(base, subdirs, file)?;
     }
-    
+
     #[test]
     fn link_existence_check(
         files in prop::collection::vec("[a-z/]+\\.md", 1..10),
@@ -295,14 +304,14 @@ proptest! {
     ) {
         prop_link_existence_check(files, target)?;
     }
-    
+
     #[test]
     fn yaml_tags_sequence(
         tags in prop::collection::vec("[a-z]+", 1..5)
     ) {
         prop_yaml_tags_sequence(tags)?;
     }
-    
+
     #[test]
     fn custom_fields_preserved(
         key in "[a-z][a-z0-9_]*",
@@ -310,7 +319,7 @@ proptest! {
     ) {
         prop_custom_fields_preserved(key, value)?;
     }
-    
+
     #[test]
     fn size_limit_enforcement(
         yaml_content in prop::collection::vec("[a-z]{10,20}", 1..5),
@@ -318,7 +327,7 @@ proptest! {
     ) {
         prop_size_limit_enforcement(yaml_content, body)?;
     }
-    
+
     #[test]
     fn bom_handling(
         yaml_content in ".{0,100}",
@@ -326,7 +335,7 @@ proptest! {
     ) {
         prop_bom_handling(yaml_content, body)?;
     }
-    
+
     #[test]
     fn multiple_delimiters(
         content1 in ".{0,50}",
@@ -336,4 +345,3 @@ proptest! {
         prop_multiple_delimiters(content1, content2, body)?;
     }
 }
-
