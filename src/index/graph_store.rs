@@ -291,4 +291,84 @@ impl GraphStore for SqliteGraphStore {
 
         Ok(issues)
     }
+
+    fn detect_circular_references(&self) -> Result<Vec<ValidationIssue>> {
+        let conn = self.conn.lock().unwrap();
+
+        let mut graph: std::collections::HashMap<String, Vec<String>> =
+            std::collections::HashMap::new();
+        let mut nodes: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        let mut stmt = conn.prepare(
+            "SELECT d.path, l.target_path
+             FROM links l
+             JOIN documents d ON d.id = l.source_document_id
+             WHERE l.target_path IS NOT NULL AND l.external_url IS NULL AND l.exists_in_repository = 1"
+        )?;
+
+        for row in stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })? {
+            let (source, target) = row?;
+            graph
+                .entry(source.clone())
+                .or_default()
+                .push(target.clone());
+            nodes.insert(source);
+            nodes.insert(target);
+        }
+
+        let mut color: std::collections::HashMap<String, u8> =
+            nodes.iter().map(|n| (n.clone(), 0)).collect();
+        let mut issues = Vec::new();
+
+        for start in &nodes {
+            if color[start] != 0 {
+                continue;
+            }
+
+            color.insert(start.clone(), 1);
+            let mut stack: Vec<(String, usize, Vec<String>)> =
+                vec![(start.clone(), 0, vec![start.clone()])];
+
+            while let Some((node, idx, path)) = stack.last_mut() {
+                let neighbors = graph.get(node).cloned().unwrap_or_default();
+
+                if *idx >= neighbors.len() {
+                    color.insert(node.clone(), 2);
+                    stack.pop();
+                    continue;
+                }
+
+                let neighbor = neighbors[*idx].clone();
+                *idx += 1;
+
+                match color.get(&neighbor).copied().unwrap_or(2) {
+                    0 => {
+                        color.insert(neighbor.clone(), 1);
+                        let mut new_path = path.clone();
+                        new_path.push(neighbor.clone());
+                        stack.push((neighbor.clone(), 0, new_path));
+                    }
+                    1 => {
+                        if let Some(cycle_start) = path.iter().position(|n| *n == neighbor) {
+                            let cycle: Vec<&str> =
+                                path[cycle_start..].iter().map(|s| s.as_str()).collect();
+                            issues.push(ValidationIssue {
+                                path: node.clone(),
+                                severity: "warning".to_string(),
+                                category: "circular_references".to_string(),
+                                message: format!("Circular reference: {}", cycle.join(" -> ")),
+                                line: None,
+                            });
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        issues.dedup_by(|a, b| a.message == b.message);
+        Ok(issues)
+    }
 }

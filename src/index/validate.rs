@@ -6,8 +6,6 @@ use super::database::RepositoryIndex;
 use crate::index::traits::GraphStore;
 use crate::model::*;
 use crate::parser::frontmatter::FrontMatterExtractor;
-use crate::parser::links::LinkResolver;
-use crate::parser::markdown::MarkdownParser;
 use crate::parser::yaml::YamlParser;
 
 const CHECKS: &[&str] = &[
@@ -21,7 +19,6 @@ const CHECKS: &[&str] = &[
     "duplicate_concept",
     "duplicate_content",
     "circular_references",
-    "malformed_links",
 ];
 
 impl RepositoryIndex {
@@ -74,7 +71,10 @@ impl RepositoryIndex {
         let checks: Vec<CheckResult> = CHECKS
             .iter()
             .map(|name| {
-                let count = issues.iter().filter(|i| i.category.as_str() == *name).count();
+                let count = issues
+                    .iter()
+                    .filter(|i| i.category.as_str() == *name)
+                    .count();
                 CheckResult {
                     check_name: name.to_string(),
                     status: if count == 0 {
@@ -110,7 +110,7 @@ impl RepositoryIndex {
             return Vec::new();
         }
         let mut issues = Vec::new();
-        let mut stmt = self
+        let stmt = self
             .conn
             .prepare("SELECT DISTINCT parent_path FROM documents WHERE parent_path != ''")
             .ok();
@@ -228,7 +228,7 @@ impl RepositoryIndex {
                 }
             };
 
-            let (body_start, raw_yaml) = match extracted {
+            let (_body_start, raw_yaml) = match extracted {
                 Some(r) => r,
                 None => continue,
             };
@@ -290,36 +290,6 @@ impl RepositoryIndex {
                     .or_default()
                     .push(path.clone());
             }
-
-            let body_text = &full_text[body_start..];
-            let (_, raw_links, _, _) = MarkdownParser::parse(body_text);
-            let known_files: Vec<String> = paths.clone();
-            let resolved = LinkResolver::resolve_links(path, &raw_links, &known_files);
-
-            for link in &resolved {
-                if link.is_external {
-                    continue;
-                }
-                if link.target.is_empty() {
-                    issues.push(ValidationIssue {
-                        path: path.clone(),
-                        severity: "warning".to_string(),
-                        category: "malformed_links".to_string(),
-                        message: format!("Empty link target"),
-                        line: None,
-                    });
-                    continue;
-                }
-                if !link.target.starts_with('#') && !link.exists_in_repository {
-                    issues.push(ValidationIssue {
-                        path: path.clone(),
-                        severity: "warning".to_string(),
-                        category: "malformed_links".to_string(),
-                        message: format!("Broken link to '{}'", link.target),
-                        line: None,
-                    });
-                }
-            }
         }
 
         for (hash, dup_paths) in &seen_hashes {
@@ -365,10 +335,9 @@ impl RepositoryIndex {
             Err(_) => return self.validate_files(),
         };
 
-        let current: HashMap<String, String> = match stmt
-            .query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            }) {
+        let current: HashMap<String, String> = match stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        }) {
             Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
             Err(_) => return self.validate_files(),
         };

@@ -1,10 +1,11 @@
 ---
 id: OKC-00020
 title: Deduplicate validation logic between database.rs and graph_store.rs
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@me'
 created_date: '2026-07-23 06:50'
-updated_date: '2026-07-23 19:02'
+updated_date: '2026-07-23 23:00'
 labels:
   - quality
 dependencies: []
