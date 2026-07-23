@@ -145,6 +145,45 @@ pub struct ValidationIssue {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationReport {
+    pub summary: ValidationSummary,
+    pub issues: Vec<ValidationIssue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationSummary {
+    pub total_issues: usize,
+    pub errors: usize,
+    pub warnings: usize,
+    pub infos: usize,
+    pub checks: Vec<CheckResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CheckResult {
+    pub check_name: String,
+    pub status: CheckStatus,
+    pub issue_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CheckStatus {
+    Pass,
+    Warn,
+    Fail,
+}
+
+impl std::fmt::Display for CheckStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CheckStatus::Pass => write!(f, "pass"),
+            CheckStatus::Warn => write!(f, "warn"),
+            CheckStatus::Fail => write!(f, "fail"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IndexStats {
     pub document_count: usize,
     pub error_count: usize,
