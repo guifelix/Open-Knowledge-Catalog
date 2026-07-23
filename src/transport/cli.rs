@@ -85,7 +85,11 @@ pub enum Command {
         #[arg(long, default_value = "50")]
         max_nodes: usize,
     },
-    Validate,
+    Validate {
+        /// Output JSON report
+        #[arg(long)]
+        json: bool,
+    },
     Stats,
     Serve {
         /// Root directories to scan

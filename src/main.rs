@@ -230,19 +230,33 @@ fn main() -> anyhow::Result<()> {
                 println!("  ... (truncated)");
             }
         }
-        Command::Validate => {
+        Command::Validate { json } => {
             let service = OkcService::open(&config)?;
-            let result = service.validate()?;
-            if result.is_empty() {
-                println!("No validation issues found");
+            let (has_errors, has_warnings) = if json {
+                let report = service.validate_report()?;
+                println!("{}", serde_json::to_string_pretty(&report)?);
+                (report.summary.errors > 0, report.summary.warnings > 0)
             } else {
-                println!("Validation issues ({}):", result.len());
-                for issue in &result {
-                    println!(
-                        "  [{}] {}: {} (line: {:?})",
-                        issue.severity, issue.path, issue.message, issue.line
-                    );
+                let result = service.validate()?;
+                if result.is_empty() {
+                    println!("No validation issues found");
+                } else {
+                    println!("Validation issues ({}):", result.len());
+                    for issue in &result {
+                        println!(
+                            "  [{}] {}: {} (line: {:?})",
+                            issue.severity, issue.path, issue.message, issue.line
+                        );
+                    }
                 }
+                let has_errors = result.iter().any(|i| i.severity == "error");
+                let has_warnings = result.iter().any(|i| i.severity == "warning");
+                (has_errors, has_warnings)
+            };
+            if has_errors {
+                std::process::exit(1);
+            } else if has_warnings {
+                std::process::exit(2);
             }
         }
         Command::Stats => {
