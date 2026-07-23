@@ -1,4 +1,4 @@
-# Open Knowledge Catalog (OKF)
+# Open Knowledge Catalog (OKC)
 
 A local-first tool that allows AI agents to safely browse, parse, search, and reason over an Open Knowledge Format (OKF) repository.
 
@@ -106,7 +106,7 @@ cd open-knowledge-catalog
 cargo build --release
 ```
 
-The binary will be at `target/release/okf`.
+The binary will be at `target/release/okc`.
 
 ### Install
 
@@ -117,7 +117,7 @@ cargo install --path .
 Or copy the binary to your PATH:
 
 ```bash
-cp target/release/okf ~/.local/bin/
+cp target/release/okc ~/.local/bin/
 ```
 
 ## Quick Start
@@ -177,7 +177,7 @@ status: published
 ### 2. Scan the Repository
 
 ```bash
-okf scan --root my-knowledge
+okc scan --root my-knowledge
 ```
 
 Output:
@@ -193,41 +193,41 @@ Scan complete:
   Duration: 0.01s
 ```
 
-This creates `okf_index.db` in the current directory (configurable via `--db-path`).
+This creates `okc_index.db` in the current directory (configurable via `--db-path`).
 
 ### 3. Query the Knowledge Base
 
 ```bash
 # Browse the hierarchy
-okf browse
+okc browse
 
 # Browse a specific directory
-okf browse metrics --depth 1
+okc browse metrics --depth 1
 
 # Search for concepts
-okf search "revenue recognition"
+okc search "revenue recognition"
 
 # Get a document
-okf get metrics/monthly-revenue.md --include metadata,headings,body
+okc get metrics/monthly-revenue.md --include metadata,headings,body
 
 # Extract a specific section
-okf section metrics/monthly-revenue.md "Recognition Rules"
+okc section metrics/monthly-revenue.md "Recognition Rules"
 
 # Exact metadata query
-okf metadata --filter type=Metric --filter tags_contains=finance --select path,title,owner
+okc metadata --filter type=Metric --filter tags_contains=finance --select path,title,owner
 
 # View links
-okf links metrics/monthly-revenue.md
-okf backlinks metrics/monthly-revenue.md
+okc links metrics/monthly-revenue.md
+okc backlinks metrics/monthly-revenue.md
 
 # Traverse the graph
-okf traverse metrics/monthly-revenue.md --max-depth 2
+okc traverse metrics/monthly-revenue.md --max-depth 2
 
 # Validate
-okf validate
+okc validate
 
 # Statistics
-okf stats
+okc stats
 ```
 
 ## Configuration
@@ -235,12 +235,12 @@ okf stats
 ### Command-Line Options
 
 ```bash
-okf --help
+okc --help
 ```
 
 Global options:
 - `--root <PATH>` - Root directory to scan (can be specified multiple times)
-- `--db-path <PATH>` - SQLite database path (default: `okf_index.db`)
+- `--db-path <PATH>` - SQLite database path (default: `okc_index.db`)
 - `--config <PATH>` - Configuration file (not yet implemented)
 
 ### Configuration File (Planned)

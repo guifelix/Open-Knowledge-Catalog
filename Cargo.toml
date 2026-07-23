@@ -3,6 +3,10 @@ name = "open-knowledge-catalog"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "okc"
+path = "src/main.rs"
+
 [dependencies]
 # Filesystem traversal
 ignore = "0.4"

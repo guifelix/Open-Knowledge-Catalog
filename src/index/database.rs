@@ -4,7 +4,7 @@ use std::path::Path;
 use rusqlite::{params, Connection};
 use tracing::info;
 
-use crate::config::OkfConfig;
+use crate::config::OkcConfig;
 use crate::index::graph_store::SqliteGraphStore;
 
 use crate::model::*;
@@ -18,11 +18,11 @@ use crate::scanner::walker::Scanner;
 pub struct RepositoryIndex {
     pub(crate) conn: Connection,
     pub(crate) graph_store: Option<SqliteGraphStore>,
-    pub(crate) config: OkfConfig,
+    pub(crate)     config: OkcConfig,
 }
 
 impl RepositoryIndex {
-    pub fn open(config: &OkfConfig) -> Result<Self, anyhow::Error> {
+    pub fn open(config: &OkcConfig) -> Result<Self, anyhow::Error> {
         let conn = Connection::open(&config.db_path)?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
         let graph_conn = Connection::open(&config.db_path)?;
@@ -36,7 +36,7 @@ impl RepositoryIndex {
     }
 
     #[allow(dead_code)]
-    pub fn open_in_memory(config: &OkfConfig) -> Result<Self, anyhow::Error> {
+    pub fn open_in_memory(config: &OkcConfig) -> Result<Self, anyhow::Error> {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
         let index = Self {

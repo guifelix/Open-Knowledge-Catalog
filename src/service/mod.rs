@@ -1,19 +1,19 @@
-use crate::config::OkfConfig;
+use crate::config::OkcConfig;
 use crate::index::RepositoryIndex;
 use crate::model::*;
 
-pub struct OkfService {
+pub struct OkcService {
     index: RepositoryIndex,
 }
 
-impl OkfService {
-    pub fn open(config: &OkfConfig) -> Result<Self, anyhow::Error> {
+impl OkcService {
+    pub fn open(config: &OkcConfig) -> Result<Self, anyhow::Error> {
         let index = RepositoryIndex::open(config)?;
         Ok(Self { index })
     }
 
     #[allow(dead_code)]
-    pub fn open_in_memory(config: &OkfConfig) -> Result<Self, anyhow::Error> {
+    pub fn open_in_memory(config: &OkcConfig) -> Result<Self, anyhow::Error> {
         let index = RepositoryIndex::open_in_memory(config)?;
         Ok(Self { index })
     }

@@ -1,15 +1,17 @@
 ---
 id: OKC-00023
 title: 'Fix naming inconsistency: okc vs okf'
-status: To Do
-assignee: []
+status: Done
+assignee:
+  - '@felix'
 created_date: '2026-07-23 19:03'
+updated_date: '2026-07-23 19:26'
 labels:
   - consistency
 dependencies: []
 priority: medium
 type: chore
-ordinal: 13400
+ordinal: 19000
 ---
 
 ## Description

@@ -1,6 +1,6 @@
 //! Integration tests for OKF retrieval using fixture repositories
 
-use open_knowledge_catalog::{config::OkfConfig, service::OkfService};
+use open_knowledge_catalog::{config::OkcConfig, service::OkcService};
 use std::collections::HashMap;
 use tempfile::TempDir;
 
@@ -37,10 +37,10 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result
 #[test]
 fn test_direct_concept_lookup() {
     let repo = setup_simple_repo();
-    let mut config = OkfConfig::default();
+    let mut config = OkcConfig::default();
     config.roots = vec![repo.path().to_path_buf()];
 
-    let mut service = OkfService::open(&config).unwrap();
+    let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
 
     // Search for monthly recurring revenue
@@ -70,10 +70,10 @@ fn test_direct_concept_lookup() {
 #[test]
 fn test_hierarchical_browsing() {
     let repo = setup_simple_repo();
-    let mut config = OkfConfig::default();
+    let mut config = OkcConfig::default();
     config.roots = vec![repo.path().to_path_buf()];
 
-    let mut service = OkfService::open(&config).unwrap();
+    let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
 
     // Browse root
@@ -103,10 +103,10 @@ fn test_hierarchical_browsing() {
 #[test]
 fn test_relationship_reasoning() {
     let repo = setup_simple_repo();
-    let mut config = OkfConfig::default();
+    let mut config = OkcConfig::default();
     config.roots = vec![repo.path().to_path_buf()];
 
-    let mut service = OkfService::open(&config).unwrap();
+    let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
 
     // Get links from monthly revenue
@@ -125,10 +125,10 @@ fn test_relationship_reasoning() {
 #[test]
 fn test_exact_metadata_query() {
     let repo = setup_simple_repo();
-    let mut config = OkfConfig::default();
+    let mut config = OkcConfig::default();
     config.roots = vec![repo.path().to_path_buf()];
 
-    let mut service = OkfService::open(&config).unwrap();
+    let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
 
     // Query for published finance metrics
@@ -166,11 +166,11 @@ fn test_exact_metadata_query() {
 #[test]
 fn test_repository_validation() {
     let repo = setup_edge_cases_repo();
-    let mut config = OkfConfig::default();
+    let mut config = OkcConfig::default();
     config.roots = vec![repo.path().to_path_buf()];
     config.require_index_files = false; // We don't have index.md in edge cases
 
-    let mut service = OkfService::open(&config).unwrap();
+    let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
 
     let issues = service.validate().unwrap();
@@ -207,12 +207,12 @@ fn test_repository_validation() {
 #[test]
 fn test_validation_oversized_frontmatter() {
     let repo = setup_edge_cases_repo();
-    let mut config = OkfConfig::default();
+    let mut config = OkcConfig::default();
     config.roots = vec![repo.path().to_path_buf()];
     config.max_front_matter_size = 10; // Very small limit to trigger oversized check
     config.require_index_files = false;
 
-    let mut service = OkfService::open(&config).unwrap();
+    let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
 
     let issues = service.validate().unwrap();
@@ -227,7 +227,7 @@ fn test_validation_oversized_frontmatter() {
 #[test]
 fn test_validation_missing_metadata() {
     let repo = setup_simple_repo();
-    let mut config = OkfConfig::default();
+    let mut config = OkcConfig::default();
     config.roots = vec![repo.path().to_path_buf()];
 
     // Create a doc with missing required metadata
@@ -238,7 +238,7 @@ fn test_validation_missing_metadata() {
     )
     .unwrap();
 
-    let mut service = OkfService::open(&config).unwrap();
+    let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
 
     let issues = service.validate().unwrap();
@@ -253,10 +253,10 @@ fn test_validation_missing_metadata() {
 #[test]
 fn test_circular_links_handled() {
     let repo = setup_edge_cases_repo();
-    let mut config = OkfConfig::default();
+    let mut config = OkcConfig::default();
     config.roots = vec![repo.path().to_path_buf()];
 
-    let mut service = OkfService::open(&config).unwrap();
+    let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
 
     // Traverse should handle circular links without infinite loop
@@ -276,10 +276,10 @@ fn test_circular_links_handled() {
 #[test]
 fn test_get_document_with_metadata() {
     let repo = setup_simple_repo();
-    let mut config = OkfConfig::default();
+    let mut config = OkcConfig::default();
     config.roots = vec![repo.path().to_path_buf()];
 
-    let mut service = OkfService::open(&config).unwrap();
+    let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
 
     let doc = service
@@ -313,10 +313,10 @@ fn test_get_document_with_metadata() {
 #[test]
 fn test_get_section() {
     let repo = setup_simple_repo();
-    let mut config = OkfConfig::default();
+    let mut config = OkcConfig::default();
     config.roots = vec![repo.path().to_path_buf()];
 
-    let mut service = OkfService::open(&config).unwrap();
+    let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
 
     let section = service
@@ -332,10 +332,10 @@ fn test_get_section() {
 #[test]
 fn test_search_with_filters() {
     let repo = setup_simple_repo();
-    let mut config = OkfConfig::default();
+    let mut config = OkcConfig::default();
     config.roots = vec![repo.path().to_path_buf()];
 
-    let mut service = OkfService::open(&config).unwrap();
+    let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
 
     // First test basic search
@@ -393,10 +393,10 @@ fn test_search_with_filters() {
 #[test]
 fn test_backlinks() {
     let repo = setup_simple_repo();
-    let mut config = OkfConfig::default();
+    let mut config = OkcConfig::default();
     config.roots = vec![repo.path().to_path_buf()];
 
-    let mut service = OkfService::open(&config).unwrap();
+    let mut service = OkcService::open(&config).unwrap();
     service.scan().unwrap();
 
     let _backlinks = service
@@ -422,12 +422,12 @@ fn test_backlinks() {
 #[test]
 fn test_stats() {
     let repo = setup_simple_repo();
-    let mut config = OkfConfig::default();
+    let mut config = OkcConfig::default();
     config.roots = vec![repo.path().to_path_buf()];
     // Use in-memory database to ensure clean state
     config.db_path = std::path::PathBuf::from(":memory:");
 
-    let mut service = OkfService::open(&config).unwrap();
+    let mut service = OkcService::open(&config).unwrap();
     let scan_result = service.scan().unwrap();
 
     assert!(scan_result.total_files > 0);

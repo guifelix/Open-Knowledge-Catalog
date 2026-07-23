@@ -1,8 +1,8 @@
 use clap::Parser;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use crate::config::OkcConfig;
 
-use crate::config::OkfConfig;
-use crate::service::OkfService;
+use crate::service::OkcService;
 use crate::transport::cli::{Cli, Command};
 
 mod config;
@@ -22,7 +22,7 @@ fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    let mut config = OkfConfig::default();
+    let mut config = OkcConfig::default();
 
     // Extract root directories from the command
     let roots = match &cli.command {
@@ -34,7 +34,7 @@ fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Command::Scan { root: _ } => {
-            let mut service = OkfService::open(&config)?;
+            let mut service = OkcService::open(&config)?;
             let result = service.scan()?;
             println!("Scan complete:");
             println!("  Total files: {}", result.total_files);
@@ -47,7 +47,7 @@ fn main() -> anyhow::Result<()> {
             println!("  Duration: {:.2}s", result.duration_secs);
         }
         Command::Browse { path, depth, limit } => {
-            let service = OkfService::open(&config)?;
+            let service = OkcService::open(&config)?;
             let result = service.browse(&path.unwrap_or_default(), depth, limit)?;
             println!("Browsing: {}", result.path);
             if let Some(idx) = result.summary_document {
@@ -75,7 +75,7 @@ fn main() -> anyhow::Result<()> {
             include,
             max_chars,
         } => {
-            let service = OkfService::open(&config)?;
+            let service = OkcService::open(&config)?;
             let result = service.get_document(&path, &include, max_chars)?;
             println!("Document: {}", result.path);
             println!("  Title: {:?}", result.metadata.title);
@@ -117,7 +117,7 @@ fn main() -> anyhow::Result<()> {
             heading,
             max_chars,
         } => {
-            let service = OkfService::open(&config)?;
+            let service = OkcService::open(&config)?;
             if let Some((h, content)) = service.get_section(&path, &heading, max_chars)? {
                 println!("Section: {}", h);
                 println!("{}", content);
@@ -132,7 +132,7 @@ fn main() -> anyhow::Result<()> {
             tags,
             limit,
         } => {
-            let service = OkfService::open(&config)?;
+            let service = OkcService::open(&config)?;
             let result = service.search(
                 &query,
                 path_prefix.as_deref(),
@@ -160,7 +160,7 @@ fn main() -> anyhow::Result<()> {
             select,
             limit,
         } => {
-            let service = OkfService::open(&config)?;
+            let service = OkcService::open(&config)?;
             let filters: std::collections::HashMap<String, String> = filter.into_iter().collect();
             let result = service.query_metadata(&filters, &select, limit)?;
             println!("Metadata query results: {} matches", result.total_matches);
@@ -172,7 +172,7 @@ fn main() -> anyhow::Result<()> {
             }
         }
         Command::Links { path } => {
-            let service = OkfService::open(&config)?;
+            let service = OkcService::open(&config)?;
             let result = service.get_links(&path)?;
             println!("Links from {}:", path);
             for l in &result {
@@ -189,7 +189,7 @@ fn main() -> anyhow::Result<()> {
             }
         }
         Command::Backlinks { path, limit } => {
-            let service = OkfService::open(&config)?;
+            let service = OkcService::open(&config)?;
             let result = service.get_backlinks(&path, limit)?;
             println!("Backlinks to {}:", path);
             for l in &result {
@@ -210,7 +210,7 @@ fn main() -> anyhow::Result<()> {
             max_depth,
             max_nodes,
         } => {
-            let service = OkfService::open(&config)?;
+            let service = OkcService::open(&config)?;
             let result = service.traverse(&start, &relations, max_depth, max_nodes)?;
             println!("Graph traversal from {}:", start);
             println!("  Nodes: {}", result.nodes.len());
@@ -231,7 +231,7 @@ fn main() -> anyhow::Result<()> {
             }
         }
         Command::Validate => {
-            let service = OkfService::open(&config)?;
+            let service = OkcService::open(&config)?;
             let result = service.validate()?;
             if result.is_empty() {
                 println!("No validation issues found");
@@ -246,7 +246,7 @@ fn main() -> anyhow::Result<()> {
             }
         }
         Command::Stats => {
-            let service = OkfService::open(&config)?;
+            let service = OkcService::open(&config)?;
             let result = service.get_stats()?;
             println!("Index stats:");
             println!("  Documents: {}", result.document_count);

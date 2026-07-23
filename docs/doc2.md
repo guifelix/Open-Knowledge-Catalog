@@ -842,8 +842,8 @@ validate_repository
 
 Use MCP resources for addressable documents or repository indexes when appropriate:
 
-okf://repository/metrics/revenue
-okf://repository/datasets/orders
+okc://repository/metrics/revenue
+okc://repository/datasets/orders
 
 Keep the tool surface small. Do not expose low-level calls like:
 
@@ -896,10 +896,10 @@ clap
 
 Recommended for:
 
-okf-tool scan
-okf-tool validate
-okf-tool search
-okf-tool serve
+okc-tool scan
+okc-tool validate
+okc-tool search
+okc-tool serve
 
 A CLI is extremely useful even when MCP is the primary interface. It lets you test the deterministic core without involving an AI client.
 
@@ -1005,14 +1005,14 @@ Use when you need counters and histograms independent of a particular exporter.
 
 Potential metrics:
 
-okf_files_discovered
-okf_files_parsed
-okf_files_skipped
-okf_parse_failures
-okf_broken_links
-okf_scan_duration_seconds
-okf_search_duration_seconds
-okf_tool_response_bytes
+okc_files_discovered
+okc_files_parsed
+okc_files_skipped
+okc_parse_failures
+okc_broken_links
+okc_scan_duration_seconds
+okc_search_duration_seconds
+okc_tool_response_bytes
 
 OpenTelemetry libraries
 

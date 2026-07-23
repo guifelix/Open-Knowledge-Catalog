@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
-pub struct OkfConfig {
+pub struct OkcConfig {
     pub roots: Vec<PathBuf>,
     pub exclude_patterns: Vec<String>,
     pub max_file_size: u64,
@@ -13,7 +13,7 @@ pub struct OkfConfig {
     pub db_path: PathBuf,
 }
 
-impl Default for OkfConfig {
+impl Default for OkcConfig {
     fn default() -> Self {
         Self {
             roots: vec![],
@@ -32,7 +32,7 @@ impl Default for OkfConfig {
             max_graph_nodes: 100,
             follow_symlinks: false,
             require_index_files: false,
-            db_path: PathBuf::from("okf_index.db"),
+            db_path: PathBuf::from("okc_index.db"),
         }
     }
 }

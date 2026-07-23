@@ -6,13 +6,13 @@ use std::time::SystemTime;
 use ignore::{WalkBuilder, WalkState};
 use tracing::info;
 
-use crate::config::OkfConfig;
+use crate::config::OkcConfig;
 use crate::model::FileRecord;
 
 pub struct Scanner;
 
 impl Scanner {
-    pub fn discover(config: &OkfConfig) -> Vec<FileRecord> {
+    pub fn discover(config: &OkcConfig) -> Vec<FileRecord> {
         let (tx, rx) = mpsc::channel();
         let max_size = config.max_file_size;
         let follow_symlinks = config.follow_symlinks;
