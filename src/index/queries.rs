@@ -8,7 +8,11 @@ use std::collections::HashMap;
 use rusqlite::params;
 
 use super::database::RepositoryIndex;
-use crate::model::*;
+use crate::model::directory::{BrowseResponse, DirectoryDocument};
+use crate::model::document::{
+    DocumentDetail, DocumentMetadata, DocumentSummary, HeadingInfo, IndexStats,
+    MetadataQueryResponse, ParseError, SearchResponse, SearchResult,
+};
 use crate::parser::markdown::MarkdownParser;
 
 impl RepositoryIndex {
@@ -398,6 +402,20 @@ impl RepositoryIndex {
         let mut custom_field_joins = Vec::new();
         let mut custom_field_count = 0;
 
+        // Valid column names for the documents table to prevent SQL injection
+        const VALID_DOCUMENT_COLUMNS: &[&str] = &[
+            "path",
+            "title",
+            "type",
+            "description",
+            "file_size",
+            "modified_at",
+            "content_hash",
+            "parse_status",
+            "parent_path",
+            "id",
+        ];
+
         for field in &base_select {
             match field.as_str() {
                 "path" => select_cols.push("d.path".to_string()),
@@ -416,13 +434,23 @@ impl RepositoryIndex {
                     custom_field_joins.push(("status".to_string(), alias));
                     custom_field_count += 1;
                 }
-                _ => select_cols.push(format!("d.{}", field)),
+                field if VALID_DOCUMENT_COLUMNS.contains(&field) => {
+                    select_cols.push(format!("d.{}", field));
+                }
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "Invalid select field: '{}'. Valid fields: {}",
+                        field,
+                        VALID_DOCUMENT_COLUMNS.join(", ")
+                    ));
+                }
             }
         }
 
         let mut sql = format!("SELECT {} FROM documents d", select_cols.join(", "));
 
         for (key, alias) in &custom_field_joins {
+            // key is validated to be "owner" or "status" above, so safe to interpolate
             sql.push_str(&format!(
                 " LEFT JOIN metadata_fields {} ON {}.document_id = d.id AND {}.key = '{}'",
                 alias, alias, alias, key
