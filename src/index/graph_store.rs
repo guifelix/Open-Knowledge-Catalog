@@ -3,7 +3,7 @@ use crate::model::document::{Link, LinkInfo, ValidationIssue};
 use crate::model::graph::{GraphEdge, TraverseNode, TraverseResponse};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::VecDeque;
-use std::sync::Mutex;
+use std::sync::{Mutex, PoisonError};
 
 pub struct SqliteGraphStore {
     conn: Mutex<Connection>,
@@ -19,7 +19,10 @@ impl SqliteGraphStore {
 
 impl GraphStore for SqliteGraphStore {
     fn init(&self) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         conn.execute_batch(
             r#"
             CREATE TABLE IF NOT EXISTS links (
@@ -39,7 +42,10 @@ impl GraphStore for SqliteGraphStore {
     }
 
     fn store_links(&self, source_path: &str, links: &[Link]) -> Result<()> {
-        let mut conn = self.conn.lock().unwrap();
+        let mut conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         let source_id = conn
             .query_row(
                 "SELECT id FROM documents WHERE path = ?1",
@@ -78,7 +84,10 @@ impl GraphStore for SqliteGraphStore {
     }
 
     fn remove_links(&self, source_path: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         conn.execute(
             "DELETE FROM links WHERE source_document_id = (SELECT id FROM documents WHERE path = ?1)",
             params![source_path],
@@ -87,7 +96,10 @@ impl GraphStore for SqliteGraphStore {
     }
 
     fn get_links(&self, path: &str) -> Result<Vec<LinkInfo>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         let mut stmt = conn.prepare(
             r#"
             SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository
@@ -113,7 +125,10 @@ impl GraphStore for SqliteGraphStore {
     }
 
     fn get_backlinks(&self, path: &str, limit: usize) -> Result<Vec<LinkInfo>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         let mut stmt = conn.prepare(
             r#"
             SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository
@@ -145,7 +160,10 @@ impl GraphStore for SqliteGraphStore {
         max_depth: usize,
         max_nodes: usize,
     ) -> Result<TraverseResponse> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         let mut visited = std::collections::HashSet::new();
         let mut nodes = Vec::new();
         let mut edges = Vec::new();
@@ -251,7 +269,10 @@ impl GraphStore for SqliteGraphStore {
     }
 
     fn validate_links(&self) -> Result<Vec<ValidationIssue>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         let mut issues = Vec::new();
 
         // Broken links
@@ -294,7 +315,10 @@ impl GraphStore for SqliteGraphStore {
     }
 
     fn detect_circular_references(&self) -> Result<Vec<ValidationIssue>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
 
         let mut graph: std::collections::HashMap<String, Vec<String>> =
             std::collections::HashMap::new();

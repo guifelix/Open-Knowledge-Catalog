@@ -4,7 +4,7 @@ use crate::model::document::{
 };
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::{BTreeMap, HashMap};
-use std::sync::Mutex;
+use std::sync::{Mutex, PoisonError};
 
 pub struct SqliteDocumentStore {
     conn: Mutex<Connection>,
@@ -20,7 +20,10 @@ impl SqliteDocumentStore {
 
     #[allow(dead_code)]
     fn get_doc_id(&self, path: &str) -> Result<Option<i64>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         conn.query_row(
             "SELECT id FROM documents WHERE path = ?1",
             params![path],
@@ -33,7 +36,10 @@ impl SqliteDocumentStore {
 
 impl DocumentStore for SqliteDocumentStore {
     fn init(&self) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         conn.execute_batch(
             r#"
             CREATE TABLE IF NOT EXISTS documents (
@@ -121,7 +127,10 @@ impl DocumentStore for SqliteDocumentStore {
     }
 
     fn upsert_document(&self, doc: &DocumentRecord) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         conn.execute(
             "INSERT OR REPLACE INTO documents
              (path, parent_path, title, type, description, body_text, file_size, modified_at, content_hash, parse_status)
@@ -143,7 +152,10 @@ impl DocumentStore for SqliteDocumentStore {
     }
 
     fn get_document(&self, path: &str) -> Result<Option<DocumentRecord>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         let mut stmt = conn.prepare(
             "SELECT id, path, parent_path, title, type, description, body_text, file_size, modified_at, content_hash, parse_status
              FROM documents WHERE path = ?1"
@@ -169,7 +181,10 @@ impl DocumentStore for SqliteDocumentStore {
     }
 
     fn delete_document(&self, path: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         conn.execute("DELETE FROM documents WHERE path = ?1", params![path])?;
         Ok(())
     }
@@ -179,7 +194,10 @@ impl DocumentStore for SqliteDocumentStore {
         path_prefix: Option<&str>,
         limit: usize,
     ) -> Result<Vec<DocumentRecord>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         let mut sql = String::from(
             "SELECT id, path, parent_path, title, type, description, body_text, file_size, modified_at, content_hash, parse_status
              FROM documents"
@@ -221,7 +239,10 @@ impl DocumentStore for SqliteDocumentStore {
     }
 
     fn insert_tags(&self, doc_id: i64, tags: &[String]) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         conn.execute(
             "DELETE FROM document_tags WHERE document_id = ?1",
             params![doc_id],
@@ -236,7 +257,10 @@ impl DocumentStore for SqliteDocumentStore {
     }
 
     fn get_tags(&self, doc_id: i64) -> Result<Vec<String>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         let mut stmt = conn.prepare("SELECT tag FROM document_tags WHERE document_id = ?1")?;
         let tags = stmt
             .query_map(params![doc_id], |row| row.get::<_, String>(0))?
@@ -246,7 +270,10 @@ impl DocumentStore for SqliteDocumentStore {
     }
 
     fn delete_tags(&self, doc_id: i64) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         conn.execute(
             "DELETE FROM document_tags WHERE document_id = ?1",
             params![doc_id],
@@ -255,7 +282,10 @@ impl DocumentStore for SqliteDocumentStore {
     }
 
     fn insert_headings(&self, doc_id: i64, headings: &[HeadingInfo]) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         conn.execute(
             "DELETE FROM headings WHERE document_id = ?1",
             params![doc_id],
@@ -270,7 +300,10 @@ impl DocumentStore for SqliteDocumentStore {
     }
 
     fn get_headings(&self, doc_id: i64) -> Result<Vec<HeadingInfo>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         let mut stmt = conn.prepare(
             "SELECT level, title, anchor FROM headings WHERE document_id = ?1 ORDER BY position",
         )?;
@@ -288,7 +321,10 @@ impl DocumentStore for SqliteDocumentStore {
     }
 
     fn delete_headings(&self, doc_id: i64) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         conn.execute(
             "DELETE FROM headings WHERE document_id = ?1",
             params![doc_id],
@@ -297,7 +333,10 @@ impl DocumentStore for SqliteDocumentStore {
     }
 
     fn insert_links(&self, doc_id: i64, links: &[LinkInfo]) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         conn.execute(
             "DELETE FROM links WHERE source_document_id = ?1",
             params![doc_id],
@@ -322,7 +361,10 @@ impl DocumentStore for SqliteDocumentStore {
     }
 
     fn get_links(&self, doc_id: i64) -> Result<Vec<LinkInfo>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         let mut stmt = conn.prepare(
             "SELECT target_path, target_anchor, external_url, exists_in_repository FROM links WHERE source_document_id = ?1"
         )?;
@@ -341,7 +383,10 @@ impl DocumentStore for SqliteDocumentStore {
     }
 
     fn delete_links(&self, doc_id: i64) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         conn.execute(
             "DELETE FROM links WHERE source_document_id = ?1",
             params![doc_id],
@@ -354,13 +399,16 @@ impl DocumentStore for SqliteDocumentStore {
         doc_id: i64,
         fields: &BTreeMap<String, serde_json::Value>,
     ) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         conn.execute(
             "DELETE FROM metadata_fields WHERE document_id = ?1",
             params![doc_id],
         )?;
         for (key, value) in fields {
-            let val_str = serde_json::to_string(value).unwrap_or_default();
+            let val_str = serde_json::to_string(value).unwrap_or_else(|_| "null".to_string());
             conn.execute(
                 "INSERT INTO metadata_fields (document_id, key, value) VALUES (?1, ?2, ?3)",
                 params![doc_id, key, val_str],
@@ -370,7 +418,10 @@ impl DocumentStore for SqliteDocumentStore {
     }
 
     fn get_metadata_fields(&self, doc_id: i64) -> Result<BTreeMap<String, serde_json::Value>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         let mut stmt =
             conn.prepare("SELECT key, value FROM metadata_fields WHERE document_id = ?1")?;
         let mut fields = BTreeMap::new();
@@ -386,7 +437,10 @@ impl DocumentStore for SqliteDocumentStore {
     }
 
     fn delete_metadata_fields(&self, doc_id: i64) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         conn.execute(
             "DELETE FROM metadata_fields WHERE document_id = ?1",
             params![doc_id],
@@ -395,7 +449,10 @@ impl DocumentStore for SqliteDocumentStore {
     }
 
     fn insert_scan_errors(&self, path: &str, errors: &[ParseError]) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         conn.execute("DELETE FROM scan_errors WHERE path = ?1", params![path])?;
         for err in errors {
             conn.execute(
@@ -407,7 +464,10 @@ impl DocumentStore for SqliteDocumentStore {
     }
 
     fn get_scan_errors(&self, path: &str) -> Result<Vec<ParseError>> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         let mut stmt =
             conn.prepare("SELECT stage, message, line FROM scan_errors WHERE path = ?1")?;
         let errors = stmt
@@ -424,7 +484,10 @@ impl DocumentStore for SqliteDocumentStore {
     }
 
     fn delete_scan_errors(&self, path: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         conn.execute("DELETE FROM scan_errors WHERE path = ?1", params![path])?;
         Ok(())
     }
@@ -444,7 +507,10 @@ impl DocumentStore for SqliteDocumentStore {
     }
 
     fn get_stats(&self) -> Result<IndexStats> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         let doc_count: i64 =
             conn.query_row("SELECT COUNT(*) FROM documents", [], |row| row.get(0))?;
         let error_count: i64 =

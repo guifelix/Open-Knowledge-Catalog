@@ -44,7 +44,7 @@ impl OkcService {
         );
 
         let watcher = FileWatcher::new(roots.clone(), debounce_ms, reconcile_secs);
-        let rx = watcher.start();
+        let rx = watcher.start()?;
 
         loop {
             match rx.recv() {

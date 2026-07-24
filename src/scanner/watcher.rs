@@ -54,7 +54,7 @@ impl FileWatcher {
 
     /// Start watching. Returns a receiver that yields debounced change batches
     /// and periodic reconcile signals. Spawns a background thread.
-    pub fn start(&self) -> mpsc::Receiver<WatchEvent> {
+    pub fn start(&self) -> Result<mpsc::Receiver<WatchEvent>, anyhow::Error> {
         let (tx, rx) = mpsc::channel();
         let roots = self.roots.clone();
         let debounce = self.debounce;
@@ -67,9 +67,9 @@ impl FileWatcher {
                     error!("File watcher terminated with error: {e}");
                 }
             })
-            .expect("spawn watcher thread");
+            .map_err(|e| anyhow::anyhow!("Failed to spawn watcher thread: {}", e))?;
 
-        rx
+        Ok(rx)
     }
 
     /// Returns `true` if the path matches an editor-temp or build-artifact pattern

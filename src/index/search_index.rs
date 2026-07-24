@@ -1,7 +1,7 @@
 use crate::index::traits::{Result, SearchFilters, SearchIndex, SearchableDocument};
 use crate::model::document::{IndexStats, SearchResponse, SearchResult};
 use rusqlite::{params, Connection};
-use std::sync::Mutex;
+use std::sync::{Mutex, PoisonError};
 
 pub struct SqliteSearchIndex {
     conn: Mutex<Connection>,
@@ -18,7 +18,10 @@ impl SqliteSearchIndex {
 
 impl SearchIndex for SqliteSearchIndex {
     fn init(&self) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         conn.execute_batch(
             r#"
             CREATE VIRTUAL TABLE IF NOT EXISTS document_search USING fts5(
@@ -35,7 +38,10 @@ impl SearchIndex for SqliteSearchIndex {
     }
 
     fn index_document(&self, doc: &SearchableDocument) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         conn.execute(
             r#"
             INSERT OR REPLACE INTO document_search (path, title, description, headings, body)
@@ -53,7 +59,10 @@ impl SearchIndex for SqliteSearchIndex {
     }
 
     fn remove_document(&self, path: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         conn.execute("DELETE FROM document_search WHERE path = ?1", params![path])?;
         Ok(())
     }
@@ -131,7 +140,10 @@ impl SearchIndex for SqliteSearchIndex {
         let mut param_vec = params_refs.clone();
         param_vec.push(&limit_val);
 
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         let mut stmt = conn.prepare(&full_sql)?;
         let results: Vec<SearchResult> = stmt
             .query_map(param_vec.as_slice(), |row| {
@@ -167,7 +179,10 @@ impl SearchIndex for SqliteSearchIndex {
     }
 
     fn stats(&self) -> Result<IndexStats> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
         let doc_count: i64 =
             conn.query_row("SELECT COUNT(*) FROM documents", [], |row| row.get(0))?;
         let error_count: i64 =

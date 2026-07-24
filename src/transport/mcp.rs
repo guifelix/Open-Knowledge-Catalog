@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use rmcp::{schemars, tool};
 use serde::{Deserialize, Serialize};
@@ -264,7 +264,7 @@ impl McpServer {
         let limit = params.limit.unwrap_or(100);
         let path = params.path.unwrap_or_default();
 
-        let svc = self.service.lock().unwrap();
+        let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.browse(&path, depth, limit) {
             Ok(r) => serde_json::to_string(&BrowseResultOutput {
                 path: r.path,
@@ -292,7 +292,7 @@ impl McpServer {
         let include = params.include.unwrap_or_default();
         let max_chars = params.max_chars.unwrap_or(12000);
 
-        let svc = self.service.lock().unwrap();
+        let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.get_document(&params.path, &include, max_chars) {
             Ok(r) => serde_json::to_string(&DocumentDetailOutput {
                 path: r.path,
@@ -324,7 +324,7 @@ impl McpServer {
     async fn get_section(&self, #[tool(aggr)] params: GetSectionParams) -> String {
         let max_chars = params.max_chars.unwrap_or(5000);
 
-        let svc = self.service.lock().unwrap();
+        let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.get_section(&params.path, &params.heading, max_chars) {
             Ok(Some((heading, content))) => {
                 serde_json::to_string(&SectionOutput { heading, content }).unwrap_or_default()
@@ -337,7 +337,7 @@ impl McpServer {
     async fn search(&self, #[tool(aggr)] params: SearchParams) -> String {
         let limit = params.limit.unwrap_or(20);
 
-        let svc = self.service.lock().unwrap();
+        let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.search(
             &params.query,
             params.path_prefix.as_deref(),
@@ -382,7 +382,7 @@ impl McpServer {
             })
             .collect();
 
-        let svc = self.service.lock().unwrap();
+        let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.query_metadata(&filters, &select, limit) {
             Ok(r) => serde_json::to_string(&MetadataResponseOutput {
                 results: r.results,
@@ -396,7 +396,7 @@ impl McpServer {
 
     #[tool(description = "Get all outgoing links from a document")]
     async fn get_links(&self, #[tool(aggr)] params: LinkParams) -> String {
-        let svc = self.service.lock().unwrap();
+        let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.get_links(&params.path) {
             Ok(links) => serde_json::to_string(
                 &links
@@ -417,7 +417,7 @@ impl McpServer {
     #[tool(description = "Get all backlinks pointing to a document")]
     async fn get_backlinks(&self, #[tool(aggr)] params: BacklinkParams) -> String {
         let limit = params.limit.unwrap_or(50);
-        let svc = self.service.lock().unwrap();
+        let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.get_backlinks(&params.path, limit) {
             Ok(links) => serde_json::to_string(
                 &links
@@ -441,7 +441,7 @@ impl McpServer {
         let max_depth = params.max_depth.unwrap_or(3);
         let max_nodes = params.max_nodes.unwrap_or(50);
 
-        let svc = self.service.lock().unwrap();
+        let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.traverse(&params.start, &relations, max_depth, max_nodes) {
             Ok(r) => serde_json::to_string(&TraverseResponseOutput {
                 nodes: r
@@ -474,7 +474,7 @@ impl McpServer {
         description = "Get index statistics: document count, error count, link count, heading count"
     )]
     async fn get_stats(&self) -> String {
-        let svc = self.service.lock().unwrap();
+        let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.get_stats() {
             Ok(s) => serde_json::to_string(&StatsOutput {
                 document_count: s.document_count,
@@ -491,7 +491,7 @@ impl McpServer {
         description = "Validate the repository and check for issues across all indexed documents"
     )]
     async fn validate(&self) -> String {
-        let svc = self.service.lock().unwrap();
+        let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.validate_report() {
             Ok(r) => serde_json::to_string(&ValidateOutput {
                 summary: ValidateSummaryOutput {
