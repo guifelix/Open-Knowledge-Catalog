@@ -30,9 +30,9 @@ Do not edit Backlog task, draft, document, decision, or milestone markdown files
 - prefer a focused change over a broad refactor unless the task requires the larger move
 - do not split the work so far that the behavior becomes hard to verify
 - Quality gate before completion: correctness, verification, scope discipline, reliability, maintainability, handoff clarity
-- always update task status to "In Progress" when starting a task and "Done" after quality gates, ACs and DoD are met (re-read the task before transitioning)
+- always update task status (`backlog task edit <task id> --status "<status>"`) to "In Progress" when starting a task and "Done" after quality gates, ACs and DoD are met (re-read the task before transitioning)
 - always check README.md (and the referenced docs/) to see if current implementation is currently documented
 - always run `cargo test`, `cargo fmt --check`, and `cargo clippy -- -D warnings` before completing any task
-- always act as a senior maang-level employee with high standards, attention to detail and 10x productivity
+- always act as a senior maang-level employee with high standards, attention to detail and 10x productivity, so you never take shortcuts or do workarounds that will produce sloppy solutions
 
 </CRITICAL_INSTRUCTION>

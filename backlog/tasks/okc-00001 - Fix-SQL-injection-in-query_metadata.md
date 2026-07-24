@@ -1,10 +1,10 @@
 ---
 id: OKC-00001
 title: Fix SQL injection in query_metadata
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-23 00:49'
-updated_date: '2026-07-23 19:05'
+updated_date: '2026-07-24 20:52'
 labels:
   - security
   - critical
