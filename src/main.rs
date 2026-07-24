@@ -28,9 +28,21 @@ fn main() -> anyhow::Result<()> {
     let roots = match &cli.command {
         Command::Scan { root } => root.clone(),
         Command::Serve { root } => root.clone(),
+        Command::Watch { root, .. } => root.clone(),
         _ => vec![],
     };
     config.roots = roots;
+
+    // Apply watcher config overrides from CLI
+    if let Command::Watch {
+        debounce,
+        reconcile,
+        ..
+    } = &cli.command
+    {
+        config.watcher_debounce_ms = *debounce;
+        config.watcher_reconcile_secs = *reconcile;
+    }
 
     match cli.command {
         Command::Scan { root: _ } => {
@@ -267,6 +279,10 @@ fn main() -> anyhow::Result<()> {
             println!("  Errors: {}", result.error_count);
             println!("  Links: {}", result.link_count);
             println!("  Headings: {}", result.heading_count);
+        }
+        Command::Watch { skip_initial, .. } => {
+            let mut service = OkcService::open(&config)?;
+            service.watch(!skip_initial)?;
         }
         Command::Serve { root: _ } => {
             println!("MCP server not yet implemented - use the library directly");

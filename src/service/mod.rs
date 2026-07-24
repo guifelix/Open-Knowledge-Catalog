@@ -3,6 +3,7 @@ mod documents;
 mod graph;
 mod search;
 mod validation;
+mod watch;
 
 use crate::config::OkcConfig;
 use crate::index::RepositoryIndex;

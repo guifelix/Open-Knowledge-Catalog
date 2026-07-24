@@ -101,7 +101,7 @@ Revenue is recognized when...
 ### Build from Source
 
 ```bash
-git clone https://github.com/your-org/open-knowledge-catalog
+git clone https://github.com/guifelix/open-knowledge-catalog
 cd open-knowledge-catalog
 cargo build --release
 ```
@@ -510,8 +510,3 @@ Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for guidel
 - Follow Rust standard style (`rustfmt`)
 - Add tests for new functionality
 - Update documentation for user-facing changes
-
-## Support
-
-- [Issues](https://github.com/your-org/open-knowledge-catalog/issues) - Bug reports and feature requests
-- [Discussions](https://github.com/your-org/open-knowledge-catalog/discussions) - Questions and community

@@ -96,6 +96,20 @@ pub enum Command {
         #[arg(short, long)]
         root: Vec<PathBuf>,
     },
+    Watch {
+        /// Root directories to watch (default: configured roots)
+        #[arg(short, long)]
+        root: Vec<PathBuf>,
+        /// Skip initial full scan before starting the watcher
+        #[arg(long)]
+        skip_initial: bool,
+        /// Debounce window in milliseconds (default: 500)
+        #[arg(long, default_value = "500")]
+        debounce: u64,
+        /// Full reconciliation interval in seconds (default: 600 = 10min)
+        #[arg(long, default_value = "600")]
+        reconcile: u64,
+    },
 }
 
 fn parse_key_val(s: &str) -> Result<(String, String), String> {
