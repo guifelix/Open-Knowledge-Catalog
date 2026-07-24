@@ -1,5 +1,6 @@
-use crate::index::traits::*;
-use crate::model::*;
+use crate::index::traits::{GraphStore, Result};
+use crate::model::document::{Link, LinkInfo, ValidationIssue};
+use crate::model::graph::{GraphEdge, TraverseNode, TraverseResponse};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::VecDeque;
 use std::sync::Mutex;

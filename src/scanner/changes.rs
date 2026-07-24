@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::model::FileRecord;
+use crate::model::document::FileRecord;
 
 #[derive(Debug)]
 pub struct FileChanges {

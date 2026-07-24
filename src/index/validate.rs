@@ -4,7 +4,9 @@ use rusqlite::params;
 
 use super::database::RepositoryIndex;
 use crate::index::traits::GraphStore;
-use crate::model::*;
+use crate::model::document::{
+    CheckResult, CheckStatus, ValidationIssue, ValidationReport, ValidationSummary,
+};
 use crate::parser::frontmatter::FrontMatterExtractor;
 use crate::parser::yaml::YamlParser;
 

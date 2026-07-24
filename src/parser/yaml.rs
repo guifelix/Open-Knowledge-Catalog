@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::model::{FrontMatter, ParseError};
+use crate::model::document::{FrontMatter, ParseError};
 use saphyr::{LoadableYamlNode, Yaml};
 
 pub struct YamlParser;

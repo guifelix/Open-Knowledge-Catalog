@@ -1,6 +1,6 @@
 use memchr::memchr;
 
-use crate::model::ParseError;
+use crate::model::document::ParseError;
 
 const DELIMITER: &[u8] = b"---";
 

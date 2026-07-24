@@ -1,4 +1,4 @@
-use crate::model::{DocumentDetail, DocumentSummary};
+use crate::model::document::{DocumentDetail, DocumentSummary};
 use crate::service::OkcService;
 
 impl OkcService {

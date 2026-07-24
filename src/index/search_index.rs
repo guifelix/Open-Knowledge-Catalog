@@ -1,5 +1,5 @@
-use crate::index::traits::*;
-use crate::model::*;
+use crate::index::traits::{Result, SearchFilters, SearchIndex, SearchableDocument};
+use crate::model::document::{IndexStats, SearchResponse, SearchResult};
 use rusqlite::{params, Connection};
 use std::sync::Mutex;
 

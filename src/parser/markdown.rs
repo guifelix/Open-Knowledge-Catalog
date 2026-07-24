@@ -1,4 +1,4 @@
-use crate::model::{Heading, Link, Section};
+use crate::model::document::{Heading, Link, Section};
 use pulldown_cmark::{Event, HeadingLevel, Tag, TagEnd};
 
 pub struct MarkdownParser;

@@ -7,7 +7,7 @@ mod watch;
 
 use crate::config::OkcConfig;
 use crate::index::RepositoryIndex;
-use crate::model::*;
+use crate::model::document::ScanResult;
 
 pub struct OkcService {
     pub(crate) index: RepositoryIndex,

@@ -7,7 +7,9 @@ use tracing::info;
 use crate::config::OkcConfig;
 use crate::index::graph_store::SqliteGraphStore;
 
-use crate::model::*;
+use crate::model::document::{
+    FileRecord, FrontMatter, ParseError, ParseStatus, ProcessChangesResult, ScanResult,
+};
 use crate::parser::frontmatter::FrontMatterExtractor;
 use crate::parser::links::LinkResolver;
 use crate::parser::markdown::MarkdownParser;

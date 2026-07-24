@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use tracing::{error, info, warn};
 
-use crate::model::FileRecord;
+use crate::model::document::FileRecord;
 use crate::scanner::changes::FileChanges;
 use crate::scanner::watcher::{FileWatcher, WatchEvent};
 use crate::service::OkcService;

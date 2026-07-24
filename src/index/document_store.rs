@@ -1,5 +1,7 @@
-use crate::index::traits::*;
-use crate::model::*;
+use crate::index::traits::{DocumentRecord, DocumentStore, Result};
+use crate::model::document::{
+    HeadingInfo, IndexStats, LinkInfo, MetadataQueryResponse, ParseError,
+};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;

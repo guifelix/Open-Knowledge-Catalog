@@ -1,6 +1,10 @@
 #![allow(dead_code)]
 
-use crate::model::*;
+use crate::model::document::{
+    HeadingInfo, IndexStats, Link, LinkInfo, MetadataQueryResponse, ParseError, SearchResponse,
+    ValidationIssue,
+};
+use crate::model::graph::TraverseResponse;
 use std::collections::{BTreeMap, HashMap};
 
 pub struct SearchableDocument {

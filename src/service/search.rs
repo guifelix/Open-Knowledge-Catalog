@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::model::{MetadataQueryResponse, SearchResponse};
+use crate::model::document::{MetadataQueryResponse, SearchResponse};
 use crate::service::OkcService;
 
 impl OkcService {

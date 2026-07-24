@@ -7,7 +7,7 @@ use ignore::{WalkBuilder, WalkState};
 use tracing::info;
 
 use crate::config::OkcConfig;
-use crate::model::FileRecord;
+use crate::model::document::FileRecord;
 
 pub struct Scanner;
 

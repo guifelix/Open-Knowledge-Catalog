@@ -1,4 +1,4 @@
-use crate::model::BrowseResponse;
+use crate::model::directory::BrowseResponse;
 use crate::service::OkcService;
 
 impl OkcService {

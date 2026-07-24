@@ -1,4 +1,5 @@
-use crate::model::{LinkInfo, TraverseResponse};
+use crate::model::document::LinkInfo;
+use crate::model::graph::TraverseResponse;
 use crate::service::OkcService;
 
 impl OkcService {

@@ -5,7 +5,8 @@
 use rusqlite::params;
 
 use super::database::RepositoryIndex;
-use crate::model::*;
+use crate::model::document::LinkInfo;
+use crate::model::graph::{GraphEdge, TraverseNode, TraverseResponse};
 
 impl RepositoryIndex {
     pub fn get_links(&self, doc_path: &str) -> Result<Vec<LinkInfo>, anyhow::Error> {

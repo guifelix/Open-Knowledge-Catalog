@@ -1,4 +1,4 @@
-use crate::model::{IndexStats, ValidationIssue, ValidationReport};
+use crate::model::document::{IndexStats, ValidationIssue, ValidationReport};
 use crate::service::OkcService;
 
 impl OkcService {
