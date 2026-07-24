@@ -20,7 +20,11 @@ impl LinkResolver {
             parent.join(target)
         };
 
-        let normalized = normalize_path(&resolved);
+        let normalized = normalize_path(&resolved).unwrap_or_else(|| {
+            // Path traversal attempt detected - return a safe fallback
+            // that will not match any known file
+            "INVALID_PATH_TRAVERSAL".to_string()
+        });
         normalized.replace('\\', "/")
     }
 
@@ -72,12 +76,19 @@ impl LinkResolver {
     }
 }
 
-pub fn normalize_path(path: &Path) -> String {
+/// Normalize a path by resolving `.` and `..` components.
+/// Returns `None` if the path attempts to traverse outside the repository root
+/// (i.e., if `..` would go past the root).
+pub fn normalize_path(path: &Path) -> Option<String> {
     let mut components = Vec::new();
     for component in path.components() {
         match component {
             std::path::Component::Normal(c) => components.push(c.to_string_lossy().to_string()),
             std::path::Component::ParentDir => {
+                if components.is_empty() {
+                    // Attempt to traverse above root - reject
+                    return None;
+                }
                 components.pop();
             }
             std::path::Component::CurDir => {}
@@ -86,7 +97,29 @@ pub fn normalize_path(path: &Path) -> String {
             }
         }
     }
-    components.join("/")
+    Some(components.join("/"))
+}
+
+/// Check if a resolved link target is safe (doesn't escape repository root).
+/// Returns `true` if the path is safe, `false` if it attempts path traversal.
+#[allow(dead_code)]
+pub fn is_safe_path(path: &str) -> bool {
+    // Empty path or root is safe
+    if path.is_empty() || path == "." {
+        return true;
+    }
+    // Absolute paths (starting with /) are not allowed in repository-relative paths
+    if path.starts_with('/') {
+        return false;
+    }
+    // Check for path traversal attempts
+    let path_obj = Path::new(path);
+    for component in path_obj.components() {
+        if matches!(component, std::path::Component::ParentDir) {
+            return false;
+        }
+    }
+    true
 }
 
 #[cfg(test)]
@@ -119,5 +152,40 @@ mod tests {
             "metrics/nonexistent.md",
             &files
         ));
+    }
+
+    #[test]
+    fn test_path_traversal_blocked() {
+        // Attempt to traverse outside repository root
+        let result = LinkResolver::resolve("metrics/revenue.md", "../../../etc/passwd");
+        assert_eq!(result, "INVALID_PATH_TRAVERSAL");
+    }
+
+    #[test]
+    fn test_path_traversal_blocked_from_root() {
+        // Attempt to traverse from root level
+        let result = LinkResolver::resolve("index.md", "../secret.txt");
+        assert_eq!(result, "INVALID_PATH_TRAVERSAL");
+    }
+
+    #[test]
+    fn test_repository_root_relative_path() {
+        // Paths starting with / are treated as repository-relative (wiki-style)
+        let result = LinkResolver::resolve("metrics/revenue.md", "/datasets/orders.md");
+        assert_eq!(result, "datasets/orders.md");
+    }
+
+    #[test]
+    fn test_normalize_path_traversal_returns_none() {
+        use std::path::Path;
+        let result = normalize_path(Path::new("../../../etc/passwd"));
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_normalize_path_valid_returns_some() {
+        use std::path::Path;
+        let result = normalize_path(Path::new("metrics/../datasets/orders.md"));
+        assert_eq!(result, Some("datasets/orders.md".to_string()));
     }
 }

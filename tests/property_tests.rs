@@ -68,10 +68,14 @@ fn prop_path_normalization_dots(segments: Vec<String>, dots: Vec<String>) -> Tes
     let path = Path::new(&path_str);
     let normalized = normalize_path(path);
 
-    let has_dots = normalized
-        .split('/')
-        .any(|s| s == "." || (s == ".." && !normalized.starts_with("../")));
-    prop_assert!(!has_dots);
+    // If normalization returns None, it means path traversal was detected
+    // which is valid behavior - we just verify it doesn't panic
+    if let Some(norm) = normalized {
+        let has_dots = norm
+            .split('/')
+            .any(|s| s == "." || (s == ".." && !norm.starts_with("../")));
+        prop_assert!(!has_dots);
+    }
     Ok(())
 }
 
@@ -131,7 +135,9 @@ fn prop_nested_path_resolution(base: String, subdirs: Vec<String>, file: String)
 
     let source_path = Path::new(&source);
     let parent = source_path.parent().unwrap_or(Path::new(""));
-    let expected = normalize_path(&parent.join(&target)).replace('\\', "/");
+    let expected = normalize_path(&parent.join(&target))
+        .map(|s| s.replace('\\', "/"))
+        .unwrap_or_else(|| "INVALID_PATH_TRAVERSAL".to_string());
     prop_assert_eq!(result, expected);
     Ok(())
 }
