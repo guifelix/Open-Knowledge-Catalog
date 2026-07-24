@@ -63,7 +63,7 @@ impl FileWatcher {
         std::thread::Builder::new()
             .name("okc-watcher".into())
             .spawn(move || {
-                if let Err(e) = run_loop(tx, roots, debounce, reconcile) {
+                if let Err(e) = run_loop(&tx, &roots, debounce, reconcile) {
                     error!("File watcher terminated with error: {e}");
                 }
             })
@@ -117,15 +117,15 @@ impl FileWatcher {
 
 /// Core event loop: bridges `notify` raw events into debounced `WatchEvent` batches.
 fn run_loop(
-    output_tx: mpsc::Sender<WatchEvent>,
-    roots: Vec<PathBuf>,
+    output_tx: &mpsc::Sender<WatchEvent>,
+    roots: &[PathBuf],
     debounce: Duration,
     reconcile: Duration,
 ) -> Result<(), anyhow::Error> {
     let (raw_tx, raw_rx) = mpsc::channel::<Result<Event, notify::Error>>();
     let mut watcher = RecommendedWatcher::new(raw_tx, Config::default())?;
 
-    for root in &roots {
+    for root in roots {
         let canonical = std::fs::canonicalize(root).unwrap_or_else(|_| root.clone());
         if canonical.exists() {
             info!("Watching root: {:?}", canonical);
@@ -140,7 +140,7 @@ fn run_loop(
     }
 
     let mut gitignore_matchers: Vec<(PathBuf, Gitignore)> = Vec::new();
-    for root in &roots {
+    for root in roots {
         let canonical = std::fs::canonicalize(root).unwrap_or_else(|_| root.clone());
         let matcher = build_gitignore(&canonical);
         gitignore_matchers.push((canonical, matcher));
@@ -214,7 +214,7 @@ fn run_loop(
                 Ok(ev) => {
                     let paths = extract_paths(&ev);
                     for pb in paths {
-                        if pb.extension().map(|e| e == "md").unwrap_or(false)
+                        if pb.extension().is_some_and(|e| e == "md")
                             && !FileWatcher::is_ignored(&pb)
                             && !is_gitignored(&pb)
                         {

@@ -51,6 +51,23 @@ cargo clippy -- -D warnings
 cargo test
 ```
 
+## Security Auditing
+
+We use `cargo-audit` to scan dependencies for known vulnerabilities:
+
+```bash
+# Install cargo-audit (one-time)
+cargo install cargo-audit --locked
+
+# Run audit locally
+cargo audit
+
+# Run audit without fetching fresh advisory DB (faster, uses cached DB)
+cargo audit --no-fetch
+```
+
+The CI pipeline runs `cargo audit` on every PR and push to main. Any vulnerabilities must be resolved before merging.
+
 ## Pull Request Process
 
 1. **Fork** the repository

@@ -49,7 +49,7 @@ impl OkcService {
         loop {
             match rx.recv() {
                 Ok(WatchEvent::Changes(paths)) => {
-                    if let Err(e) = self.handle_watch_changes(paths) {
+                    if let Err(e) = self.handle_watch_changes(&paths) {
                         error!("Error processing watch changes: {e}");
                     }
                 }
@@ -82,7 +82,7 @@ impl OkcService {
     /// them through the index.
     fn handle_watch_changes(
         &mut self,
-        changed: HashSet<std::path::PathBuf>,
+        changed: &HashSet<std::path::PathBuf>,
     ) -> Result<(), anyhow::Error> {
         let canonical_roots: Vec<std::path::PathBuf> = self
             .index
@@ -96,7 +96,7 @@ impl OkcService {
         let mut added_or_modified: Vec<FileRecord> = Vec::new();
         let mut deleted: Vec<String> = Vec::new();
 
-        for pb in &changed {
+        for pb in changed {
             let canonical = std::fs::canonicalize(pb).unwrap_or_else(|_| pb.clone());
 
             // Compute the relative path used in the index

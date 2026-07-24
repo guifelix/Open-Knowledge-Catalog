@@ -41,7 +41,7 @@ impl Scanner {
                         match entry {
                             Ok(entry) => {
                                 let path = entry.path();
-                                if path.extension().map(|e| e == "md").unwrap_or(false) {
+                                if path.extension().is_some_and(|e| e == "md") {
                                     if let Ok(metadata) = entry.metadata() {
                                         if metadata.is_file() {
                                             let size = metadata.len();
@@ -52,11 +52,8 @@ impl Scanner {
                                             let modified_at = metadata
                                                 .modified()
                                                 .ok()
-                                                .and_then(|t| {
-                                                    t.duration_since(SystemTime::UNIX_EPOCH).ok()
-                                                })
-                                                .map(|d| d.as_secs() as i64)
-                                                .unwrap_or(0);
+                                                .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+                                                .map_or(0, |d| d.as_secs() as i64);
 
                                             let rel_path = pathdiff(path, &root_clone)
                                                 .unwrap_or_else(|| path.to_path_buf());

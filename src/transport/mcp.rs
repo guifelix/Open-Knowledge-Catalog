@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use rmcp::{schemars, tool};
+use rmcp::{
+    handler::server::{router::tool::ToolRouter, wrapper::Parameters},
+    schemars, tool, tool_handler, tool_router,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::config::OkcConfig;
@@ -10,6 +13,7 @@ use crate::service::OkcService;
 #[derive(Clone)]
 pub struct McpServer {
     pub service: Arc<Mutex<OkcService>>,
+    tool_router: ToolRouter<Self>,
 }
 
 impl McpServer {
@@ -17,6 +21,7 @@ impl McpServer {
         let service = OkcService::open(config)?;
         Ok(Self {
             service: Arc::new(Mutex::new(service)),
+            tool_router: Self::tool_router(),
         })
     }
 }
@@ -224,21 +229,21 @@ struct ValidateIssueOutput {
     line: Option<usize>,
 }
 
+#[tool_router]
 impl McpServer {
     #[tool(
         description = "Scan directories and index all markdown files into the knowledge catalog"
     )]
-    async fn scan(#[tool(aggr)] params: ScanParams) -> String {
+    async fn scan(
+        &self,
+        Parameters(ScanParams { roots, db_path }): Parameters<ScanParams>,
+    ) -> String {
         let config = OkcConfig {
-            roots: params
-                .roots
-                .into_iter()
-                .map(std::path::PathBuf::from)
-                .collect(),
-            db_path: params
-                .db_path
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| std::path::PathBuf::from("okc_index.db")),
+            roots: roots.into_iter().map(std::path::PathBuf::from).collect(),
+            db_path: db_path.map_or_else(
+                || std::path::PathBuf::from("okc_index.db"),
+                std::path::PathBuf::from,
+            ),
             ..Default::default()
         };
 
@@ -259,10 +264,13 @@ impl McpServer {
     }
 
     #[tool(description = "Browse the directory tree of the knowledge catalog")]
-    async fn browse(&self, #[tool(aggr)] params: BrowseParams) -> String {
-        let depth = params.depth.unwrap_or(1);
-        let limit = params.limit.unwrap_or(100);
-        let path = params.path.unwrap_or_default();
+    async fn browse(
+        &self,
+        Parameters(BrowseParams { path, depth, limit }): Parameters<BrowseParams>,
+    ) -> String {
+        let depth = depth.unwrap_or(1);
+        let limit = limit.unwrap_or(100);
+        let path = path.unwrap_or_default();
 
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.browse(&path, depth, limit) {
@@ -288,12 +296,19 @@ impl McpServer {
     }
 
     #[tool(description = "Get a document's full content and metadata from the knowledge catalog")]
-    async fn get_document(&self, #[tool(aggr)] params: GetDocumentParams) -> String {
-        let include = params.include.unwrap_or_default();
-        let max_chars = params.max_chars.unwrap_or(12000);
+    async fn get_document(
+        &self,
+        Parameters(GetDocumentParams {
+            path,
+            include,
+            max_chars,
+        }): Parameters<GetDocumentParams>,
+    ) -> String {
+        let include = include.unwrap_or_default();
+        let max_chars = max_chars.unwrap_or(12000);
 
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
-        match svc.get_document(&params.path, &include, max_chars) {
+        match svc.get_document(&path, &include, max_chars) {
             Ok(r) => serde_json::to_string(&DocumentDetailOutput {
                 path: r.path,
                 title: r.metadata.title,
@@ -321,11 +336,18 @@ impl McpServer {
     }
 
     #[tool(description = "Get a specific section of a document by heading title or anchor")]
-    async fn get_section(&self, #[tool(aggr)] params: GetSectionParams) -> String {
-        let max_chars = params.max_chars.unwrap_or(5000);
+    async fn get_section(
+        &self,
+        Parameters(GetSectionParams {
+            path,
+            heading,
+            max_chars,
+        }): Parameters<GetSectionParams>,
+    ) -> String {
+        let max_chars = max_chars.unwrap_or(5000);
 
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
-        match svc.get_section(&params.path, &params.heading, max_chars) {
+        match svc.get_section(&path, &heading, max_chars) {
             Ok(Some((heading, content))) => {
                 serde_json::to_string(&SectionOutput { heading, content }).unwrap_or_default()
             }
@@ -334,15 +356,24 @@ impl McpServer {
     }
 
     #[tool(description = "Full-text search across all documents in the knowledge catalog")]
-    async fn search(&self, #[tool(aggr)] params: SearchParams) -> String {
-        let limit = params.limit.unwrap_or(20);
+    async fn search(
+        &self,
+        Parameters(SearchParams {
+            query,
+            path_prefix,
+            types,
+            tags,
+            limit,
+        }): Parameters<SearchParams>,
+    ) -> String {
+        let limit = limit.unwrap_or(20);
 
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.search(
-            &params.query,
-            params.path_prefix.as_deref(),
-            params.types.as_deref(),
-            params.tags.as_deref(),
+            &query,
+            path_prefix.as_deref(),
+            types.as_deref(),
+            tags.as_deref(),
             limit,
         ) {
             Ok(r) => serde_json::to_string(&SearchResponseOutput {
@@ -366,11 +397,17 @@ impl McpServer {
     }
 
     #[tool(description = "Query document metadata with filters and field selection")]
-    async fn query_metadata(&self, #[tool(aggr)] params: MetadataParams) -> String {
-        let select = params.select.unwrap_or_default();
-        let limit = params.limit.unwrap_or(100);
-        let filters: HashMap<String, String> = params
-            .filter
+    async fn query_metadata(
+        &self,
+        Parameters(MetadataParams {
+            filter,
+            select,
+            limit,
+        }): Parameters<MetadataParams>,
+    ) -> String {
+        let select = select.unwrap_or_default();
+        let limit = limit.unwrap_or(100);
+        let filters: HashMap<String, String> = filter
             .unwrap_or_default()
             .into_iter()
             .filter_map(|f| {
@@ -395,9 +432,9 @@ impl McpServer {
     }
 
     #[tool(description = "Get all outgoing links from a document")]
-    async fn get_links(&self, #[tool(aggr)] params: LinkParams) -> String {
+    async fn get_links(&self, Parameters(LinkParams { path }): Parameters<LinkParams>) -> String {
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
-        match svc.get_links(&params.path) {
+        match svc.get_links(&path) {
             Ok(links) => serde_json::to_string(
                 &links
                     .into_iter()
@@ -415,10 +452,13 @@ impl McpServer {
     }
 
     #[tool(description = "Get all backlinks pointing to a document")]
-    async fn get_backlinks(&self, #[tool(aggr)] params: BacklinkParams) -> String {
-        let limit = params.limit.unwrap_or(50);
+    async fn get_backlinks(
+        &self,
+        Parameters(BacklinkParams { path, limit }): Parameters<BacklinkParams>,
+    ) -> String {
+        let limit = limit.unwrap_or(50);
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
-        match svc.get_backlinks(&params.path, limit) {
+        match svc.get_backlinks(&path, limit) {
             Ok(links) => serde_json::to_string(
                 &links
                     .into_iter()
@@ -436,13 +476,21 @@ impl McpServer {
     }
 
     #[tool(description = "Traverse the knowledge graph starting from a document, following links")]
-    async fn traverse(&self, #[tool(aggr)] params: TraverseParams) -> String {
-        let relations = params.relations.unwrap_or_default();
-        let max_depth = params.max_depth.unwrap_or(3);
-        let max_nodes = params.max_nodes.unwrap_or(50);
+    async fn traverse(
+        &self,
+        Parameters(TraverseParams {
+            start,
+            relations,
+            max_depth,
+            max_nodes,
+        }): Parameters<TraverseParams>,
+    ) -> String {
+        let relations = relations.unwrap_or_default();
+        let max_depth = max_depth.unwrap_or(3);
+        let max_nodes = max_nodes.unwrap_or(50);
 
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
-        match svc.traverse(&params.start, &relations, max_depth, max_nodes) {
+        match svc.traverse(&start, &relations, max_depth, max_nodes) {
             Ok(r) => serde_json::to_string(&TraverseResponseOutput {
                 nodes: r
                     .nodes
@@ -516,22 +564,7 @@ impl McpServer {
             Err(e) => format!("Error: {}", e),
         }
     }
-
-    rmcp::tool_box!(McpServer {
-        scan,
-        browse,
-        get_document,
-        get_section,
-        search,
-        query_metadata,
-        get_links,
-        get_backlinks,
-        traverse,
-        get_stats,
-        validate
-    });
 }
 
-impl rmcp::handler::server::ServerHandler for McpServer {
-    rmcp::tool_box!(@derive);
-}
+#[tool_handler]
+impl rmcp::handler::server::ServerHandler for McpServer {}
