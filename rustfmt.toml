@@ -1,0 +1,22 @@
+# rustfmt configuration for Open Knowledge Catalog
+# Run with: cargo fmt --check
+
+# Edition
+edition = "2021"
+
+# Line width
+max_width = 100
+
+# Indentation
+tab_spaces = 4
+hard_tabs = false
+
+# Newlines
+newline_style = "Unix"
+
+# Reorder imports
+reorder_imports = true
+reorder_modules = true
+
+# Merge derives
+merge_derives = true
