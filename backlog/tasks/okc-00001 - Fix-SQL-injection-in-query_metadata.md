@@ -4,7 +4,7 @@ title: Fix SQL injection in query_metadata
 status: Done
 assignee: []
 created_date: '2026-07-23 00:49'
-updated_date: '2026-07-24 20:52'
+updated_date: '2026-07-24 21:58'
 labels:
   - security
   - critical
