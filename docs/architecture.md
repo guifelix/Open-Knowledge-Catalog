@@ -1,6 +1,18 @@
+---
+type: Documentation
+title: Architecture
+description: System architecture, layers, data flow, and design principles
+tags:
+  - architecture
+  - design
+  - internals
+owner: Engineering Team
+status: published
+---
+
 # Architecture
 
-## Overview
+## System Layers
 
 The system has five main layers, each with a single responsibility:
 
@@ -34,91 +46,6 @@ The system has five main layers, each with a single responsibility:
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Layer Details
-
-### 1. Filesystem Layer (`src/scanner/`)
-
-**Responsibilities:**
-- Recursively walk approved repository roots
-- Discover Markdown files (`.md`, `.markdown`)
-- Respect `.gitignore` and custom exclude patterns
-- Skip hidden/excluded directories
-- Normalize paths to repository-relative form
-- Enforce symlink policy (follow/skip/reject)
-- Collect file size and modification time
-- Detect added, changed, and deleted files
-
-**Key Components:**
-- `walker.rs` — Parallel filesystem walker using `ignore` crate
-- `changes.rs` — Incremental change detection via mtime/size/content hash
-
-**Output:** `FileRecord { path, absolute_path, size, modified_at }`
-
-### 2. Parsing Layer (`src/parser/`)
-
-**Responsibilities:**
-- Extract YAML front matter from Markdown files
-- Parse YAML into structured data (preserving custom fields)
-- Parse Markdown for headings, links, sections, searchable text
-- Resolve relative links against source document path
-- Check link target existence
-
-**Key Components:**
-- `frontmatter.rs` — Fast boundary detection using `memchr`
-- `yaml.rs` — YAML parsing via `saphyr` (Serde-compatible, panic-free)
-- `markdown.rs` — Streaming event parser via `pulldown-cmark`
-- `links.rs` — Link resolution, normalization, existence checking
-
-**Output:** `ParsedDocument { front_matter, headings, links, sections, searchable_text }`
-
-### 3. Repository Model (`src/model/`)
-
-**Directory Tree (`directory.rs`):**
-- Represents filesystem containment hierarchy
-- Each node: path, optional `index.md`, child directories, documents
-- Used for browsing, progressive disclosure, subtree search limiting
-
-**Document Graph (`graph.rs`):**
-- Represents relationships between concepts
-- Edge types: `contains`, `parent`, `links_to`, `linked_from`
-- Future: `depends_on`, `owned_by`, `implements`, `uses`, `related_to`
-- Coexists with directory tree (hierarchy remains first-class API)
-
-### 4. Index & Storage Layer (`src/index/`)
-
-**SQLite Schema:**
-- `documents` — Core document metadata + content hash + parse status
-- `document_tags` — Many-to-many tags
-- `headings` — Heading level, title, anchor, position
-- `links` — Source doc, target path, anchor, external URL, existence
-- `metadata_fields` — Custom front-matter fields as key/value
-- `scan_errors` — Parse failures per file
-- `document_search` (FTS5) — Full-text search: path, title, description, headings, body
-
-**Key Components:**
-- `database.rs` — Connection management, schema, scan orchestration
-- `document_store.rs` — Document CRUD, tags, headings, links, metadata
-- `search_index.rs` — FTS5 operations, BM25 ranking
-- `graph_store.rs` — Graph edges, traversal (recursive CTEs)
-- `queries.rs` — Metadata filtering, browse, get, section retrieval
-- `validate.rs` — Repository validation (8 checks)
-- `export.rs` — JSON export for CLI/benchmarks
-- `migrations.rs` — Versioned schema migrations
-- `traits.rs` — `DocumentStore`, `SearchIndex`, `GraphStore` traits for backend swapping
-
-### 5. AI Tool Interface (`src/service/` + `src/transport/`)
-
-**Service Layer (`service/`):**
-- `browse.rs` — `browse_directory`
-- `documents.rs` — `get_document`, `get_section`
-- `search.rs` — `search_documents`
-- `graph.rs` — `get_links`, `get_backlinks`, `traverse_graph`
-- `validation.rs` — `validate_repository`
-
-**Transport Layer (`transport/`):**
-- `cli.rs` — Clap-based CLI with all 9 operations
-- `mcp.rs` — MCP server (rmcp, child-process transport)
-
 ## Technology Stack
 
 | Layer | Library | Purpose |
@@ -130,43 +57,247 @@ The system has five main layers, each with a single responsibility:
 | Storage | `rusqlite` (SQLite) | Metadata, FTS5, graph edges, transactions |
 | Hashing | `blake3` | Content fingerprints for incremental scans |
 | CLI | `clap` | Command-line interface |
-| Serialization | `serde` + `serde_json` | Structured I/O |
 | MCP | `rmcp` | Model Context Protocol server |
 | Async | `tokio` | MCP transport, cancellation |
 | Errors | `thiserror` + `anyhow` + `miette` | Domain errors, context, diagnostics |
 | Logging | `tracing` + `tracing-subscriber` | Structured logs, JSON in server mode |
+| Schema | `schemars` | JSON Schema from Rust types |
 | Config | `figment` | Merge defaults + file + env + CLI |
+| Paths | `camino` | UTF-8 path types |
 
-## Data Flow
+## Code Structure
 
 ```
-OKF repository
-    ↓
-parallel filesystem walker
-    ↓
-front-matter & Markdown parsers
-    ↓
-normalized documents
-    ├── directory hierarchy
-    ├── metadata
-    ├── headings & sections
-    └── document-link graph
-    ↓
-SQLite
-    ├── metadata indexes
-    ├── FTS5 text index
-    └── graph edges
-    ↓
-bounded AI tools
-    ├── browse
-    ├── search
-    ├── filter
-    ├── read section
-    ├── follow links
-    └── validate
-    ↓
-AI-generated answer with source paths
+src/
+├── main.rs                 # CLI entry point
+├── lib.rs                  # Module declarations
+├── config.rs               # Configuration types (figment)
+├── scanner/
+│   ├── mod.rs
+│   ├── walker.rs           # Parallel filesystem walker
+│   ├── changes.rs          # Incremental change detection
+│   └── watcher.rs          # Filesystem watcher (notify)
+├── parser/
+│   ├── mod.rs
+│   ├── frontmatter.rs      # YAML boundary extraction
+│   ├── yaml.rs             # saphyr YAML parsing
+│   ├── markdown.rs         # pulldown-cmark event parsing
+│   └── links.rs            # Link resolution & validation
+├── model/
+│   ├── mod.rs
+│   ├── document.rs         # Document, front-matter, heading, link, section
+│   ├── directory.rs        # Directory tree types
+│   └── graph.rs            # Graph edge types
+├── index/
+│   ├── mod.rs
+│   ├── database.rs         # Connection, schema, scan orchestration
+│   ├── document_store.rs   # Document CRUD + tags/headings/links/metadata
+│   ├── search_index.rs     # FTS5 operations
+│   ├── graph_store.rs      # Graph edges + traversal
+│   ├── queries.rs          # Metadata filtering, browse, get, section
+│   ├── validate.rs         # Repository validation (8 checks)
+│   ├── export.rs           # JSON export
+│   ├── migrations.rs       # Versioned schema migrations
+│   ├── graph.rs            # Graph types
+│   └── traits.rs           # DocumentStore, SearchIndex, GraphStore traits
+├── service/
+│   ├── mod.rs
+│   ├── browse.rs           # browse_directory
+│   ├── documents.rs        # get_document, get_section
+│   ├── search.rs           # search_documents
+│   ├── graph.rs            # get_links, get_backlinks, traverse_graph
+│   └── validation.rs       # validate_repository
+└── transport/
+    ├── mod.rs
+    ├── cli.rs              # Clap CLI definitions
+    └── mcp.rs              # MCP server (rmcp)
 ```
+
+## OKF Bundle Model
+
+### Bundle Structure (per OKF v0.2 §3)
+
+A bundle is a directory tree of markdown files. The directory structure is independent of the domain.
+
+```
+path/to/bundle/
+  index.md                      # Optional. Directory listing for progressive disclosure.
+  log.md                        # Optional. Chronological history of updates.
+  <concept>.md                  # A concept at the bundle root.
+  <subdirectory>/               # Subdirectories organize concepts into groups.
+    index.md
+    <concept>.md
+    <subdirectory>/
+      ...
+```
+
+**Reserved filenames** (must not be used for concept documents):
+- `index.md` — Directory listing (§8 of spec)
+- `log.md` — Update history (§9 of spec)
+
+### Concept Documents (per OKF v0.2 §4)
+
+Every concept is a UTF-8 markdown file with:
+1. **YAML frontmatter block** — delimited by `---` at start and closing `---`
+2. **Markdown body** — free-form content
+
+#### Required Frontmatter (per §4.1)
+
+```yaml
+---
+type: <Type name>                  # REQUIRED
+title: <Optional display name>
+description: <Optional one-line summary>
+resource: <Optional canonical URI for the underlying asset>
+tags: [<tag>, <tag>, ...]          # Optional
+# ... trust, lifecycle, provenance, and computation families (§5, §10)
+# ... other producer-defined key/value pairs
+---
+```
+
+- `type` is the only always-required key. A concept carrying just `type` is fully conformant.
+- Type values are not registered centrally. Producers SHOULD pick descriptive, self-explanatory values.
+- Consumers MUST tolerate unknown types gracefully.
+
+#### Recommended Frontmatter
+
+- `title` — Human-readable display name. If omitted, consumers MAY derive from filename.
+- `description` — Single sentence summary. Used by `index.md` generators, search snippets, previews.
+- `resource` — URI uniquely identifying the underlying asset. Absent for abstract concepts.
+- `tags` — YAML list of short strings for cross-cutting categorization.
+
+#### Trust, Lifecycle, Provenance (per §5)
+
+```yaml
+# Provenance: sources the concept derives from
+sources:
+  - id: ga4-schema
+    resource: https://developers.google.com/analytics/bigquery/export-schema
+    title: GA4 BigQuery Export schema
+    author: team:ga4-docs
+    usage_count: 5000
+    last_modified: 2026-05-30
+usage_window: { from: 2026-06-01, to: 2026-06-30 }
+
+# Trust: how content was produced and verified
+generated: { by: reference_agent/gemini-2.5-pro, at: 2026-06-20T22:53:05Z }
+verified:
+  - { by: human:ahormati, at: 2026-06-25T09:00:00Z }
+  - { by: process:finance-nightly, at: 2026-06-26T02:00:00Z }
+
+# Lifecycle
+status: stable        # draft | stable | deprecated
+stale_after: 2026-09-23   # absolute date; content is stale on/after this day
+```
+
+**Trust tiers** (derived from `verified`, per §5.3):
+- No `verified` key ⇒ **unverified**
+- `verified` by non-`human:` actors only ⇒ **machine-confirmed**
+- `verified` by a `human:<id>` actor ⇒ **human-reviewed**
+
+**Actor convention** (per §7):
+- `<producer>/<version>` for agents/tools: `reference_agent/gemini-2.5-pro`
+- `human:<id>` for people: `human:ahormati`
+- `process:<id>` for automated processes: `process:finance-nightly`
+
+#### Cross-Linking (per §6)
+
+Concepts link to other concepts using standard markdown links:
+
+- **Absolute (bundle-relative):** begins with `/`, interpreted relative to bundle root (recommended)
+  ```markdown
+  See the [customers table](/tables/customers.md) for the join key.
+  ```
+- **Relative:** standard markdown relative path
+  ```markdown
+  See the [neighboring concept](./other.md).
+  ```
+
+Links assert a relationship; the specific kind (parent/child, references, joins-with, depends-on) is conveyed by surrounding prose. Consumers treat all links as directed edges of an untyped relationship.
+
+Consumers MUST tolerate broken links — a link whose target does not exist is not malformed; it may represent not-yet-written knowledge.
+
+### Directory Index (`index.md`, per §8)
+
+Optional file at any directory level providing a listing for progressive disclosure. Consumers can synthesize this from frontmatter at consumption time.
+
+### Update Log (`log.md`, per §9)
+
+Optional chronological history of updates to the bundle.
+
+## Storage & Indexing
+
+### SQLite Schema
+
+Key tables:
+- `documents` — core document metadata + content hash + parse status
+- `document_tags` — many-to-many tags
+- `headings` — heading level, title, anchor, position
+- `links` — source doc, target path, anchor, external URL, existence
+- `metadata_fields` — custom front-matter fields as key/value
+- `scan_errors` — parse failures per file
+- `file_records` — incremental scan state (path, mtime, size, hash)
+
+### Full-Text Search (FTS5)
+
+Virtual table `document_search` with fields:
+- `path`, `title`, `description`, `headings`, `body`
+
+BM25 ranking with field weights:
+1. `title` (highest)
+2. `description`
+3. `headings`
+4. `body` (lowest)
+
+### Incremental Indexing
+
+1. Discover current files (parallel walk)
+2. Compare with stored `file_records` (path, mtime, size)
+3. Skip unchanged files
+4. Hash content only when mtime/size changed
+5. Parse new/modified files
+6. Delete records for removed files
+7. Rebuild affected links and search entries
+
+Content hash includes `parser_version` and `index_schema_version` so parser/schema upgrades trigger re-indexing.
+
+## AI Tool Interface
+
+### Core Operations (9 tools)
+
+| Operation | Purpose |
+|-----------|---------|
+| `browse_directory` | Inspect one area of the OKF hierarchy |
+| `get_document` | Retrieve one known concept with metadata, headings, and/or body |
+| `get_section` | Extract a specific Markdown section without the full document |
+| `search_documents` | Full-text search with optional path/type/tag filters |
+| `query_metadata` | Exact structured filtering on front-matter fields |
+| `get_links` | Outgoing links from a document |
+| `get_backlinks` | Documents referencing a concept |
+| `traverse_graph` | Explore related concepts via graph edges |
+| `validate_repository` | Report structural problems |
+
+### Transport Options
+
+- **MCP Server** (planned) — for AI agents via Model Context Protocol
+- **CLI JSON** — `okc <command> --json` for direct agent consumption
+- **Native Rust** — library API for embedded use
+
+## Security & Resource Limits
+
+Required protections:
+- Fixed allowed repository roots (no `..` escape)
+- Configurable symlink policy
+- Maximum file size
+- Maximum front-matter size
+- Maximum scan results
+- Maximum graph depth/nodes
+- Maximum response characters
+- Binary file rejection
+- Excluded secret directories (`.git/`, `node_modules/`, `target/`, `.env*`, `secrets/`, `credentials/`)
+- Read-only operation by default
+
+Exclusion policy is configurable for repositories that intentionally document similarly-named concepts.
 
 ## Design Principles
 

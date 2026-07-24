@@ -1,3 +1,15 @@
+---
+type: Documentation
+title: Configuration
+description: All configuration options for OKC (TOML, environment variables, CLI)
+tags:
+  - configuration
+  - settings
+  - config
+owner: Engineering Team
+status: published
+---
+
 # Configuration
 
 ## Command-Line Options

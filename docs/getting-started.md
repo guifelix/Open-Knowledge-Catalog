@@ -1,3 +1,15 @@
+---
+type: Documentation
+title: Getting Started
+description: Installation, quick start, and basic usage of OKC
+tags:
+  - getting-started
+  - installation
+  - quickstart
+owner: Documentation Team
+status: published
+---
+
 # Getting Started
 
 ## Installation
@@ -31,13 +43,13 @@ cp target/release/okc ~/.local/bin/
 
 ## Quick Start
 
-### 1. Create an OKF Repository
+### 1. Create an OKF Bundle
 
 ```bash
 mkdir -p my-knowledge/{metrics,datasets}
 ```
 
-Create `my-knowledge/metrics/monthly-revenue.md`:
+Create `my-knowledge/metrics/monthly-revenue.md` (OKF v0.2 format):
 
 ```markdown
 ---
@@ -45,8 +57,11 @@ type: Metric
 title: Monthly Revenue
 description: Recognized recurring revenue for the month
 tags: [finance, executive]
-owner: Finance Analytics
-status: published
+resource: https://console.example.com/metrics/monthly-revenue
+generated: { by: human:analyst, at: 2026-07-24T10:00:00Z }
+verified: { by: human:reviewer, at: 2026-07-24T11:00:00Z }
+status: stable
+stale_after: 2026-10-24
 ---
 
 # Definition
@@ -59,6 +74,12 @@ Revenue is recognized when:
 1. Service is delivered
 2. Payment is reasonably assured
 3. Amount is measurable
+
+# Sources
+
+The recognition policy is defined in [Revenue Recognition Policy](/policies/revenue-recognition.md).[^rev-policy]
+
+[^rev-policy]: Revenue recognition policy
 ```
 
 Create `my-knowledge/datasets/customer-orders.md`:
@@ -69,8 +90,10 @@ type: Dataset
 title: Customer Orders
 description: Raw order data from the e-commerce platform
 tags: [sales, raw-data]
-owner: Data Engineering
-status: published
+resource: https://console.example.com/datasets/customer-orders
+generated: { by: process:etl-pipeline, at: 2026-07-24T02:00:00Z }
+verified: { by: process:data-quality-check, at: 2026-07-24T02:30:00Z }
+status: stable
 ---
 
 # Schema
@@ -81,9 +104,13 @@ status: published
 | customer_id | string | Customer identifier |
 | order_date | date | Date of order |
 | amount | decimal | Order total in USD |
+
+# Related
+
+See [Monthly Revenue](/metrics/monthly-revenue.md) for the metric computed from this dataset.
 ```
 
-### 2. Scan the Repository
+### 2. Scan the Bundle
 
 ```bash
 okc scan --root my-knowledge
@@ -98,7 +125,7 @@ Scan complete:
   Deleted: 0
   Parse failures: 0
   Broken links: 0
-  Total links: 0
+  Total links: 1
   Duration: 0.01s
 ```
 
