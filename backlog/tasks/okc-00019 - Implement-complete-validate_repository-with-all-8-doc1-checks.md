@@ -4,14 +4,14 @@ title: Implement complete validate_repository with all 8 doc1 checks
 status: Done
 assignee: []
 created_date: '2026-07-23 06:49'
-updated_date: '2026-07-24 00:22'
+updated_date: '2026-07-24 01:12'
 labels:
   - completeness
 dependencies:
   - OKC-00020
 references:
   - 'src/index/database.rs:1008-1078'
-  - docs/doc1.md
+  - docs/implementation-plan.md
 priority: high
 type: feature
 ordinal: 21000

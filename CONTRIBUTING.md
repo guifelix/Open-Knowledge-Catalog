@@ -139,4 +139,4 @@ This project follows the [Contributor Covenant](https://www.contributor-covenant
 
 - Open a [discussion](https://github.com/your-org/open-knowledge-catalog/discussions)
 - Check existing [issues](https://github.com/your-org/open-knowledge-catalog/issues)
-- Review the [architecture docs](doc1.md) and [library analysis](doc2.md)
+- Review the [architecture docs](docs/implementation-plan.md) and [library analysis](docs/library-analysis.md)

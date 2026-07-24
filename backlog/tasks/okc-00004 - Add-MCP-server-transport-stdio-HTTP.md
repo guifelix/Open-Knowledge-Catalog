@@ -4,7 +4,7 @@ title: Add MCP server transport (stdio + HTTP)
 status: To Do
 assignee: []
 created_date: '2026-07-23 00:49'
-updated_date: '2026-07-23 19:02'
+updated_date: '2026-07-24 01:12'
 labels:
   - mcp
   - delivery
@@ -12,7 +12,7 @@ dependencies:
   - OKC-00002
 references:
   - src/transport/cli.rs
-  - docs/doc1.md#7-mcp-server-transport-stdio--http
+  - docs/implementation-plan.md#7-mcp-server-transport-stdio--http
 priority: high
 type: feature
 ordinal: 1400
