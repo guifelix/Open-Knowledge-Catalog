@@ -1,3 +1,16 @@
+---
+type: Documentation
+title: References
+description: OKF specification, key libraries, prior art, license, and contributing
+tags:
+  - references
+  - libraries
+  - prior-art
+  - license
+owner: Documentation Team
+status: published
+---
+
 # References
 
 ## OKF Specification
@@ -18,11 +31,6 @@
 | `tokio` | Async runtime | [GitHub](https://github.com/tokio-rs/tokio) |
 | `thiserror` | Derive error types | [GitHub](https://github.com/dtolnay/thiserror) |
 | `anyhow` | Application error handling | [GitHub](https://github.com/dtolnay/anyhow) |
-| `miette` | Diagnostic error reporting | [GitHub](https://github.com/zkat/miette) |
-| `tracing` | Structured logging | [GitHub](https://github.com/tokio-rs/tracing) |
-| `schemars` | JSON Schema generation | [GitHub](https://github.com/keats/schemars) |
-| `figment` | Configuration layering | [GitHub](https://github.com/figment-rs/figment) |
-| `camino` | UTF-8 path types | [GitHub](https://github.com/camino-rs/camino) |
 
 ## Prior Art
 

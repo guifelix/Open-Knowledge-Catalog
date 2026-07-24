@@ -1,3 +1,15 @@
+---
+type: Documentation
+title: Roadmap
+description: Phase status and known issues tracked in backlog
+tags:
+  - roadmap
+  - planning
+  - status
+owner: Engineering Team
+status: published
+---
+
 # Roadmap
 
 ## Phase 1 (Current) - Minimal Repository Reader
