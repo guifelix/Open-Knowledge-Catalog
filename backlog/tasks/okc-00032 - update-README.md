@@ -4,7 +4,7 @@ title: update README
 status: Done
 assignee: []
 created_date: '2026-07-24 01:24'
-updated_date: '2026-07-24 19:47'
+updated_date: '2026-07-24 19:54'
 labels: []
 dependencies: []
 ordinal: 24000
@@ -27,5 +27,5 @@ ordinal: 24000
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Split README into 7 focused docs in docs/ (getting-started, architecture, configuration, ai-usage, development, roadmap, references). Updated README.md as concise overview with links. Updated AGENTS.md with quality gate instructions. Fixed clippy warnings in mcp.rs and watcher.rs. Aligned all docs with OKF v0.2 spec: frontmatter fields (type, title, description, resource, tags, generated, verified, status, stale_after, sources), actor convention (human:, process:, producer/version), trust tiers (unverified/machine-confirmed/human-reviewed), reserved filenames (index.md, log.md), bundle-relative links. All quality gates pass: cargo test (19 passed), cargo fmt --check, cargo clippy -- -D warnings.
+Split README into 7 focused docs in docs/: getting-started.md, architecture.md, configuration.md, ai-usage.md, development.md, roadmap.md, references.md. Updated README.md as concise overview with links to all docs. Updated AGENTS.md with quality gate instructions (cargo test, fmt, clippy) and docs review requirement. Fixed clippy warnings in mcp.rs and watcher.rs. Aligned all docs with OKF v0.2 spec: frontmatter fields (type, title, description, resource, tags, generated, verified, status, stale_after, sources with id/resource/author/usage_count/last_modified/usage_window), actor convention (human:, process:, producer/version), trust tiers (unverified/machine-confirmed/human-reviewed), reserved filenames (index.md, log.md), bundle-relative links. All quality gates pass: cargo test (19 passed), cargo fmt --check, cargo clippy -- -D warnings. docs/design/ contains original pre-implementation design artifacts (not user-facing, no OKF format needed).
 <!-- SECTION:FINAL_SUMMARY:END -->
