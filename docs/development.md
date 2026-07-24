@@ -1,3 +1,16 @@
+---
+type: Documentation
+title: Development Guide
+description: Prerequisites, test commands, code structure, workflow, and adding tools/backends
+tags:
+  - development
+  - testing
+  - contributing
+  - workflow
+owner: Engineering Team
+status: published
+---
+
 # Development Guide
 
 ## Prerequisites
@@ -50,7 +63,8 @@ src/
 ├── scanner/
 │   ├── mod.rs
 │   ├── walker.rs           # Parallel filesystem walker
-│   └── changes.rs          # Incremental change detection
+│   ├── changes.rs          # Incremental change detection
+│   └── watcher.rs          # Filesystem watcher (notify)
 ├── parser/
 │   ├── mod.rs
 │   ├── frontmatter.rs      # YAML boundary extraction

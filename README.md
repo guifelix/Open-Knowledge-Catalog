@@ -1,6 +1,6 @@
 # Open Knowledge Catalog (OKC)
 
-A local-first tool that allows AI agents to safely browse, parse, search, and reason over an Open Knowledge Format (OKF) repository.
+A local-first tool that allows AI agents to safely browse, parse, search, and reason over an [Open Knowledge Format (OKF)](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) repository.
 
 ## Overview
 
