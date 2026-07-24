@@ -214,14 +214,13 @@ fn run_loop(
                 Ok(ev) => {
                     let paths = extract_paths(&ev);
                     for pb in paths {
-                        if pb.extension().map(|e| e == "md").unwrap_or(false) {
-                            if !FileWatcher::is_ignored(&pb) {
-                                if !is_gitignored(&pb) {
-                                    debug!("Watch event: {} ({ev:?})", pb.display());
-                                    pending.insert(pb);
-                                    last_flush = Instant::now();
-                                }
-                            }
+                        if pb.extension().map(|e| e == "md").unwrap_or(false)
+                            && !FileWatcher::is_ignored(&pb)
+                            && !is_gitignored(&pb)
+                        {
+                            debug!("Watch event: {} ({ev:?})", pb.display());
+                            pending.insert(pb);
+                            last_flush = Instant::now();
                         }
                     }
                 }
@@ -240,7 +239,7 @@ fn run_loop(
         }
 
         if !pending.is_empty() && last_flush.elapsed() >= debounce {
-            let batch: HashSet<PathBuf> = pending.drain().collect();
+            let batch: HashSet<PathBuf> = std::mem::take(&mut pending);
             debug!("Flushing {} change(s) after debounce", batch.len());
             if output_tx.send(WatchEvent::Changes(batch)).is_err() {
                 return Ok(());

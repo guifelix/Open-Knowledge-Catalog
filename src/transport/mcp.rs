@@ -229,15 +229,18 @@ impl McpServer {
         description = "Scan directories and index all markdown files into the knowledge catalog"
     )]
     async fn scan(#[tool(aggr)] params: ScanParams) -> String {
-        let mut config = OkcConfig::default();
-        config.roots = params
-            .roots
-            .into_iter()
-            .map(std::path::PathBuf::from)
-            .collect();
-        if let Some(db) = params.db_path {
-            config.db_path = std::path::PathBuf::from(db);
-        }
+        let config = OkcConfig {
+            roots: params
+                .roots
+                .into_iter()
+                .map(std::path::PathBuf::from)
+                .collect(),
+            db_path: params
+                .db_path
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::path::PathBuf::from("okc_index.db")),
+            ..Default::default()
+        };
 
         match OkcService::open(&config).and_then(|mut svc| svc.scan()) {
             Ok(r) => serde_json::to_string(&ScanResultOutput {
