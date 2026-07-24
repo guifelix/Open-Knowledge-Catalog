@@ -4,8 +4,8 @@ Thank you for your interest in contributing! This document provides guidelines f
 
 ## Ways to Contribute
 
-- **Bug Reports**: Found an issue? [Open an issue](https://github.com/your-org/open-knowledge-catalog/issues)
-- **Feature Requests**: Have an idea? [Start a discussion](https://github.com/your-org/open-knowledge-catalog/discussions)
+- **Bug Reports**: Found an issue? [Open an issue](https://github.com/guifelix/open-knowledge-catalog/issues)
+- **Feature Requests**: Have an idea? [Start a discussion](https://github.com/guifelix/open-knowledge-catalog/discussions)
 - **Code Contributions**: Fix bugs, add features, improve documentation
 - **Documentation**: Improve README, add examples, write tutorials
 - **Testing**: Add test cases, improve test coverage
@@ -22,7 +22,7 @@ Thank you for your interest in contributing! This document provides guidelines f
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/open-knowledge-catalog.git
+git clone https://github.com/guifelix/open-knowledge-catalog.git
 cd open-knowledge-catalog
 
 # Build the project
@@ -137,6 +137,6 @@ This project follows the [Contributor Covenant](https://www.contributor-covenant
 
 ## Questions?
 
-- Open a [discussion](https://github.com/your-org/open-knowledge-catalog/discussions)
-- Check existing [issues](https://github.com/your-org/open-knowledge-catalog/issues)
+- Open a [discussion](https://github.com/guifelix/open-knowledge-catalog/discussions)
+- Check existing [issues](https://github.com/guifelix/open-knowledge-catalog/issues)
 - Review the [architecture docs](docs/implementation-plan.md) and [library analysis](docs/library-analysis.md)

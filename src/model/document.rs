@@ -204,6 +204,16 @@ pub struct ScanResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProcessChangesResult {
+    pub files_added: usize,
+    pub files_modified: usize,
+    pub files_deleted: usize,
+    pub parse_failures: usize,
+    pub broken_links: usize,
+    pub total_links: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResponse {
     pub results: Vec<SearchResult>,
     pub total_matches: usize,

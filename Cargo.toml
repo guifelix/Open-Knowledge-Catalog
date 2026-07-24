@@ -11,6 +11,9 @@ path = "src/main.rs"
 # Filesystem traversal
 ignore = "0.4"
 
+# Filesystem watching
+notify = { version = "6", features = ["macos_fsevent"] }
+
 # Front-matter boundary detection
 memchr = "2"
 

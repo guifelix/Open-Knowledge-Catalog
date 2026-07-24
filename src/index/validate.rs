@@ -44,6 +44,7 @@ impl RepositoryIndex {
         Ok(self.build_report(issues))
     }
 
+    #[allow(dead_code)]
     pub fn validate_incremental(
         &self,
         previous_hashes: Option<&HashMap<String, String>>,
@@ -318,6 +319,7 @@ impl RepositoryIndex {
         issues
     }
 
+    #[allow(dead_code)]
     fn validate_files_changed(
         &self,
         previous_hashes: Option<&HashMap<String, String>>,

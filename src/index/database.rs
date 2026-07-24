@@ -12,7 +12,7 @@ use crate::parser::frontmatter::FrontMatterExtractor;
 use crate::parser::links::LinkResolver;
 use crate::parser::markdown::MarkdownParser;
 use crate::parser::yaml::YamlParser;
-use crate::scanner::changes::ChangeDetector;
+use crate::scanner::changes::{ChangeDetector, FileChanges};
 use crate::scanner::walker::Scanner;
 
 pub struct RepositoryIndex {
@@ -69,6 +69,30 @@ impl RepositoryIndex {
         );
 
         let known_paths: Vec<String> = current_files.iter().map(|f| f.path.clone()).collect();
+
+        let result = self.process_changes(&changes, &known_paths)?;
+
+        let duration = start.elapsed();
+
+        Ok(ScanResult {
+            total_files: current_files.len(),
+            added: result.files_added,
+            modified: result.files_modified,
+            deleted: result.files_deleted,
+            parse_failures: result.parse_failures,
+            broken_links: result.broken_links,
+            total_links: result.total_links,
+            duration_secs: duration.as_secs_f64(),
+        })
+    }
+
+    /// Process a set of file changes (added, modified, deleted) incrementally.
+    /// Used by both full `scan()` and the incremental watcher.
+    pub fn process_changes(
+        &mut self,
+        changes: &FileChanges,
+        known_paths: &[String],
+    ) -> Result<ProcessChangesResult, anyhow::Error> {
         let mut parse_failures = 0;
         let mut total_links = 0;
         let mut broken_links = 0;
@@ -77,6 +101,7 @@ impl RepositoryIndex {
         let tx = self.conn.transaction()?;
 
         for path in &changes.deleted {
+            info!("Removing deleted document: {path}");
             tx.execute("DELETE FROM documents WHERE path = ?1", params![path])?;
             tx.execute("DELETE FROM scan_errors WHERE path = ?1", params![path])?;
         }
@@ -118,7 +143,6 @@ impl RepositoryIndex {
             let (front_matter, parse_status, parse_errors, front_matter_end) =
                 Self::parse_front_matter(&extractor, &file.path, &body);
 
-            // Use only the markdown body (after front matter) for parsing
             let markdown_body = if front_matter_end < body.len() {
                 body[front_matter_end..].trim_start()
             } else {
@@ -127,7 +151,7 @@ impl RepositoryIndex {
 
             let (headings, links, body_text, _sections) = MarkdownParser::parse(markdown_body);
 
-            let resolved_links = LinkResolver::resolve_links(&file.path, &links, &known_paths);
+            let resolved_links = LinkResolver::resolve_links(&file.path, &links, known_paths);
             total_links += resolved_links.len();
             broken_links += resolved_links
                 .iter()
@@ -269,7 +293,6 @@ impl RepositoryIndex {
 
         tx.commit()?;
 
-        // Insert collected errors after transaction commits
         if !collected_errors.is_empty() {
             let tx2 = self.conn.transaction()?;
             for (path, stage, message, line) in collected_errors {
@@ -281,17 +304,13 @@ impl RepositoryIndex {
             tx2.commit()?;
         }
 
-        let duration = start.elapsed();
-
-        Ok(ScanResult {
-            total_files: current_files.len(),
-            added: changes.added.len(),
-            modified: changes.modified.len(),
-            deleted: changes.deleted.len(),
+        Ok(ProcessChangesResult {
+            files_added: changes.added.len(),
+            files_modified: changes.modified.len(),
+            files_deleted: changes.deleted.len(),
             parse_failures,
             broken_links,
             total_links,
-            duration_secs: duration.as_secs_f64(),
         })
     }
 
@@ -339,6 +358,15 @@ impl RepositoryIndex {
             })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(records)
+    }
+
+    /// Load all known document paths (for link-resolution in incremental updates).
+    pub fn load_paths(&self) -> Result<Vec<String>, anyhow::Error> {
+        let mut stmt = self.conn.prepare("SELECT path FROM documents")?;
+        let paths = stmt
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(paths)
     }
 }
 
