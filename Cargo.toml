@@ -65,3 +65,40 @@ criterion = { version = "0.5", features = ["html_reports"] }
 
 # Fuzz targets moved to `cargo fuzz` workflow (run with `cargo fuzz run`)
 # fuzz/frontmatter_extraction.rs, fuzz/yaml_parsing.rs, fuzz/path_normalization.rs
+
+[lints.rust]
+# Allow specific lints that are noisy or not applicable
+dead_code = "allow"
+unused_imports = "allow"
+missing_docs = "allow"
+
+# Warn on these lints (stricter than default)
+unused_variables = "warn"
+unused_mut = "warn"
+unused_assignments = "warn"
+
+# Deny these lints (errors)
+# (none for now)
+
+[lints.clippy]
+# Allow specific lints that are noisy or not applicable
+type_complexity = "allow"
+large_enum_variant = "allow"
+module_name_repetitions = "allow"
+
+# Warn on these lints (stricter than default)
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unused_async = "warn"
+redundant_closure = "warn"
+needless_borrow = "warn"
+needless_pass_by_value = "warn"
+manual_map = "warn"
+manual_flatten = "warn"
+filter_map_next = "warn"
+map_unwrap_or = "warn"
+
+# Deny these lints (errors)
+# (none for now - we use warn to avoid breaking existing code)
