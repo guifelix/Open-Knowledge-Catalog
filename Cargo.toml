@@ -32,7 +32,7 @@ rusqlite = { version = "0.34", features = ["bundled"] }
 blake3 = "1"
 
 # MCP / Async
-rmcp = { version = "0.1", features = ["server", "transport-child-process", "macros"] }
+rmcp = { version = "0.1", features = ["server", "transport-child-process", "transport-io", "macros"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "process"] }
 tokio-util = "0.7"
 

@@ -280,12 +280,26 @@ fn main() -> anyhow::Result<()> {
             println!("  Links: {}", result.link_count);
             println!("  Headings: {}", result.heading_count);
         }
+
         Command::Watch { skip_initial, .. } => {
             let mut service = OkcService::open(&config)?;
             service.watch(!skip_initial)?;
         }
-        Command::Serve { root: _ } => {
-            println!("MCP server not yet implemented - use the library directly");
+
+        Command::Serve { root } => {
+            let roots = if root.is_empty() {
+                vec![std::env::current_dir()?]
+            } else {
+                root
+            };
+            config.roots = roots;
+
+            let server = crate::transport::mcp::McpServer::new(&config)?;
+            let rt = tokio::runtime::Runtime::new()?;
+            rt.block_on(async {
+                let (stdin, stdout) = rmcp::transport::io::stdio();
+                rmcp::service::serve_server(server, (stdin, stdout)).await
+            })?;
         }
     }
 
