@@ -9,6 +9,7 @@ cargo-fuzz = true
 [dependencies]
 open-knowledge-catalog = { path = ".." }
 libfuzzer-sys = "0.4"
+tempfile = "3"
 
 [profile.release]
 debug = 1
@@ -30,6 +31,13 @@ bench = false
 [[bin]]
 name = "path_normalization"
 path = "fuzz_targets/path_normalization.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "query_metadata"
+path = "fuzz_targets/query_metadata.rs"
 test = false
 doc = false
 bench = false
