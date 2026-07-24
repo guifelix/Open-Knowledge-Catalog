@@ -1,6 +1,20 @@
+pub mod browse;
+pub mod documents;
+pub mod graph;
+pub mod search;
+pub mod stats;
+pub mod validation;
+
 use crate::config::OkcConfig;
 use crate::index::RepositoryIndex;
 use crate::model::*;
+use crate::service::browse::browse as browse_impl;
+use crate::service::browse::scan as scan_impl;
+use crate::service::documents::*;
+use crate::service::graph::traverse as traverse_impl;
+use crate::service::search::*;
+use crate::service::stats::get_stats as get_stats_impl;
+use crate::service::validation::*;
 
 pub struct OkcService {
     index: RepositoryIndex,
@@ -19,7 +33,7 @@ impl OkcService {
     }
 
     pub fn scan(&mut self) -> Result<ScanResult, anyhow::Error> {
-        self.index.scan()
+        scan_impl(&mut self.index)
     }
 
     pub fn browse(
@@ -28,7 +42,7 @@ impl OkcService {
         depth: usize,
         limit: usize,
     ) -> Result<BrowseResponse, anyhow::Error> {
-        self.index.browse_directory(path, depth, limit)
+        browse_impl(&self.index, path, depth, limit)
     }
 
     pub fn get_document(
@@ -37,7 +51,7 @@ impl OkcService {
         include: &[String],
         max_chars: usize,
     ) -> Result<DocumentDetail, anyhow::Error> {
-        self.index.get_document(path, include, max_chars)
+        get_document(&self.index, path, include, max_chars)
     }
 
     pub fn get_section(
@@ -46,7 +60,7 @@ impl OkcService {
         heading: &str,
         max_chars: usize,
     ) -> Result<Option<(String, String)>, anyhow::Error> {
-        self.index.get_section(path, heading, max_chars)
+        get_section(&self.index, path, heading, max_chars)
     }
 
     pub fn search(
@@ -57,7 +71,7 @@ impl OkcService {
         tags: Option<&[String]>,
         limit: usize,
     ) -> Result<SearchResponse, anyhow::Error> {
-        self.index.search(query, path_prefix, types, tags, limit)
+        search(&self.index, query, path_prefix, types, tags, limit)
     }
 
     pub fn query_metadata(
@@ -66,15 +80,15 @@ impl OkcService {
         select: &[String],
         limit: usize,
     ) -> Result<MetadataQueryResponse, anyhow::Error> {
-        self.index.query_metadata(filters, select, limit)
+        query_metadata(&self.index, filters, select, limit)
     }
 
     pub fn get_links(&self, path: &str) -> Result<Vec<LinkInfo>, anyhow::Error> {
-        self.index.get_links(path)
+        get_links(&self.index, path)
     }
 
     pub fn get_backlinks(&self, path: &str, limit: usize) -> Result<Vec<LinkInfo>, anyhow::Error> {
-        self.index.get_backlinks(path, limit)
+        get_backlinks(&self.index, path, limit)
     }
 
     pub fn traverse(
@@ -84,16 +98,15 @@ impl OkcService {
         max_depth: usize,
         max_nodes: usize,
     ) -> Result<TraverseResponse, anyhow::Error> {
-        self.index
-            .traverse_graph(start, relations, max_depth, max_nodes)
+        traverse_impl(&self.index, start, relations, max_depth, max_nodes)
     }
 
     pub fn validate(&self) -> Result<Vec<ValidationIssue>, anyhow::Error> {
-        self.index.validate()
+        validate(&self.index)
     }
 
     pub fn validate_report(&self) -> Result<ValidationReport, anyhow::Error> {
-        self.index.validate_report()
+        validate_report(&self.index)
     }
 
     #[allow(dead_code)]
@@ -101,15 +114,15 @@ impl OkcService {
         &self,
         limit: usize,
     ) -> Result<Vec<DocumentSummary>, anyhow::Error> {
-        self.index.get_recently_modified(limit)
+        get_recently_modified(&self.index, limit)
     }
 
     pub fn get_stats(&self) -> Result<IndexStats, anyhow::Error> {
-        self.index.get_stats()
+        get_stats_impl(&self.index)
     }
 
     #[allow(dead_code)]
     pub fn export_to_json(&self) -> Result<serde_json::Value, anyhow::Error> {
-        self.index.export_to_json()
+        export_to_json(&self.index)
     }
 }
