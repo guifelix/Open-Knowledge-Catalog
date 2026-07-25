@@ -32,8 +32,8 @@ rusqlite = { version = "0.34", features = ["bundled"] }
 blake3 = "1"
 
 # MCP / Async
-rmcp = { version = "=2.2.0", features = ["server", "client", "transport-child-process", "transport-io", "macros"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "process"] }
+rmcp = { version = "=2.2.0", features = ["server", "client", "transport-child-process", "transport-io", "macros", "transport-streamable-http-server", "transport-streamable-http-server-session", "transport-streamable-http-client", "transport-streamable-http-client-reqwest", "transport-worker"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "process", "net"] }
 tokio-util = "0.7"
 
 # CLI
@@ -62,6 +62,9 @@ tempfile = "3"
 proptest = "1"
 libfuzzer-sys = "0.4"
 criterion = { version = "0.5", features = ["html_reports"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+axum = "0.8"
+tokio-util = "0.7"
 
 # Fuzz targets moved to `cargo fuzz` workflow (run with `cargo fuzz run`)
 # fuzz/frontmatter_extraction.rs, fuzz/yaml_parsing.rs, fuzz/path_normalization.rs
