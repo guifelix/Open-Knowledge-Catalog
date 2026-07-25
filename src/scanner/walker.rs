@@ -52,7 +52,9 @@ impl Scanner {
                                             let modified_at = metadata
                                                 .modified()
                                                 .ok()
-                                                .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+                                                .and_then(|t| {
+                                                    t.duration_since(SystemTime::UNIX_EPOCH).ok()
+                                                })
                                                 .map_or(0, |d| d.as_secs() as i64);
 
                                             let rel_path = pathdiff(path, &root_clone)
