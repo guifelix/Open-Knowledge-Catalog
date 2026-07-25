@@ -1,3 +1,16 @@
+//! Index validation and integrity checks.
+//!
+//! This module provides comprehensive validation of the repository index,
+//! including:
+//! - Broken link detection (internal and external)
+//! - Scan error reporting
+//! - Missing index file detection
+//! - File encoding and size validation
+//! - YAML front-matter validation
+//! - Metadata completeness checks
+//! - Duplicate concept/content detection
+//! - Circular reference detection in the link graph
+
 use std::collections::{HashMap, HashSet};
 
 use rusqlite::params;
@@ -10,6 +23,7 @@ use crate::model::document::{
 use crate::parser::frontmatter::FrontMatterExtractor;
 use crate::parser::yaml::YamlParser;
 
+/// Ordered list of validation check names.
 const CHECKS: &[&str] = &[
     "broken_links",
     "scan_errors",
@@ -24,10 +38,12 @@ const CHECKS: &[&str] = &[
 ];
 
 impl RepositoryIndex {
+    /// Run all validation checks and return a flat list of issues.
     pub fn validate(&self) -> Result<Vec<ValidationIssue>, anyhow::Error> {
         Ok(self.validate_report()?.issues)
     }
 
+    /// Run all validation checks and return a structured report.
     pub fn validate_report(&self) -> Result<ValidationReport, anyhow::Error> {
         let mut issues = Vec::new();
 
@@ -47,6 +63,11 @@ impl RepositoryIndex {
     }
 
     #[allow(dead_code)]
+    /// Run incremental validation using previous content hashes.
+    ///
+    /// Only re-validates files that have changed since the last validation,
+    /// using content hashes to detect modifications. Skips unchanged files
+    /// for performance.
     pub fn validate_incremental(
         &self,
         previous_hashes: Option<&HashMap<String, String>>,

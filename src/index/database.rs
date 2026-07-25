@@ -1,3 +1,17 @@
+//! Main repository index implementation backed by SQLite.
+//!
+//! [`RepositoryIndex`] is the central storage component managing:
+//! - Document metadata and content (titles, front-matter, body text)
+//! - Heading hierarchy for each document
+//! - Internal and external links with resolution status
+//! - Custom metadata fields
+//! - Full-text search index (via [`SqliteSearchIndex`])
+//! - Graph edges for link traversal (via [`SqliteGraphStore`])
+//! - Scan error tracking
+//!
+//! Uses SQLite with WAL mode for concurrent read access and supports
+//! both file-based and in-memory storage for testing.
+
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -17,6 +31,11 @@ use crate::parser::yaml::YamlParser;
 use crate::scanner::changes::{ChangeDetector, FileChanges};
 use crate::scanner::walker::Scanner;
 
+/// Primary repository index backed by SQLite.
+///
+/// Manages document storage, full-text search, link graph, and metadata.
+/// Coordinates with [`SqliteGraphStore`] for graph operations and
+/// [`SqliteSearchIndex`] for full-text search.
 pub struct RepositoryIndex {
     pub(crate) conn: Connection,
     pub(crate) graph_store: Option<SqliteGraphStore>,
@@ -24,6 +43,10 @@ pub struct RepositoryIndex {
 }
 
 impl RepositoryIndex {
+    /// Open a new repository index at the configured database path.
+    ///
+    /// Initializes the schema if needed (via migrations) and prepares
+    /// the graph store connection.
     pub fn open(config: &OkcConfig) -> Result<Self, anyhow::Error> {
         let conn = Connection::open(&config.db_path)?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
@@ -37,6 +60,10 @@ impl RepositoryIndex {
         Ok(index)
     }
 
+    /// Open an in-memory repository index for testing.
+    ///
+    /// Uses an in-memory SQLite database with the same schema.
+    /// The graph store is not available in this mode.
     #[allow(dead_code)]
     pub fn open_in_memory(config: &OkcConfig) -> Result<Self, anyhow::Error> {
         let conn = Connection::open_in_memory()?;
@@ -55,6 +82,11 @@ impl RepositoryIndex {
         Ok(())
     }
 
+    /// Perform a full repository scan, detecting and processing all changes.
+    ///
+    /// Discovers all markdown files under configured roots, compares against
+    /// the previous index state, and incrementally processes additions,
+    /// modifications, and deletions.
     pub fn scan(&mut self) -> Result<ScanResult, anyhow::Error> {
         let start = std::time::Instant::now();
 

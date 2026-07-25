@@ -1,6 +1,6 @@
 //! Integration tests for OKF retrieval using fixture repositories
 
-use open_knowledge_catalog::{config::OkcConfig, service::OkcService};
+use okc::{config::OkcConfig, service::OkcService};
 use std::collections::HashMap;
 use tempfile::TempDir;
 

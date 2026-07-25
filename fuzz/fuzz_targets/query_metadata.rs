@@ -2,8 +2,8 @@
 
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use open_knowledge_catalog::index::RepositoryIndex;
-use open_knowledge_catalog::config::OkcConfig;
+use okc::index::RepositoryIndex;
+use okc::config::OkcConfig;
 use std::collections::HashMap;
 use tempfile::TempDir;
 

@@ -9,6 +9,10 @@ use crate::model::document::LinkInfo;
 use crate::model::graph::{GraphEdge, TraverseNode, TraverseResponse};
 
 impl RepositoryIndex {
+    /// Get forward links from a document.
+    ///
+    /// Returns all links originating from the given document with
+    /// resolution status (exists in repo, external, broken).
     pub fn get_links(&self, doc_path: &str) -> Result<Vec<LinkInfo>, anyhow::Error> {
         let mut stmt = self.conn.prepare(
             "SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository
@@ -32,6 +36,9 @@ impl RepositoryIndex {
         Ok(links)
     }
 
+    /// Get backlinks to a document.
+    ///
+    /// Returns documents that link to the given path, limited by `limit`.
     pub fn get_backlinks(
         &self,
         doc_path: &str,
@@ -59,6 +66,10 @@ impl RepositoryIndex {
         Ok(backlinks)
     }
 
+    /// Traverse the link graph from a starting document.
+    ///
+    /// Performs breadth-first traversal following links matching the given
+    /// relation types. Respects `max_depth` and `max_nodes` limits.
     pub fn traverse_graph(
         &self,
         start: &str,

@@ -1,19 +1,42 @@
+//! Front-matter extraction from markdown documents.
+//!
+//! [`FrontMatterExtractor`] locates and extracts YAML front-matter blocks
+//! delimited by `---` markers at the start of markdown files.
+//!
+//! Handles:
+//! - UTF-8 BOM detection and stripping
+//! - Opening and closing `---` delimiters
+//! - Size limits to prevent DoS from oversized front-matter
+//! - Returns byte offset of closing delimiter for body extraction
+
 use memchr::memchr;
 
 use crate::model::document::ParseError;
 
 const DELIMITER: &[u8] = b"---";
 
+/// Extracts YAML front-matter from markdown document bytes.
+///
+/// The extractor finds the opening `---` delimiter, locates the closing `---`,
+/// and returns the raw YAML content between them along with the byte offset
+/// of the closing delimiter (for extracting the markdown body).
 #[derive(Clone, Debug)]
 pub struct FrontMatterExtractor {
     max_size: usize,
 }
 
 impl FrontMatterExtractor {
+    /// Create a new extractor with a maximum front-matter size limit.
+    ///
+    /// Front-matter exceeding this size will cause a parse error.
     pub fn new(max_size: usize) -> Self {
         Self { max_size }
     }
 
+    /// Extract front-matter from document bytes.
+    ///
+    /// Returns `Ok(Some((end_offset, yaml_content)))` if front-matter is found,
+    /// `Ok(None)` if no front-matter present, or `Err` if malformed.
     pub fn extract(&self, input: &[u8]) -> Result<Option<(usize, String)>, ParseError> {
         let bom_len = if input.starts_with(b"\xef\xbb\xbf") {
             3

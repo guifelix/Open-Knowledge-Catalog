@@ -1,6 +1,14 @@
 //! Export and format operations for RepositoryIndex.
 //!
-//! Public API: export_to_json.
+//! Provides JSON export functionality for the entire repository index.
+//! Used by the CLI `--json` flag and for benchmarking.
+//!
+//! Exported data includes:
+//! - Document metadata (path, title, type, description, tags)
+//! - Heading hierarchy
+//! - Body text content
+//! - Links (internal and external)
+//! - Custom front-matter fields
 
 use rusqlite::params;
 

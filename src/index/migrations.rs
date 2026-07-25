@@ -1,5 +1,21 @@
+//! Database schema migrations for the repository index.
+//!
+//! This module manages the SQLite schema for the OKC index, including:
+//! - `documents` - Core document metadata and content
+//! - `document_tags` - Document tag associations
+//! - `headings` - Heading hierarchy for each document
+//! - `links` - Internal and external link relationships
+//! - `metadata_fields` - Custom front-matter fields
+//! - `document_search` - FTS5 full-text search index
+//! - `scan_errors` - Parse error tracking
+//! - `schema_version` - Migration version tracking
+
 use rusqlite::Connection;
 
+/// Run all pending migrations on the given connection.
+///
+/// Creates tables and indexes if they don't exist. This is idempotent
+/// and safe to call on every startup.
 pub fn run(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(
         "

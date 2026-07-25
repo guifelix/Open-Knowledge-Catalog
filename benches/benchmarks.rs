@@ -17,8 +17,8 @@ use std::path::Path;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, SamplingMode};
 use tempfile::TempDir;
 
-use open_knowledge_catalog::config::OkcConfig;
-use open_knowledge_catalog::service::OkcService;
+use okc::config::OkcConfig;
+use okc::service::OkcService;
 
 // ---------------------------------------------------------------------------
 // Corpus sizes

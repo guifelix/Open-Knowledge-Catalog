@@ -1,3 +1,11 @@
+//! Open Knowledge Catalog (OKC) - Command-line interface.
+//!
+//! This binary provides the `okc` command-line tool for indexing and querying
+//! markdown-based knowledge bases with front-matter metadata, wiki-style links,
+//! and graph-based navigation.
+//!
+//! See the library crate documentation for architecture details.
+
 use crate::config::OkcConfig;
 use clap::Parser;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};

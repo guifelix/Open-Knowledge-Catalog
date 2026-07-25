@@ -1,9 +1,28 @@
+//! Markdown parsing using pulldown-cmark.
+//!
+//! [`MarkdownParser`] extracts structured data from markdown content:
+//! - Headings with levels and auto-generated anchors
+//! - Links (wiki-style `[[...]]` and standard `[text](url)`)
+//! - Plain text body for full-text search
+//! - Logical sections (heading + content) for granular search results
+
 use crate::model::document::{Heading, Link, Section};
 use pulldown_cmark::{Event, HeadingLevel, Tag, TagEnd};
 
+/// Parses markdown into structured components.
+///
+/// Uses pulldown-cmark for compliant CommonMark parsing.
+/// Extracts headings, links, body text, and logical sections.
 pub struct MarkdownParser;
 
 impl MarkdownParser {
+    /// Parse markdown body into headings, links, plain text, and sections.
+    ///
+    /// Returns a tuple of:
+    /// - `Vec<Heading>` - All headings with level, title, anchor, position
+    /// - `Vec<Link>` - All links (wiki-style and standard) with raw text
+    /// - `String` - Plain text body for search indexing
+    /// - `Vec<Section>` - Logical sections (heading + content) for granular search
     pub fn parse(body: &str) -> (Vec<Heading>, Vec<Link>, String, Vec<Section>) {
         let parser = pulldown_cmark::Parser::new(body);
 
@@ -49,6 +68,7 @@ impl MarkdownParser {
                                 start_position: 0,
                             });
                         }
+
                         current_section_heading = heading_text.clone();
                         current_section_level = pending_heading_level;
                         current_section_content = String::new();
@@ -119,6 +139,7 @@ impl MarkdownParser {
     }
 }
 
+/// Generate a URL-friendly slug from heading text.
 fn slugify(text: &str) -> String {
     text.to_lowercase()
         .chars()

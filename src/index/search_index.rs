@@ -1,13 +1,27 @@
+//! SQLite FTS5-backed full-text search index.
+//!
+//! [`SqliteSearchIndex`] implements the [`SearchIndex`] trait using SQLite's
+//! FTS5 extension with Porter stemming and Unicode61 tokenization.
+//!
+//! Provides full-text search across document paths, titles, descriptions,
+//! headings, and body content with support for path prefix filtering,
+//! type/tag filtering, and relevance ranking.
+
 use crate::index::traits::{Result, SearchFilters, SearchIndex, SearchableDocument};
 use crate::model::document::{IndexStats, SearchResponse, SearchResult};
 use rusqlite::{params, Connection};
 use std::sync::{Mutex, PoisonError};
 
+/// FTS5-based search index with thread-safe connection.
+///
+/// Uses SQLite's FTS5 virtual table for efficient full-text search.
+/// The index is updated incrementally during document processing.
 pub struct SqliteSearchIndex {
     conn: Mutex<Connection>,
 }
 
 impl SqliteSearchIndex {
+    /// Create a new search index with the given database connection.
     #[allow(dead_code)]
     pub fn new(conn: Connection) -> Self {
         Self {

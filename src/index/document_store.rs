@@ -1,3 +1,12 @@
+//! SQLite-backed document storage implementation.
+//!
+//! This module provides [`SqliteDocumentStore`], an implementation of the
+//! [`DocumentStore`] trait that persists documents, headings, links, tags,
+//! and metadata fields to a SQLite database.
+//!
+//! The store uses a mutex-protected connection for thread safety and provides
+//! CRUD operations for all document-related data.
+
 use crate::index::traits::{DocumentRecord, DocumentStore, Result};
 use crate::model::document::{
     HeadingInfo, IndexStats, LinkInfo, MetadataQueryResponse, ParseError,
@@ -6,11 +15,16 @@ use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Mutex, PoisonError};
 
+/// SQLite-backed document store with thread-safe connection.
+///
+/// Implements the [`DocumentStore`] trait for persistent document storage.
+/// All operations are serialized through a mutex to ensure thread safety.
 pub struct SqliteDocumentStore {
     conn: Mutex<Connection>,
 }
 
 impl SqliteDocumentStore {
+    /// Create a new document store with the given database connection.
     #[allow(dead_code)]
     pub fn new(conn: Connection) -> Self {
         Self {

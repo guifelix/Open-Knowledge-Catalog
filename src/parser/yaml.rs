@@ -1,11 +1,31 @@
+//! YAML front-matter parsing using saphyr.
+//!
+//! [`YamlParser`] converts raw YAML strings into structured [`FrontMatter`].
+//!
+//! Recognized standard keys:
+//! - `type` -> `concept_type`
+//! - `title` -> `title`
+//! - `description` -> `description`
+//! - `tags` -> `tags` (sequence of strings)
+//!
+//! All other keys are stored in `custom` as a `BTreeMap` for round-trip preservation.
+
 use std::collections::BTreeMap;
 
 use crate::model::document::{FrontMatter, ParseError};
 use saphyr::{LoadableYamlNode, Yaml};
 
+/// Parses YAML front-matter into structured data.
+///
+/// Uses saphyr for safe YAML loading. Extracts known keys and preserves
+/// unknown keys in the `custom` map.
 pub struct YamlParser;
 
 impl YamlParser {
+    /// Parse raw YAML string into FrontMatter.
+    ///
+    /// Returns `Err` if YAML is not a mapping at the top level,
+    /// contains aliases, or produces a BadValue.
     pub fn parse(raw: &str) -> Result<FrontMatter, ParseError> {
         let docs = Yaml::load_from_str(raw).map_err(|e| ParseError {
             stage: "yaml".into(),

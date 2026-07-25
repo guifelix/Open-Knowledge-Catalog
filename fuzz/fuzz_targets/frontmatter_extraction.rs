@@ -1,7 +1,7 @@
 // Fuzz target for frontmatter extraction
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use open_knowledge_catalog::parser::frontmatter::FrontMatterExtractor;
+use okc::parser::frontmatter::FrontMatterExtractor;
 
 fuzz_target!(|data: &[u8]| {
     let extractor = FrontMatterExtractor::new(1024 * 1024);

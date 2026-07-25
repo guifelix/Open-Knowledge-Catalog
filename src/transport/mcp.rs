@@ -1,3 +1,20 @@
+//! Model Context Protocol (MCP) server implementation.
+//!
+//! Provides an MCP server that exposes OKC functionality as tools for
+//! AI assistant integration. Uses `rmcp` for protocol handling.
+//!
+//! Available tools:
+//! - `scan` - Index repository
+//! - `browse` - Directory browsing
+//! - `get_document` - Document retrieval
+//! - `get_section` - Section extraction
+//! - `search` - Full-text search
+//! - `query_metadata` - Structured metadata queries
+//! - `get_links` / `get_backlinks` - Link navigation
+//! - `traverse` - Graph traversal
+//! - `validate` - Index validation
+//! - `get_stats` - Index statistics
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -10,13 +27,19 @@ use serde::{Deserialize, Serialize};
 use crate::config::OkcConfig;
 use crate::service::OkcService;
 
+/// MCP server wrapping the OKC service.
+///
+/// Holds a thread-safe reference to the service and the tool router
+/// for MCP protocol handling.
 #[derive(Clone)]
 pub struct McpServer {
+    /// Thread-safe reference to the OKC service.
     pub service: Arc<Mutex<OkcService>>,
     tool_router: ToolRouter<Self>,
 }
 
 impl McpServer {
+    /// Create a new MCP server with the given configuration.
     pub fn new(config: &OkcConfig) -> Result<Self, anyhow::Error> {
         let service = OkcService::open(config)?;
         Ok(Self {

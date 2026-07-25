@@ -1,10 +1,30 @@
+//! Link resolution and validation for wiki-style markdown links.
+//!
+//! [`LinkResolver`] handles:
+//! - Relative path resolution (e.g., `[[page]]`, `[[../page]]`)
+//! - Absolute path resolution (e.g., `[[/page]]`)
+//! - External URL pass-through (http/https/mailto)
+//! - Path normalization and traversal attack prevention
+//! - Existence checking against known repository files
+
 use std::path::Path;
 
 use crate::model::Link;
 
+/// Resolves and validates markdown links.
+///
+/// Provides static methods for resolving link targets relative to a source
+/// document, checking existence, and batch-processing extracted links.
 pub struct LinkResolver;
 
 impl LinkResolver {
+    /// Resolve a single link target relative to a source document.
+    ///
+    /// Handles:
+    /// - Absolute paths (starting with `/`) -> repository root
+    /// - Relative paths -> resolved from source document's parent directory
+    /// - External URLs (http/https/mailto) -> returned unchanged
+    /// - Path traversal attempts (`../` escaping repo) -> returns safe fallback
     pub fn resolve(source_path: &str, target: &str) -> String {
         let source = Path::new(source_path);
         let parent = source.parent().unwrap_or(Path::new(""));
@@ -28,6 +48,10 @@ impl LinkResolver {
         normalized.replace('\\', "/")
     }
 
+    /// Check if a link target exists in the repository.
+    ///
+    /// External URLs (http/https/mailto) always return true.
+    /// Internal links are checked against the known files list (without anchor).
     pub fn check_exists(target: &str, known_files: &[String]) -> bool {
         if target.starts_with("http://")
             || target.starts_with("https://")
@@ -41,6 +65,11 @@ impl LinkResolver {
             .any(|f| f.as_str() == target_without_anchor)
     }
 
+    /// Resolve a batch of raw links against known repository files.
+    ///
+    /// For each link, resolves the target path and checks existence.
+    /// Returns links with `target`, `target_anchor`, `is_external`,
+    /// and `exists_in_repository` populated.
     pub fn resolve_links(
         source_path: &str,
         raw_links: &[Link],
@@ -77,6 +106,7 @@ impl LinkResolver {
 }
 
 /// Normalize a path by resolving `.` and `..` components.
+///
 /// Returns `None` if the path attempts to traverse outside the repository root
 /// (i.e., if `..` would go past the root).
 pub fn normalize_path(path: &Path) -> Option<String> {
@@ -101,6 +131,7 @@ pub fn normalize_path(path: &Path) -> Option<String> {
 }
 
 /// Check if a resolved link target is safe (doesn't escape repository root).
+///
 /// Returns `true` if the path is safe, `false` if it attempts path traversal.
 #[allow(dead_code)]
 pub fn is_safe_path(path: &str) -> bool {

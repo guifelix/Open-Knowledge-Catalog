@@ -1,3 +1,11 @@
+//! File system watching integration for incremental index updates.
+//!
+//! [`OkcService::watch`] starts a cross-platform file watcher that:
+//! - Debounces rapid file changes (configurable)
+//! - Filters editor temporary files
+//! - Processes changes incrementally via [`ChangeDetector`]
+//! - Periodically runs full reconciliation to catch missed events
+
 use std::collections::HashSet;
 use std::path::Path;
 use std::time::Duration;

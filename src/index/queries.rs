@@ -16,6 +16,10 @@ use crate::model::document::{
 use crate::parser::markdown::MarkdownParser;
 
 impl RepositoryIndex {
+    /// Browse a directory in the knowledge base.
+    ///
+    /// Returns subdirectories and documents at the given path with optional
+    /// index document summary. Depth controls recursion into subdirectories.
     pub fn browse_directory(
         &self,
         path: &str,
@@ -83,6 +87,10 @@ impl RepositoryIndex {
         })
     }
 
+    /// Get a document by path with optional section inclusion and truncation.
+    ///
+    /// - `include`: Section names to include (empty = all)
+    /// - `max_body_chars`: Maximum characters for body content
     pub fn get_document(
         &self,
         doc_path: &str,
@@ -213,6 +221,9 @@ impl RepositoryIndex {
         })
     }
 
+    /// Get a specific section from a document by heading title or anchor slug.
+    ///
+    /// Returns `(heading_title, section_content)` if found, truncated to `max_chars`.
     pub fn get_section(
         &self,
         doc_path: &str,
@@ -264,6 +275,13 @@ impl RepositoryIndex {
         Ok(None)
     }
 
+    /// Full-text search across indexed documents.
+    ///
+    /// - `query`: Search query string (FTS5 syntax supported)
+    /// - `path_prefix`: Optional path prefix to restrict search scope
+    /// - `types`: Optional concept types to filter by
+    /// - `tags`: Optional tags to filter by
+    /// - `limit`: Maximum results to return
     pub fn search(
         &self,
         query: &str,
@@ -386,6 +404,11 @@ impl RepositoryIndex {
         })
     }
 
+    /// Structured metadata query with filtering and projection.
+    ///
+    /// - `filters`: Key-value pairs to match against front-matter fields
+    /// - `select_fields`: Fields to include in results (empty = all)
+    /// - `limit`: Maximum rows to return
     pub fn query_metadata(
         &self,
         filters: &HashMap<String, String>,
@@ -539,6 +562,9 @@ impl RepositoryIndex {
         })
     }
 
+    /// Get recently modified documents.
+    ///
+    /// Returns lightweight summaries sorted by modification time (newest first).
     #[allow(dead_code)]
     pub fn get_recently_modified(
         &self,
@@ -565,6 +591,7 @@ impl RepositoryIndex {
         Ok(docs)
     }
 
+    /// Get index statistics (document count, link count, etc.).
     pub fn get_stats(&self) -> Result<IndexStats, anyhow::Error> {
         let doc_count: i64 = self
             .conn

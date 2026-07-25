@@ -1,3 +1,12 @@
+//! Core data models for the Open Knowledge Catalog.
+//!
+//! This module defines the fundamental data structures used throughout the crate:
+//!
+//! - [`directory`] - Directory browsing types (`DirectoryNode`, `DirectoryDocument`, `BrowseResponse`)
+//! - [`document`] - Document types (`FileRecord`, `FrontMatter`, `DocumentSummary`, `DocumentDetail`,
+//!   `SearchResult`, `LinkInfo`, `ValidationIssue`, `ValidationReport`, `IndexStats`, `ScanResult`)
+//! - [`graph`] - Graph traversal types (`GraphEdge`, `TraverseNode`, `TraverseResponse`)
+
 #[allow(unused_imports)]
 pub mod directory;
 #[allow(unused_imports)]

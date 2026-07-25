@@ -1,3 +1,13 @@
+//! Cross-platform filesystem watcher with debouncing and reconciliation.
+//!
+//! [`FileWatcher`] monitors repository roots for changes to markdown files,
+//! providing:
+//! - Debounced event batching (configurable window)
+//! - Editor temporary file filtering (`.swp`, `~`, `.tmp`, etc.)
+//! - Gitignore-aware exclusion
+//! - Periodic full reconciliation to catch missed events
+//! - `.md` file extension filtering
+
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
@@ -36,6 +46,11 @@ impl Default for FileWatcher {
 }
 
 impl FileWatcher {
+    /// Create a new file watcher with custom roots and timing.
+    ///
+    /// - `roots`: Directories to watch recursively
+    /// - `debounce_ms`: Debounce window in milliseconds (default: 500)
+    /// - `reconcile_secs`: Full reconciliation interval in seconds (default: 600)
     pub fn new(roots: Vec<PathBuf>, debounce_ms: u64, reconcile_secs: u64) -> Self {
         Self {
             roots,
@@ -44,6 +59,7 @@ impl FileWatcher {
         }
     }
 
+    /// Create a watcher with default timing from roots.
     #[allow(dead_code)]
     pub fn from_roots(roots: Vec<PathBuf>) -> Self {
         Self {

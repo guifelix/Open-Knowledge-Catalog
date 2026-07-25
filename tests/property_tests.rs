@@ -1,9 +1,9 @@
 //! Property-based tests using proptest
 
-use open_knowledge_catalog::model::Link as ModelLink;
-use open_knowledge_catalog::parser::frontmatter::FrontMatterExtractor;
-use open_knowledge_catalog::parser::links::{normalize_path, LinkResolver};
-use open_knowledge_catalog::parser::yaml::YamlParser;
+use okc::model::Link as ModelLink;
+use okc::parser::frontmatter::FrontMatterExtractor;
+use okc::parser::links::{normalize_path, LinkResolver};
+use okc::parser::yaml::YamlParser;
 use proptest::prelude::*;
 use proptest::test_runner::TestCaseResult;
 use std::path::Path;

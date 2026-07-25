@@ -1,3 +1,11 @@
+//! SQLite-backed graph store for link traversal and graph operations.
+//!
+//! [`SqliteGraphStore`] implements the [`GraphStore`] trait providing:
+//! - Link storage and retrieval (forward links, backlinks)
+//! - Graph traversal with depth and node limits
+//! - Link validation and circular reference detection
+//! - Thread-safe access via mutex-protected connection
+
 use crate::index::traits::{GraphStore, Result};
 use crate::model::document::{Link, LinkInfo, ValidationIssue};
 use crate::model::graph::{GraphEdge, TraverseNode, TraverseResponse};
@@ -5,11 +13,17 @@ use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::VecDeque;
 use std::sync::{Mutex, PoisonError};
 
+/// SQLite implementation of the graph store trait.
+///
+/// Stores link relationships in a normalized schema with indexes for
+/// efficient traversal queries. Uses a mutex for thread-safe access
+/// to the underlying SQLite connection.
 pub struct SqliteGraphStore {
     conn: Mutex<Connection>,
 }
 
 impl SqliteGraphStore {
+    /// Create a new graph store with the given database connection.
     pub fn new(conn: Connection) -> Self {
         Self {
             conn: Mutex::new(conn),

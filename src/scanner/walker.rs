@@ -1,3 +1,13 @@
+//! Parallel filesystem walker for markdown file discovery.
+//!
+//! [`Scanner`] uses the `ignore` crate for efficient, parallel directory traversal
+//! with support for:
+//! - `.gitignore` and standard ignore patterns
+//! - Configurable exclude patterns
+//! - Symlink following (optional)
+//! - File size limits
+//! - Extension filtering (`.md` files only)
+
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
@@ -9,9 +19,17 @@ use tracing::info;
 use crate::config::OkcConfig;
 use crate::model::document::FileRecord;
 
+/// Discovers markdown files in configured repository roots.
+///
+/// Runs a parallel walk for each root directory, sending discovered
+/// `.md` files through a channel for collection and sorting.
 pub struct Scanner;
 
 impl Scanner {
+    /// Discover all markdown files under configured roots.
+    ///
+    /// Returns a sorted vector of [`FileRecord`] with path, size, and mtime.
+    /// Respects exclude patterns, size limits, and symlink settings from config.
     pub fn discover(config: &OkcConfig) -> Vec<FileRecord> {
         let (tx, rx) = mpsc::channel();
         let max_size = config.max_file_size;
@@ -86,6 +104,7 @@ impl Scanner {
     }
 }
 
+/// Compute relative path from root to path.
 fn pathdiff(path: &Path, root: &Path) -> Option<PathBuf> {
     path.strip_prefix(root).ok().map(|p| p.to_path_buf())
 }
