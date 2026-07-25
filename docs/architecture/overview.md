@@ -4,102 +4,89 @@
 
 The Open Knowledge Catalog (OKC) is a markdown knowledge base indexer and query engine. It scans directories of markdown files with YAML front-matter, builds a searchable index with full-text search and graph navigation, and exposes the data via CLI and MCP (Model Context Protocol) server for AI assistant integration.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           EXTERNAL ACTORS                                    │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐  │
-│  │   Human     │    │   AI        │    │   CI/CD     │    │   File      │  │
-│  │   User      │    │   Assistant │    │   Pipeline  │    │   System    │  │
-│  │   (CLI)     │    │   (MCP)     │    │   (Tests)   │    │   (Markdown)│  │
-│  └──────┬──────┘    └──────┬──────┘    └──────┬──────┘    └──────┬──────┘  │
-└─────────┼──────────────────┼──────────────────┼──────────────────┼──────────┘
-          │                  │                  │                  │
-          ▼                  ▼                  ▼                  ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         TRANSPORT LAYER                                      │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  ┌─────────────────────────────┐    ┌─────────────────────────────────────┐ │
-│  │         CLI (clap)          │    │         MCP Server (rmcp)           │ │
-│  │  scan, browse, get, search, │    │  9 tools: scan, browse, get_doc,    │ │
-│  │  section, metadata, links,  │    │  get_section, search, query_meta,   │ │
-│  │  backlinks, traverse,       │    │  get_links, get_backlinks,          │ │
-│  │  validate, stats, watch,    │    │  traverse, validate, get_stats      │ │
-│  │  serve                      │    │                                     │ │
-│  └──────────────┬──────────────┘    └──────────────┬──────────────────────┘ │
-└─────────────────┼──────────────────────────────────┼────────────────────────┘
-                  │                                  │
-                  ▼                                  ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         SERVICE LAYER                                        │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  ┌─────────────────────────────────────────────────────────────────────────┐ │
-│  │                        OkcService (Facade)                              │ │
-│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌───────┐ │ │
-│  │  │ Browse  │ │Documents│ │ Graph   │ │ Search  │ │Validate │ │ Watch │ │ │
-│  │  └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘ └───┬───┘ │ │
-│  └───────┼───────────┼───────────┼───────────┼───────────┼───────────┼─────┘ │
-└──────────┼───────────┼───────────┼───────────┼───────────┼───────────┼───────┘
-           │           │           │           │           │           │
-           ▼           ▼           ▼           ▼           ▼           ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         INDEX LAYER (RepositoryIndex)                        │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────────┐  │
-│  │ Document Store   │  │ Search Index     │  │ Graph Store              │  │
-│  │ (SqliteDocument  │  │ (SqliteSearch    │  │ (SqliteGraphStore)       │  │
-│  │  Store)          │  │  Index)          │  │                          │  │
-│  │                  │  │                  │  │ - Link edges             │  │
-│  │ - Documents      │  │ - FTS5 virtual   │  │ - Traversal              │  │
-│  │ - Tags           │  │   table          │  │ - Backlinks              │  │
-│  │ - Headings       │  │ - BM25 ranking   │  │                          │  │
-│  │ - Links          │  │ - Field weights  │  │                          │  │
-│  │ - Metadata       │  │                  │  │                          │  │
-│  │ - Scan errors    │  │                  │  │                          │  │
-│  └────────┬─────────┘  └────────┬─────────┘  └────────────┬─────────────┘  │
-│           │                     │                         │                │
-│           └─────────────────────┼─────────────────────────┘                │
-│                                 ▼                                          │
-│                    ┌────────────────────────┴────────┐                                  │
-│                    │   SQLite Database  │                                  │
-│                    │   (WAL mode)       │                                  │
-│                    │                    │                                  │
-│                    │ Tables:            │                                  │
-│                    │ - documents        │                                  │
-│                    │ - document_tags    │                                  │
-│                    │ - headings         │                                  │
-│                    │ - links            │                                  │
-│                    │ - metadata_fields  │                                  │
-│                    │ - scan_errors      │                                  │
-│                    │ - file_records     │                                  │
-│                    │ - document_search  │  (FTS5 virtual table)            │
-│                    └────────────────────┘                                  │
-└─────────────────────────────────────────────────────────────────────────────┘
-           │
-           ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         SCANNER & PARSER LAYER                               │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────────┐  │
-│  │ Scanner          │  │ Change Detector  │  │ Parser Pipeline          │  │
-│  │ (walker)         │  │ (changes)        │  │                          │  │
-│  │                  │  │                  │  │ ┌──────────────────────┐ │  │
-│  │ - Parallel walk  │  │ - Added          │  │ │ FrontMatterExtractor │ │  │
-│  │ - Glob patterns  │  │ - Modified       │  │ │ (YAML)               │ │  │
-│  │ - Exclude rules  │  │ - Deleted        │  │ ├──────────────────────┤ │  │
-│  │ - Size limits    │  │ - Unchanged      │  │ │ LinkResolver         │ │  │
-│  └────────┬─────────┘  └────────┬─────────┘  │ │ (wiki-links, URLs)   │ │  │
-│           │                     │            │ ├──────────────────────┤ │  │
-│           └─────────────────────┼────────────┤ │ MarkdownParser       │ │  │
-│                                 ▼            │ │ (headings, sections) │ │  │
-│                    ┌────────────────────────┐ │ ├──────────────────────┤ │  │
-│                    │ File Watcher           │ │ │ YamlParser           │ │  │
-│                    │ (watcher)              │ │ │ (serde_yaml)         │ │  │
-│                    │ - notify crate         │ │ └──────────────────────┘ │  │
-│                    │ - Debouncing           │ └──────────────────────────┘  │
-│                    │ - Reconciliation       │                                 │
-│                    └────────────────────────┘                                 │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph EXTERNAL["External Actors"]
+        USER["Human User (CLI)"]
+        AI["AI Assistant (MCP)"]
+        CI["CI/CD Pipeline"]
+        FS["File System (Markdown)"]
+    end
+
+    subgraph TRANSPORT["Transport Layer"]
+        CLI["CLI (clap)"]
+        MCP["MCP Server (rmcp)"]
+    end
+
+    subgraph SERVICE["Service Layer"]
+        OKCSERVICE["OkcService (Facade)"]
+        BROWSE["Browse"]
+        DOCS["Documents"]
+        GRAPH["Graph"]
+        SEARCH["Search"]
+        VALIDATE["Validate"]
+        WATCH["Watch"]
+    end
+
+    subgraph INDEX["Index Layer (RepositoryIndex)"]
+        DOCSTORE["Document Store\n(SqliteDocumentStore)"]
+        SEARCHIDX["Search Index\n(SqliteSearchIndex)"]
+        GRAPHSTORE["Graph Store\n(SqliteGraphStore)"]
+    end
+
+    subgraph STORAGE["Storage"]
+        SQLITE[("SQLite Database\n(WAL mode)")]
+        TABLES["Tables:\n- documents\n- document_tags\n- headings\n- links\n- metadata_fields\n- scan_errors\n- file_records\n- document_search (FTS5)"]
+    end
+
+    subgraph SCANNER["Scanner & Parser Layer"]
+        SCANNER_WALKER["Scanner (walker)"]
+        CHANGEDETECTOR["Change Detector"]
+        PARSER_PIPELINE["Parser Pipeline"]
+        FRONTMATTER["FrontMatterExtractor (YAML)"]
+        LINKRESOLVER["LinkResolver (wiki-links, URLs)"]
+        MARKDOWNPARSER["MarkdownParser (headings, sections)"]
+        YAMLPARSER["YamlParser (serde_yaml)"]
+        FILEWATCHER["File Watcher (notify crate)"]
+    end
+
+    USER --> CLI
+    AI --> MCP
+    CI --> CLI
+    FS --> SCANNER_WALKER
+
+    CLI --> OKCSERVICE
+    MCP --> OKCSERVICE
+
+    OKCSERVICE --> BROWSE
+    OKCSERVICE --> DOCS
+    OKCSERVICE --> GRAPH
+    OKCSERVICE --> SEARCH
+    OKCSERVICE --> VALIDATE
+    OKCSERVICE --> WATCH
+
+    BROWSE --> DOCSTORE
+    DOCS --> DOCSTORE
+    GRAPH --> GRAPHSTORE
+    SEARCH --> SEARCHIDX
+    VALIDATE --> DOCSTORE
+    VALIDATE --> SEARCHIDX
+    VALIDATE --> GRAPHSTORE
+    WATCH --> SCANNER_WALKER
+
+    DOCSTORE --> SQLITE
+    SEARCHIDX --> SQLITE
+    GRAPHSTORE --> SQLITE
+
+    SQLITE --> TABLES
+
+    SCANNER_WALKER --> CHANGEDETECTOR
+    CHANGEDETECTOR --> PARSER_PIPELINE
+    PARSER_PIPELINE --> FRONTMATTER
+    PARSER_PIPELINE --> LINKRESOLVER
+    PARSER_PIPELINE --> MARKDOWNPARSER
+    PARSER_PIPELINE --> YAMLPARSER
+    FILEWATCHER --> CHANGEDETECTOR
 ```
 
 ## Module Boundaries
@@ -118,79 +105,35 @@ The Open Knowledge Catalog (OKC) is a markdown knowledge base indexer and query 
 
 ### Scan Pipeline (Full Index)
 
-```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│  Discover   │───▶│  Detect     │───▶│  Parse      │───▶│  Store      │
-│  Files      │    │  Changes    │    │  Documents  │    │  Results    │
-└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
-      │                  │                  │                  │
-      ▼                  ▼                  ▼                  ▼
-  Scanner::         ChangeDetector    DocumentParser    RepositoryIndex
-  discover()        ::detect()        ::process_changes()  ::process_changes()
-  - walk roots      - compare with    - extract FM      - upsert docs
-  - filter .md      file_records      - resolve links   - index FTS5
-  - collect meta    - classify        - parse MD        - store graph
+```mermaid
+flowchart LR
+    DISCOVER["Discover Files\nScanner::discover()\n- walk roots\n- filter .md\n- collect meta"] --> DETECT["Detect Changes\nChangeDetector::detect()\n- compare with file_records\n- classify added/modified/deleted"]
+    DETECT --> PARSE["Parse Documents\nDocumentParser::process_changes()\n- extract FM\n- resolve links\n- parse MD"]
+    PARSE --> STORE["Store Results\nRepositoryIndex::process_changes()\n- upsert docs\n- index FTS5\n- store graph"]
 ```
 
 ### Incremental Watch Flow
 
-```
-File System Event
-       │
-       ▼
-┌──────────────────┐
-│  FileWatcher     │  (notify crate, debounced)
-│  - collect events│
-│  - batch by      │
-│    debounce_ms   │
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│  Reconcile       │  (periodic full scan)
-│  - full walk     │
-│  - detect drift  │
-└────────┬─────────┘
-         │
-         ▼
-    [Same as Scan Pipeline]
+```mermaid
+flowchart TD
+    FSEVENT["File System Event"] --> NOTIFY["notify crate"]
+    NOTIFY --> WATCHER["FileWatcher\n- collect events\n- batch by debounce_ms"]
+    WATCHER --> BATCH["Batch Events"]
+    WATCHER -.-> RECONCILE["Reconcile (600s)\n- full walk\n- detect drift"]
+    BATCH --> CHANGEDETECTOR["ChangeDetector\n(same as scan)"]
+    RECONCILE --> CHANGEDETECTOR
+    CHANGEDETECTOR --> PROCESS["RepositoryIndex\n.process_changes()\n(same parser + storage)"]
 ```
 
 ### Query Flow (Search Example)
 
-```
-CLI/MCP Request
-       │
-       ▼
-┌──────────────────┐
-│  OkcService      │
-│  .search()       │
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│  RepositoryIndex │
-│  .search()       │
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│  SqliteSearch    │
-│  Index           │
-│  - FTS5 query    │
-│  - BM25 rank     │
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│  DocumentStore   │
-│  - fetch details │
-│  (title, path,   │
-│   excerpt)       │
-└────────┬─────────┘
-         │
-         ▼
-    Response
+```mermaid
+flowchart TD
+    REQUEST["CLI/MCP Request"] --> SERVICE["OkcService.search()"]
+    SERVICE --> REPO["RepositoryIndex.search()"]
+    REPO --> FTS5["SqliteSearchIndex\n- FTS5 query\n- BM25 rank"]
+    FTS5 --> DOCSTORE["DocumentStore\n- fetch details\n(title, path, excerpt)"]
+    DOCSTORE --> RESPONSE["Response"]
 ```
 
 ## Key Abstractions

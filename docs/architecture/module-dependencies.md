@@ -4,99 +4,84 @@
 
 This document shows the module dependencies in the Open Knowledge Catalog crate. Arrows indicate "depends on" (uses types/functions from).
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                                    main.rs                                       │
-│                              (CLI entry point)                                   │
-└─────────────────────────────────────┬───────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                                  transport/                                      │
-│  ┌─────────────────────┐    ┌─────────────────────┐                             │
-│  │       cli.rs        │    │       mcp.rs        │                             │
-│  │  (clap commands)    │    │  (MCP server)       │                             │
-│  └──────────┬──────────┘    └──────────┬──────────┘                             │
-└─────────────┼──────────────────────────┼────────────────────────────────────────┘
-              │                          │
-              ▼                          ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                                  service/                                        │
-│  ┌─────────────────────────────────────────────────────────────────────────────┐ │
-│  │                            OkcService (Facade)                              │ │
-│  │  ┌─────────┐ ┌──────────┐ ┌────────┐ ┌────────┐ ┌──────────┐ ┌──────────┐  │ │
-│  │  │ Browse  │ │ Documents│ │ Graph  │ │ Search │ │ Validate │ │  Watch   │  │ │
-│  │  └────┬────┘ └────┬─────┘ └────┬───┘ └────┬───┘ └────┬─────┘ └────┬─────┘  │ │
-│  └───────┼───────────┼────────────┼───────────┼───────────┼────────────┼────────┘ │
-└──────────┼───────────┼────────────┼───────────┼───────────┼────────────┼──────────┘
-           │           │            │           │           │            │
-           ▼           ▼            ▼           ▼           ▼            ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                                    index/                                        │
-│  ┌─────────────────────────────────────────────────────────────────────────────┐ │
-│  │                          RepositoryIndex                                     │ │
-│  │  ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────────────────┐   │ │
-│  │  │ Document Store  │ │  Search Index   │ │       Graph Store           │   │ │
-│  │  │ (SqliteDocStore)│ │(SqliteSearchIdx)│ │      (SqliteGraphStore)     │   │ │
-│  │  └────────┬────────┘ └────────┬────────┘ └──────────────┬──────────────┘   │ │
-│  └───────────┼───────────────────┼─────────────────────────┼───────────────────┘ │
-└──────────────┼───────────────────┼─────────────────────────┼──────────────────────┘
-               │                   │                         │
-               ▼                   ▼                         ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                              index/ (support modules)                            │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌────────────────────────┐  │
-│  │  database.rs │ │  queries.rs  │ │  validate.rs │ │  parser.rs (index)     │  │
-│  │  (scan,      │ │  (search,    │ │  (8 checks)  │ │  (process_changes,    │  │
-│  │   process)   │ │   browse,    │ │              │ │   DocumentParser)      │  │
-│  │              │ │   get, etc)  │ │              │ │                        │  │
-│  └──────────────┘ └──────────────┘ └──────────────┘ └────────────────────────┘  │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌────────────────────────┐  │
-│  │  traits.rs   │ │ migrations.rs│ │  export.rs   │ │  graph.rs / graph_store│  │
-│  │  (DocStore,  │ │  (schema v1) │ │  (JSON)      │ │  (traversal algos)     │  │
-│  │   SearchIdx, │ │              │ │              │ │                        │  │
-│  │   GraphStore)│ │              │ │              │ │                        │  │
-│  └──────────────┘ └──────────────┘ └──────────────┘ └────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────────────┘
-               │                   │                         │
-               ▼                   ▼                         ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                                  parser/                                         │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌────────────────────────┐  │
-│  │ frontmatter.rs│ │   yaml.rs    │ │ markdown.rs  │ │      links.rs        │  │
-│  │ (YAML bounds) │ │ (saphyr)     │ │(pulldown-    │ │  (wiki-links, URLs,  │  │
-│  │               │ │              │ │  cmark)      │ │   resolution)        │  │
-│  └──────────────┘ └──────────────┘ └──────────────┘ └────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────────────┘
-               │                   │                         │
-               ▼                   ▼                         ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                                  scanner/                                        │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐                             │
-│  │  walker.rs   │ │  changes.rs  │ │  watcher.rs  │                             │
-│  │ (parallel    │ │ (diff: add/  │ │ (notify,     │                             │
-│  │  walk,      │ │  mod/del)    │ │  debounce,   │                             │
-│  │  ignore)     │ │              │ │  reconcile)  │                             │
-│  └──────────────┘ └──────────────┘ └──────────────┘                             │
-└─────────────────────────────────────────────────────────────────────────────────┘
-               │                   │                         │
-               ▼                   ▼                         ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                                  model/                                          │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐                             │
-│  │ document.rs  │ │ directory.rs │ │   graph.rs   │                             │
-│  │ (FileRecord, │ │ (BrowseResp, │ │ (GraphEdge,  │                             │
-│  │  FrontMatter,│ │  DirNode,    │ │  TraverseNode,│                             │
-│  │  SearchResult│ │  DirDoc)     │ │  TraverseResp)│                             │
-│  │  Link, etc)  │ │              │ │              │                             │
-│  └──────────────┘ └──────────────┘ └──────────────┘                             │
-└─────────────────────────────────────────────────────────────────────────────────┘
-               │
-               ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                                  config.rs                                       │
-│                           (OkcConfig - figment)                                  │
-└─────────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    MAIN["main.rs\n(CLI entry point)"]
+    
+    subgraph TRANSPORT["transport/"]
+        CLI["cli.rs\n(clap commands)"]
+        MCP["mcp.rs\n(MCP server)"]
+    end
+    
+    subgraph SERVICE["service/"]
+        OKCSERVICE["OkcService (Facade)"]
+        BROWSE["Browse"]
+        DOCS["Documents"]
+        GRAPH["Graph"]
+        SEARCH["Search"]
+        VALIDATE["Validate"]
+        WATCH["Watch"]
+    end
+    
+    subgraph INDEX["index/"]
+        REPOINDEX["RepositoryIndex"]
+        DOCSTORE["Document Store\n(SqliteDocumentStore)"]
+        SEARCHIDX["Search Index\n(SqliteSearchIndex)"]
+        GRAPHSTORE["Graph Store\n(SqliteGraphStore)"]
+    end
+    
+    subgraph INDEX_SUPPORT["index/ (support modules)"]
+        DATABASE["database.rs\n(scan, process)"]
+        QUERIES["queries.rs\n(search, browse, get, etc)"]
+        VALIDATE_IDX["validate.rs\n(8 checks)"]
+        PARSER_IDX["parser.rs (index)\n(process_changes, DocumentParser)"]
+        TRAITS["traits.rs\n(DocStore, SearchIdx, GraphStore)"]
+        MIGRATIONS["migrations.rs\n(schema v1)"]
+        EXPORT["export.rs\n(JSON)"]
+        GRAPH_IDX["graph.rs / graph_store.rs\n(traversal algos)"]
+    end
+    
+    subgraph PARSER["parser/"]
+        FRONTMATTER["frontmatter.rs\n(YAML bounds)"]
+        YAML["yaml.rs\n(saphyr)"]
+        MARKDOWN["markdown.rs\n(pulldown-cmark)"]
+        LINKS["links.rs\n(wiki-links, URLs, resolution)"]
+    end
+    
+    subgraph SCANNER["scanner/"]
+        WALKER["walker.rs\n(parallel walk, ignore)"]
+        CHANGES["changes.rs\n(diff: add/mod/del)"]
+        WATCHER["watcher.rs\n(notify, debounce, reconcile)"]
+    end
+    
+    subgraph MODEL["model/"]
+        DOCUMENT["document.rs\n(FileRecord, FrontMatter,\nSearchResult, Link, etc)"]
+        DIRECTORY["directory.rs\n(BrowseResp, DirNode, DirDoc)"]
+        GRAPH_MODEL["graph.rs\n(GraphEdge, TraverseNode,\nTraverseResp)"]
+    end
+    
+    CONFIG["config.rs\n(OkcConfig - figment)"]
+    
+    MAIN --> TRANSPORT
+    TRANSPORT --> SERVICE
+    SERVICE --> INDEX
+    INDEX --> INDEX_SUPPORT
+    INDEX_SUPPORT --> PARSER
+    INDEX_SUPPORT --> SCANNER
+    INDEX_SUPPORT --> MODEL
+    PARSER --> MODEL
+    SCANNER --> CONFIG
+    SCANNER --> MODEL
+    INDEX --> CONFIG
+    INDEX --> MODEL
+    INDEX --> PARSER
+    INDEX --> SCANNER
+    SERVICE --> CONFIG
+    SERVICE --> MODEL
+    TRANSPORT --> CONFIG
+    TRANSPORT --> MODEL
+    MAIN --> CONFIG
+    MAIN --> MODEL
 ```
 
 ## Dependency Matrix
@@ -125,11 +110,24 @@ This document shows the module dependencies in the Open Knowledge Catalog crate.
 
 ## Trait Boundaries (for Testing/Swapping)
 
-```
-index/traits.rs
-├── DocumentStore  →  SqliteDocumentStore, MockDocumentStore, MemoryDocumentStore
-├── SearchIndex    →  SqliteSearchIndex,  TantivySearchIndex,  MockSearchIndex
-└── GraphStore     →  SqliteGraphStore,   MockGraphStore,      MemoryGraphStore
+```mermaid
+graph LR
+    TRAITS["index/traits.rs"]
+    TRAITS --> DOCSTORE_TRAIT["DocumentStore"]
+    TRAITS --> SEARCHIDX_TRAIT["SearchIndex"]
+    TRAITS --> GRAPHSTORE_TRAIT["GraphStore"]
+    
+    DOCSTORE_TRAIT --> SQLITE_DOC["SqliteDocumentStore"]
+    DOCSTORE_TRAIT --> MOCK_DOC["MockDocumentStore"]
+    DOCSTORE_TRAIT --> MEMORY_DOC["MemoryDocumentStore"]
+    
+    SEARCHIDX_TRAIT --> SQLITE_SEARCH["SqliteSearchIndex"]
+    SEARCHIDX_TRAIT --> TANTIVY_SEARCH["TantivySearchIndex"]
+    SEARCHIDX_TRAIT --> MOCK_SEARCH["MockSearchIndex"]
+    
+    GRAPHSTORE_TRAIT --> SQLITE_GRAPH["SqliteGraphStore"]
+    GRAPHSTORE_TRAIT --> MOCK_GRAPH["MockGraphStore"]
+    GRAPHSTORE_TRAIT --> MEMORY_GRAPH["MemoryGraphStore"]
 ```
 
 Service layer uses `RepositoryIndex` which composes trait objects:

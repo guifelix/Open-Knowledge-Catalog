@@ -6,66 +6,29 @@ This document describes the primary data flows in the Open Knowledge Catalog sys
 
 ## 1. Full Repository Scan Flow
 
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   CLI/MCP   │────▶│ OkcService  │────▶│RepositoryIdx│────▶│  Scanner    │
-│  scan cmd   │     │  .scan()    │     │  .scan()    │     │ .discover() │
-└─────────────┘     └─────────────┘     └──────┬──────┘     └──────┬──────┘
-                                               │                   │
-                                               ▼                   ▼
-                                        ┌─────────────┐     ┌─────────────┐
-                                        │ Load prev   │     │ Parallel    │
-                                        │ file records│     │ walk (ignore)│
-                                        └──────┬──────┘     └──────┬──────┘
-                                               │                   │
-                                               ▼                   ▼
-                                        ┌─────────────────────────────────┐
-                                        │      ChangeDetector             │
-                                        │  .detect(current, previous)     │
-                                        │  → added, modified, deleted     │
-                                        └──────────────┬──────────────────┘
-                                                       │
-                                                       ▼
-                                        ┌─────────────────────────────────┐
-                                        │      Parser Pipeline            │
-                                        │  (index/parser.rs)              │
-                                        │  process_changes()              │
-                                        │                                 │
-                                        │  For each changed file:         │
-                                        │  1. FrontMatterExtractor        │
-                                        │  2. YamlParser (saphyr)         │
-                                        │  3. MarkdownParser (pulldown)   │
-                                        │  4. LinkResolver                │
-                                        │  → ParsedDocument               │
-                                        └──────────────┬──────────────────┘
-                                                       │
-                                                       ▼
-                                        ┌─────────────────────────────────┐
-                                        │      Store Results              │
-                                        │                                 │
-                                        │  Deletions:                     │
-                                        │  - document_store.delete()      │
-                                        │  - search_index.remove()        │
-                                        │  - graph_store.remove_links()   │
-                                        │                                 │
-                                        │  Insertions/Updates:            │
-                                        │  - document_store.upsert()      │
-                                        │  - document_store.tags/headings │
-                                        │  - document_store.links         │
-                                        │  - document_store.metadata      │
-                                        │  - document_store.errors        │
-                                        │  - search_index.index()         │
-                                        │  - graph_store.store_links()    │
-                                        └──────────────┬──────────────────┘
-                                                       │
-                                                       ▼
-                                        ┌─────────────────────────────────┐
-                                        │      ScanResult                 │
-                                        │  total_files, added, modified,  │
-                                        │  deleted, parse_failures,       │
-                                        │  broken_links, total_links,     │
-                                        │  duration_secs                  │
-                                        └─────────────────────────────────┘
+```mermaid
+flowchart TD
+    CLI_MCP["CLI/MCP\nscan cmd"] --> SERVICE["OkcService\n.scan()"]
+    SERVICE --> REPO_IDX["RepositoryIndex\n.scan()"]
+    REPO_IDX --> SCANNER["Scanner\n.discover()"]
+    REPO_IDX --> LOAD_PREV["Load prev\nfile records"]
+    SCANNER --> PARALLEL_WALK["Parallel walk\n(ignore crate)"]
+    LOAD_PREV --> CHANGE_DETECTOR["ChangeDetector\n.detect(current, previous)\n→ added, modified, deleted"]
+    PARALLEL_WALK --> CHANGE_DETECTOR
+    CHANGE_DETECTOR --> PARSER_PIPELINE["Parser Pipeline\n(index/parser.rs)\nprocess_changes()"]
+    PARSER_PIPELINE --> FRONTMATTER["1. FrontMatterExtractor\n(YAML bounds)"]
+    PARSER_PIPELINE --> YAML_PARSER["2. YamlParser\n(saphyr)"]
+    PARSER_PIPELINE --> MARKDOWN_PARSER["3. MarkdownParser\n(pulldown-cmark)"]
+    PARSER_PIPELINE --> LINK_RESOLVER["4. LinkResolver\n(wiki-links, URLs)"]
+    FRONTMATTER --> PARSED_DOC["ParsedDocument"]
+    YAML_PARSER --> PARSED_DOC
+    MARKDOWN_PARSER --> PARSED_DOC
+    LINK_RESOLVER --> PARSED_DOC
+    PARSED_DOC --> STORE_RESULTS["Store Results"]
+    STORE_RESULTS --> DELETIONS["Deletions:\n- document_store.delete()\n- search_index.remove()\n- graph_store.remove_links()"]
+    STORE_RESULTS --> INSERTIONS["Insertions/Updates:\n- document_store.upsert()\n- document_store.tags/headings\n- document_store.links\n- document_store.metadata\n- document_store.errors\n- search_index.index()\n- graph_store.store_links()"]
+    DELETIONS --> SCAN_RESULT["ScanResult\ntotal_files, added, modified,\ndeleted, parse_failures,\nbroken_links, total_links,\nduration_secs"]
+    INSERTIONS --> SCAN_RESULT
 ```
 
 ### Scan Data Structures
@@ -125,56 +88,26 @@ struct DocumentRecord {
 
 ## 2. Incremental Watch Flow
 
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  File System│────▶│  notify     │────▶│ FileWatcher │────▶│  Debounce   │
-│  (events)   │     │  (cross-    │     │  .watch()   │     │  (500ms)    │
-└─────────────┘     │  platform)  │     └──────┬──────┘     └──────┬──────┘
-                    └─────────────┘            │                   │
-                                               ▼                   ▼
-                                        ┌─────────────┐     ┌─────────────┐
-                                        │  Batch      │     │ Reconcile   │
-                                        │  events     │     │  (600s)     │
-                                        └──────┬──────┘     └──────┬──────┘
-                                               │                   │
-                                               ▼                   ▼
-                                        ┌─────────────────────────────────┐
-                                        │      ChangeDetector             │
-                                        │  (same as scan)                 │
-                                        └──────────────┬──────────────────┘
-                                                       │
-                                                       ▼
-                                        ┌─────────────────────────────────┐
-                                        │      RepositoryIndex            │
-                                        │  .process_changes(changes)      │
-                                        │  (same parser + storage)        │
-                                        └─────────────────────────────────┘
+```mermaid
+flowchart TD
+    FS_EVENT["File System\n(events)"] --> NOTIFY["notify crate\n(cross-platform)"]
+    NOTIFY --> WATCHER["FileWatcher\n.watch()\n- collect events\n- batch by debounce_ms"]
+    WATCHER --> BATCH["Batch\nevents"]
+    WATCHER -.-> RECONCILE["Reconcile (600s)\n- full walk\n- detect drift"]
+    BATCH --> CHANGE_DETECTOR["ChangeDetector\n(same as scan)"]
+    RECONCILE --> CHANGE_DETECTOR
+    CHANGE_DETECTOR --> PROCESS["RepositoryIndex\n.process_changes(changes)\n(same parser + storage)"]
 ```
 
 ## 3. Search Flow
 
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   CLI/MCP   │────▶│ OkcService  │────▶│RepositoryIdx│────▶│SearchIndex  │
-│ search cmd  │     │ .search()   │     │ .search()   │     │ .search()   │
-└─────────────┘     └─────────────┘     └──────┬──────┘     └──────┬──────┘
-                                               │                   │
-                                               ▼                   ▼
-                                        ┌─────────────┐     ┌─────────────┐
-                                        │ Build FTS5  │     │ Execute     │
-                                        │ query string│     │ SELECT with │
-                                        │ (prefix,    │     │ bm25() rank │
-                                        │  phrases,   │     │             │
-                                        │  NEAR)      │     │             │
-                                        └──────┬──────┘     └──────┬──────┘
-                                               │                   │
-                                               ▼                   ▼
-                                        ┌─────────────────────────────────┐
-                                        │      SearchResponse             │
-                                        │  results: Vec<SearchResult>     │
-                                        │  total_matches: usize           │
-                                        │  truncated: bool                │
-                                        └─────────────────────────────────┘
+```mermaid
+flowchart TD
+    REQUEST["CLI/MCP\nRequest"] --> SERVICE["OkcService\n.search()"]
+    SERVICE --> REPO["RepositoryIndex\n.search()"]
+    REPO --> FTS5["SqliteSearchIndex\n- FTS5 query\n- BM25 rank"]
+    FTS5 --> DOCSTORE["DocumentStore\n- fetch details\n(title, path, excerpt)"]
+    DOCSTORE --> RESPONSE["SearchResponse\nresults: Vec<SearchResult>\ntotal_matches: usize\ntruncated: bool"]
 ```
 
 ### Search Query Building
@@ -217,26 +150,15 @@ const BM25_WEIGHTS: &[f64] = &[10.0, 5.0, 2.0, 1.0, 0.0];
 
 ## 4. Graph Traversal Flow
 
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   CLI/MCP   │────▶│ OkcService  │────▶│RepositoryIdx│────▶│ GraphStore  │
-│ traverse    │     │ .traverse() │     │ .traverse() │     │ .traverse() │
-└─────────────┘     └─────────────┘     └──────┬──────┘     └──────┬──────┘
-                                               │                   │
-                                               ▼                   ▼
-                                        ┌─────────────┐     ┌─────────────┐
-                                        │ Build BFS   │     │ Recursive   │
-                                        │ queue       │     │ CTE query   │
-                                        │ (Rust)      │     │ (SQL)       │
-                                        └──────┬──────┘     └──────┬──────┘
-                                               │                   │
-                                               ▼                   ▼
-                                        ┌─────────────────────────────────┐
-                                        │      TraverseResponse           │
-                                        │  nodes: Vec<TraverseNode>       │
-                                        │  edges: Vec<GraphEdge>          │
-                                        │  truncated: bool                │
-                                        └─────────────────────────────────┘
+```mermaid
+flowchart TD
+    REQUEST["CLI/MCP\ntraverse"] --> SERVICE["OkcService\n.traverse()"]
+    SERVICE --> REPO["RepositoryIndex\n.traverse()"]
+    REPO --> GRAPH_STORE["GraphStore\n.traverse()"]
+    GRAPH_STORE --> BFS["Build BFS\nqueue (Rust)"]
+    GRAPH_STORE -.-> CTE["Recursive\nCTE query (SQL)"]
+    BFS --> TRAVERSE_RESPONSE["TraverseResponse\nnodes: Vec<TraverseNode>\nedges: Vec<GraphEdge>\ntruncated: bool"]
+    CTE --> TRAVERSE_RESPONSE
 ```
 
 ### Traversal Algorithm (BFS with Depth Limit)
@@ -295,24 +217,15 @@ fn traverse(&self, params: &TraverseParams) -> Result<TraverseResponse> {
 
 ## 5. Document Retrieval Flow
 
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   CLI/MCP   │────▶│ OkcService  │────▶│RepositoryIdx│────▶│DocumentStore│
-│ get_doc cmd │     │.get_document│     │.get_document│     │.get_document│
-└─────────────┘     └─────────────┘     └──────┬──────┘     └──────┬──────┘
-                                               │                   │
-                                               ▼                   ▼
-                                        ┌─────────────┐     ┌─────────────┐
-                                        │ Load doc    │     │ Load related│
-                                        │ record      │     │ data        │
-                                        └──────┬──────┘     └──────┬──────┘
-                                               │                   │
-                                               ▼                   ▼
-                                        ┌─────────────────────────────────┐
-                                        │      DocumentDetail             │
-                                        │  path, metadata, headings,      │
-                                        │  body (optional), sections      │
-                                        └─────────────────────────────────┘
+```mermaid
+flowchart TD
+    REQUEST["CLI/MCP\nget_doc cmd"] --> SERVICE["OkcService\n.get_document()"]
+    SERVICE --> REPO["RepositoryIndex\n.get_document()"]
+    REPO --> DOC_STORE["DocumentStore\n.get_document()"]
+    DOC_STORE --> LOAD_DOC["Load doc\nrecord"]
+    DOC_STORE --> LOAD_RELATED["Load related\ndata"]
+    LOAD_DOC --> DOC_DETAIL["DocumentDetail\npath, metadata, headings,\nbody (optional), sections"]
+    LOAD_RELATED --> DOC_DETAIL
 ```
 
 ### Section Extraction
@@ -345,49 +258,37 @@ fn get_section(&self, path: &str, heading: &str, max_chars: usize)
 
 ## 6. Validation Flow
 
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   CLI/MCP   │────▶│ OkcService  │────▶│RepositoryIdx│────▶│  Validate   │
-│ validate    │     │ .validate() │     │ .validate() │     │  (8 checks) │
-└─────────────┘     └─────────────┘     └──────┬──────┘     └──────┬──────┘
-                                               │                   │
-                                               ▼                   ▼
-                                        ┌─────────────────────────────────┐
-                                        │  1. Orphan documents            │
-                                        │  2. Broken internal links       │
-                                        │  3. Missing index files         │
-                                        │  4. Duplicate IDs (front-matter)│
-                                        │  5. Circular references         │
-                                        │  6. Parse failures              │
-                                        │  7. Missing required fields     │
-                                        │  8. Stale content (stale_after) │
-                                        └──────────────┬──────────────────┘
-                                                       │
-                                                       ▼
-                                        ┌─────────────────────────────────┐
-                                        │      ValidationReport           │
-                                        │  summary: ValidationSummary     │
-                                        │  issues: Vec<ValidationIssue>   │
-                                        └─────────────────────────────────┘
+```mermaid
+flowchart TD
+    REQUEST["CLI/MCP\nvalidate"] --> SERVICE["OkcService\n.validate()"]
+    SERVICE --> REPO["RepositoryIndex\n.validate()"]
+    REPO --> VALIDATE["Validate\n(8 checks)"]
+    VALIDATE --> CHECK1["1. Orphan documents"]
+    VALIDATE --> CHECK2["2. Broken internal links"]
+    VALIDATE --> CHECK3["3. Missing index files"]
+    VALIDATE --> CHECK4["4. Duplicate IDs (front-matter)"]
+    VALIDATE --> CHECK5["5. Circular references"]
+    VALIDATE --> CHECK6["6. Parse failures"]
+    VALIDATE --> CHECK7["7. Missing required fields"]
+    VALIDATE --> CHECK8["8. Stale content (stale_after)"]
+    CHECK1 --> REPORT["ValidationReport\nsummary: ValidationSummary\nissues: Vec<ValidationIssue>"]
+    CHECK2 --> REPORT
+    CHECK3 --> REPORT
+    CHECK4 --> REPORT
+    CHECK5 --> REPORT
+    CHECK6 --> REPORT
+    CHECK7 --> REPORT
+    CHECK8 --> REPORT
 ```
 
 ## 7. Export Flow (JSON)
 
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   CLI/MCP   │────▶│ OkcService  │────▶│RepositoryIdx│────▶│   Export    │
-│ export cmd  │     │.export_json │     │.export_json │     │  (JSON)     │
-└─────────────┘     └─────────────┘     └──────┬──────┘     └──────┬──────┘
-                                               │                   │
-                                               ▼                   ▼
-                                        ┌─────────────────────────────────┐
-                                        │  Serialize full index:          │
-                                        │  - All documents                │
-                                        │  - All links                    │
-                                        │  - Graph edges                  │
-                                        │  - Metadata                     │
-                                        │  - Stats                        │
-                                        └─────────────────────────────────┘
+```mermaid
+flowchart TD
+    REQUEST["CLI/MCP\nexport cmd"] --> SERVICE["OkcService\n.export_json()"]
+    SERVICE --> REPO["RepositoryIndex\n.export_json()"]
+    REPO --> EXPORT["Export\n(JSON)"]
+    EXPORT --> SERIALIZE["Serialize full index:\n- All documents\n- All links\n- Graph edges\n- Metadata\n- Stats"]
 ```
 
 ## Data Flow Summary Table
@@ -408,6 +309,7 @@ fn get_section(&self, path: &str, heading: &str, max_chars: usize)
 ## Error Handling in Data Flows
 
 All flows use `anyhow::Result<T>` with context:
+
 ```rust
 // Scanner
 Scanner::discover(&config)
