@@ -12,6 +12,7 @@
 //! - [`validate`] - Index validation and integrity checks
 //! - [`export`] - JSON export functionality
 //! - [`migrations`] - Database schema migrations
+//! - [`parser`] - Document parsing (front-matter, markdown, links)
 
 pub mod database;
 pub mod document_store;
@@ -19,6 +20,7 @@ pub mod export;
 pub mod graph;
 pub mod graph_store;
 pub mod migrations;
+pub mod parser;
 pub mod queries;
 pub mod search_index;
 pub mod traits;

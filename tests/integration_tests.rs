@@ -429,9 +429,11 @@ fn test_backlinks() {
 #[test]
 fn test_stats() {
     let repo = setup_simple_repo();
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("test.db");
     let config = OkcConfig {
         roots: vec![repo.path().to_path_buf()],
-        db_path: std::path::PathBuf::from(":memory:"),
+        db_path,
         ..Default::default()
     };
 
