@@ -35,6 +35,10 @@ pub enum TransportType {
     about = "Open Knowledge Catalog - index and query markdown knowledge bases"
 )]
 pub struct Cli {
+    /// Path to configuration file (TOML)
+    #[arg(long, global = true)]
+    pub config: Option<PathBuf>,
+
     /// The subcommand to execute
     #[command(subcommand)]
     pub command: Command,

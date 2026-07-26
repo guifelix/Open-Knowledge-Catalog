@@ -1,0 +1,103 @@
+# Open Knowledge Catalog (OKC) Configuration
+# 
+# This file can be placed at:
+#   - ./okc.toml (project root)
+#   - ~/.config/okc/config.toml (XDG config directory)
+#   - Or specified via --config /path/to/config.toml
+#
+# All settings can be overridden via environment variables with OKC_ prefix
+# (e.g., OKC_ROOTS, OKC_DB_PATH, OKC_MAX_FILE_SIZE)
+# CLI flags have the highest priority.
+
+[scanner]
+# Repository roots to scan for markdown files
+# Each root is walked recursively (respecting exclude_patterns)
+roots = ["./knowledge"]
+
+# Glob patterns for files and directories to exclude from scanning
+# Defaults include common VCS, dependency, and build directories
+exclude_patterns = [
+    ".git/",
+    "node_modules/",
+    "vendor/",
+    "target/",
+    ".env",
+    "secrets/",
+    "credentials/",
+]
+
+# Maximum file size in bytes to process (larger files are skipped)
+# Default: 2 MiB (2097152)
+max_file_size = 2097152
+
+# Maximum front-matter size in bytes (larger front-matter causes parse failure)
+# Default: 64 KiB (65536)
+max_front_matter_size = 65536
+
+# Follow symbolic links during scanning
+# Default: false (for safety)
+follow_symlinks = false
+
+# Require index.md files in directories for directory browsing
+# Default: false
+require_index_files = false
+
+[indexer]
+# Maximum depth for graph traversal operations
+# Default: 5
+max_graph_depth = 5
+
+# Maximum number of nodes to return in graph traversal
+# Default: 100
+max_graph_nodes = 100
+
+[database]
+# Path to the SQLite database file
+# Default: ./okc_index.db
+db_path = "okc_index.db"
+
+[watcher]
+# Debounce window in milliseconds for file watcher events
+# Multiple events within this window are batched
+# Default: 500ms
+debounce_ms = 500
+
+# Full reconciliation interval in seconds
+# Periodically re-scans all roots to catch missed changes
+# Default: 600s (10 minutes)
+reconcile_secs = 600
+
+[search]
+# BM25 relevance ranking configuration for FTS5 search
+# Higher weight = more important for relevance scoring
+# Defaults follow ADR-002 specification
+
+# Title field weight (most important)
+# Default: 10.0
+bm25_title_weight = 10.0
+
+# Description field weight
+# Default: 5.0
+bm25_description_weight = 5.0
+
+# Headings field weight
+# Default: 2.0
+bm25_headings_weight = 2.0
+
+# Body field weight (baseline)
+# Default: 1.0
+bm25_body_weight = 1.0
+
+# Concept type field weight (not used for relevance by default)
+# Default: 0.0
+bm25_concept_type_weight = 0.0
+
+# BM25 k1 parameter (term frequency saturation)
+# Higher = less saturation, more weight to term frequency
+# Default: 1.2
+bm25_k1 = 1.2
+
+# BM25 b parameter (length normalization)
+# 0.0 = no normalization, 1.0 = full normalization
+# Default: 0.75
+bm25_b = 0.75

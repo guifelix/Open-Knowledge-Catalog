@@ -31,27 +31,11 @@ fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    let mut config = OkcConfig::default();
+    // Load configuration: defaults -> config file -> env vars -> CLI flags
+    let mut config = OkcConfig::load(cli.config.as_deref())?;
 
-    // Extract root directories from the command
-    let roots = match &cli.command {
-        Command::Scan { root } => root.clone(),
-        Command::Serve { root, .. } => root.clone(),
-        Command::Watch { root, .. } => root.clone(),
-        _ => vec![],
-    };
-    config.roots = roots;
-
-    // Apply watcher config overrides from CLI
-    if let Command::Watch {
-        debounce,
-        reconcile,
-        ..
-    } = &cli.command
-    {
-        config.watcher_debounce_ms = *debounce;
-        config.watcher_reconcile_secs = *reconcile;
-    }
+    // Apply CLI overrides (highest priority)
+    apply_cli_overrides(&mut config, &cli.command);
 
     match cli.command {
         Command::Scan { root: _ } => {
@@ -329,4 +313,29 @@ fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+/// Apply CLI flag overrides to the configuration (highest priority).
+fn apply_cli_overrides(config: &mut OkcConfig, command: &Command) {
+    // Extract root directories from the command
+    let roots = match command {
+        Command::Scan { root } => root.clone(),
+        Command::Serve { root, .. } => root.clone(),
+        Command::Watch { root, .. } => root.clone(),
+        _ => vec![],
+    };
+    if !roots.is_empty() {
+        config.roots = roots;
+    }
+
+    // Apply watcher config overrides from CLI
+    if let Command::Watch {
+        debounce,
+        reconcile,
+        ..
+    } = command
+    {
+        config.watcher_debounce_ms = *debounce;
+        config.watcher_reconcile_secs = *reconcile;
+    }
 }
