@@ -4,11 +4,11 @@ title: Remove unused Tokio dependency
 status: To Do
 assignee: []
 created_date: '2026-07-23 19:03'
-updated_date: '2026-07-23 19:04'
+updated_date: '2026-07-25 23:57'
 labels:
   - cleanup
 dependencies: []
-priority: medium
+priority: low
 type: chore
 ordinal: 14400
 ---

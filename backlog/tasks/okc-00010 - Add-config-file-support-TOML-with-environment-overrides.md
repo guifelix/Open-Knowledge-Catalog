@@ -4,11 +4,11 @@ title: Add config file support (TOML) with environment overrides
 status: To Do
 assignee: []
 created_date: '2026-07-23 00:50'
-updated_date: '2026-07-23 19:02'
+updated_date: '2026-07-25 23:57'
 labels:
   - config
 dependencies: []
-priority: low
+priority: medium
 type: feature
 ordinal: 15400
 ---

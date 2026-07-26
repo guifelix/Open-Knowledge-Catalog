@@ -4,11 +4,11 @@ title: Add semantic embeddings with Tantivy/hybrid search
 status: To Do
 assignee: []
 created_date: '2026-07-23 00:50'
-updated_date: '2026-07-23 19:03'
+updated_date: '2026-07-25 23:57'
 labels:
   - future
 dependencies: []
-priority: low
+priority: medium
 type: feature
 ordinal: 17400
 ---

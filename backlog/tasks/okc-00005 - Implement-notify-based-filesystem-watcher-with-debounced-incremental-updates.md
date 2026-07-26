@@ -4,11 +4,11 @@ title: Implement notify-based filesystem watcher with debounced incremental upda
 status: To Do
 assignee: []
 created_date: '2026-07-23 00:49'
-updated_date: '2026-07-23 19:02'
+updated_date: '2026-07-25 23:57'
 labels:
   - ux
 dependencies: []
-priority: high
+priority: medium
 type: feature
 ordinal: 2400
 ---

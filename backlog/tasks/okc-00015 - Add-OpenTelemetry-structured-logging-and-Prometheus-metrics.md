@@ -4,13 +4,13 @@ title: Add OpenTelemetry structured logging and Prometheus metrics
 status: To Do
 assignee: []
 created_date: '2026-07-23 00:51'
-updated_date: '2026-07-23 19:02'
+updated_date: '2026-07-25 23:57'
 labels:
   - ops
 dependencies: []
 references:
   - 'absorbed: OKC-00009'
-priority: high
+priority: low
 type: feature
 ordinal: 4400
 ---
