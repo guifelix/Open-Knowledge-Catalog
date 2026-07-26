@@ -307,6 +307,7 @@ pub fn extract_wiki_links(text: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
 
     #[test]
@@ -489,7 +490,7 @@ mod tests {
 
         let resolved = LinkResolver::resolve(source, target);
         let (path, anchor) = split_anchor(&resolved);
-        let exists = LinkResolver::check_exists(&path, &known_files);
+        let exists = LinkResolver::check_exists(path, &known_files);
 
         assert_eq!(path, "metrics/costs.md");
         assert_eq!(anchor, Some("q1".to_string()));

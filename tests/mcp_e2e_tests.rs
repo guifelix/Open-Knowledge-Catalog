@@ -2,6 +2,8 @@
 //!
 //! Tests all MCP tools via stdio transport, verifying responses match service-layer output.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use okc::{config::OkcConfig, service::OkcService};
 use rmcp::{
     model::{CallToolRequestParams, ClientInfo, ServerCapabilities, ServerInfo},
@@ -73,7 +75,7 @@ async fn create_mcp_server_stdio(
         anyhow::Ok(())
     });
 
-    let client = TestClientHandler::default().serve(client_transport).await?;
+    let client = TestClientHandler.serve(client_transport).await?;
 
     // Give server time to initialize
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;

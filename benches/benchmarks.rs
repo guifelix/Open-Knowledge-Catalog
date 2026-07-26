@@ -12,6 +12,11 @@
 //!
 //! Corpora: small (10), medium (50), large (200) documents.
 
+#![allow(clippy::unwrap_used)]
+#![allow(clippy::expect_used)]
+#![allow(clippy::panic)]
+#![allow(clippy::default_constructed_unit_structs)]
+
 use std::path::Path;
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, SamplingMode};
@@ -24,7 +29,7 @@ use okc::service::OkcService;
 // Corpus sizes
 // ---------------------------------------------------------------------------
 
-const SIZES: &[usize] = &[10, 50, 200, 1000];
+const SIZES: &[usize] = &[10, 50, 200, 1000, 10000];
 
 // ---------------------------------------------------------------------------
 // Document generation

@@ -1,5 +1,7 @@
 //! Integration tests for OKF retrieval using fixture repositories
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use okc::{config::OkcConfig, service::OkcService};
 use std::collections::HashMap;
 use tempfile::TempDir;

@@ -1,5 +1,9 @@
 //! Property-based tests using proptest
 
+#![allow(clippy::needless_pass_by_value)]
+#![allow(clippy::map_unwrap_or)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use okc::model::Link as ModelLink;
 use okc::parser::frontmatter::FrontMatterExtractor;
 use okc::parser::links::{normalize_path, LinkResolver};
