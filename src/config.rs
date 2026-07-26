@@ -681,6 +681,7 @@ mod tests {
 
     #[test]
     fn test_load_config_from_file() {
+        let _lock = ENV_MUTEX.lock().unwrap();
         let dir = tempdir().unwrap();
         let config_path = dir.path().join("okc.toml");
         let config_content = format!(
@@ -708,6 +709,7 @@ max_graph_depth = 3
 
     #[test]
     fn test_create_default_config_file() {
+        let _lock = ENV_MUTEX.lock().unwrap();
         let dir = tempdir().unwrap();
         let config_dir = dir.path().join("okc");
         std::fs::create_dir_all(&config_dir).unwrap();

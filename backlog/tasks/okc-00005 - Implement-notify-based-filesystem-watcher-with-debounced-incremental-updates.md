@@ -1,10 +1,10 @@
 ---
 id: OKC-00005
 title: Implement notify-based filesystem watcher with debounced incremental updates
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-23 00:49'
-updated_date: '2026-07-25 23:57'
+updated_date: '2026-07-26 20:32'
 labels:
   - ux
 dependencies: []

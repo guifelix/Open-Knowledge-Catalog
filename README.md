@@ -167,7 +167,7 @@ cargo doc --no-deps --open
 | 2: Markdown Structure | ✅ Done |
 | 3: Persistent Index | ✅ Done |
 | 4: AI-Facing Operations | ✅ Done |
-| 5: Continuous Updates | 🔲 Planned |
+| 5: Continuous Updates | ✅ Done |
 | 6: Advanced Retrieval | 🔮 Future |
 
 See [docs/roadmap.md](docs/roadmap.md) for details.

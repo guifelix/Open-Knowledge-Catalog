@@ -40,11 +40,11 @@ status: published
 - ✅ `validate_repository`
 - 🔲 MCP server transport
 
-## Phase 5 - Continuous Updates (Planned)
-- Filesystem watcher (`notify`)
-- Debounced updates
-- Partial graph rebuilding
-- Index health reporting
+## Phase 5 - Continuous Updates
+- ✅ Filesystem watcher (`notify`)
+- ✅ Debounced updates
+- ✅ Partial graph rebuilding
+- ✅ Index health reporting
 
 ## Phase 6 - Advanced Retrieval (Future)
 *Only add after measuring real retrieval failures:*
@@ -64,7 +64,7 @@ status: published
 | 2 | ✅ Done | 100% |
 | 3 | ✅ Done | 100% |
 | 4 | ✅ Done | 100% |
-| 5 | 🔲 Planned | 0% |
+| 5 | ✅ Done | 100% |
 | 6 | 🔮 Future | 0% |
 
 ## Known Issues (Tracked in Backlog)
