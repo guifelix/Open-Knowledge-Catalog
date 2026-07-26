@@ -76,7 +76,7 @@ impl RepositoryIndex {
         }
 
         let document_store = SqliteDocumentStore::new(pool.clone());
-        let search_index = SqliteSearchIndex::new(pool.clone());
+        let search_index = SqliteSearchIndex::new(pool.clone(), config.bm25.clone());
         let graph_store = SqliteGraphStore::new(pool.clone());
 
         let index = Self {
@@ -112,7 +112,7 @@ impl RepositoryIndex {
         }
 
         let document_store = SqliteDocumentStore::new(pool.clone());
-        let search_index = SqliteSearchIndex::new(pool.clone());
+        let search_index = SqliteSearchIndex::new(pool.clone(), config.bm25.clone());
 
         let index = Self {
             pool,

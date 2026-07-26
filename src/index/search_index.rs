@@ -9,6 +9,7 @@
 //!
 //! Thread Safety: Uses a connection pool (r2d2) for thread-safe access.
 
+use crate::config::Bm25Config;
 use crate::index::traits::{Result, SearchFilters, SearchIndex, SearchableDocument};
 use crate::model::document::{IndexStats, SearchResponse, SearchResult};
 use r2d2::Pool;
@@ -22,17 +23,30 @@ use std::sync::Arc;
 /// The index is updated incrementally during document processing.
 pub struct SqliteSearchIndex {
     pool: Arc<Pool<SqliteConnectionManager>>,
+    bm25_config: Bm25Config,
 }
 
 impl SqliteSearchIndex {
-    /// Create a new search index with the given connection pool.
+    /// Create a new search index with the given connection pool and BM25 configuration.
     #[allow(dead_code)]
-    pub fn new(pool: Arc<Pool<SqliteConnectionManager>>) -> Self {
-        Self { pool }
+    pub fn new(pool: Arc<Pool<SqliteConnectionManager>>, bm25_config: Bm25Config) -> Self {
+        Self { pool, bm25_config }
     }
 
     fn get_conn(&self) -> Result<r2d2::PooledConnection<SqliteConnectionManager>> {
         Ok(self.pool.get()?)
+    }
+
+    /// Build the BM25 function call with configured weights.
+    fn bm25_expr(&self) -> String {
+        format!(
+            "bm25(document_search, {}, {}, {}, {}, {})",
+            self.bm25_config.title_weight,
+            self.bm25_config.description_weight,
+            self.bm25_config.headings_weight,
+            self.bm25_config.body_weight,
+            self.bm25_config.concept_type_weight,
+        )
     }
 }
 
@@ -47,6 +61,7 @@ impl SearchIndex for SqliteSearchIndex {
                 description,
                 headings,
                 body,
+                concept_type,
                 tokenize = 'porter unicode61'
             );
             "#,
@@ -58,8 +73,8 @@ impl SearchIndex for SqliteSearchIndex {
         let conn = self.get_conn()?;
         conn.execute(
             r#"
-            INSERT OR REPLACE INTO document_search (path, title, description, headings, body)
-            VALUES (?1, ?2, ?3, ?4, ?5)
+            INSERT OR REPLACE INTO document_search (path, title, description, headings, body, concept_type)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             "#,
             params![
                 doc.path,
@@ -67,6 +82,7 @@ impl SearchIndex for SqliteSearchIndex {
                 doc.description.clone().unwrap_or_default(),
                 doc.headings,
                 doc.body,
+                doc.concept_type.clone().unwrap_or_default(),
             ],
         )?;
         Ok(())
@@ -81,11 +97,14 @@ impl SearchIndex for SqliteSearchIndex {
     fn search(&self, query: &str, filters: &SearchFilters, limit: usize) -> Result<SearchResponse> {
         let escaped = query.replace('\'', "''");
 
-        let mut sql = String::from(
-            "SELECT ds.path, ds.title, d.type, ds.rank, ds.body
+        let bm25_expr = self.bm25_expr();
+
+        let mut sql = format!(
+            "SELECT ds.path, ds.title, d.type, {}, ds.body
              FROM document_search ds
              JOIN documents d ON d.path = ds.path
              WHERE document_search MATCH ?1",
+            bm25_expr
         );
 
         let mut conditions = Vec::new();
@@ -137,12 +156,18 @@ impl SearchIndex for SqliteSearchIndex {
             param_values.iter().map(|p| p.as_ref()).collect();
 
         let full_sql = if conditions.is_empty() {
-            format!("{} ORDER BY rank LIMIT ?{}", sql, param_values.len() + 1)
+            format!(
+                "{} ORDER BY {} LIMIT ?{}",
+                sql,
+                bm25_expr,
+                param_values.len() + 1
+            )
         } else {
             format!(
-                "{} AND {} ORDER BY rank LIMIT ?{}",
+                "{} AND {} ORDER BY {} LIMIT ?{}",
                 sql,
                 conditions.join(" AND "),
+                bm25_expr,
                 param_values.len() + 1
             )
         };

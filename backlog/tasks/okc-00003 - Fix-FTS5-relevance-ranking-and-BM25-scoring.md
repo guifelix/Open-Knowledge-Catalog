@@ -1,10 +1,10 @@
 ---
 id: OKC-00003
 title: Fix FTS5 relevance ranking and BM25 scoring
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-23 00:49'
-updated_date: '2026-07-23 19:02'
+updated_date: '2026-07-26 03:22'
 labels:
   - search
 dependencies:

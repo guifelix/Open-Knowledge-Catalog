@@ -98,6 +98,41 @@ OKC_DB_PATH="/data/okc_index.db"
 |--------|------|---------|-------------|
 | `require_index_files` | `bool` | `false` | Treat missing `index.md` as validation error |
 
+## Search Configuration (BM25)
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `bm25.title_weight` | `f64` | `10.0` | Weight for title field in BM25 scoring |
+| `bm25.description_weight` | `f64` | `5.0` | Weight for description field in BM25 scoring |
+| `bm25.headings_weight` | `f64` | `2.0` | Weight for headings field in BM25 scoring |
+| `bm25.body_weight` | `f64` | `1.0` | Weight for body field in BM25 scoring |
+| `bm25.concept_type_weight` | `f64` | `0.0` | Weight for concept_type field in BM25 scoring |
+| `bm25.k1` | `f64` | `1.2` | BM25 term frequency saturation parameter |
+| `bm25.b` | `f64` | `0.75` | BM25 document length normalization parameter |
+
+Higher weights increase the importance of that field in relevance ranking. The default weights follow the ADR-002 specification: title > description > headings > body > concept_type.
+
+Example TOML configuration:
+
+```toml
+[search]
+bm25_title_weight = 10.0
+bm25_description_weight = 5.0
+bm25_headings_weight = 2.0
+bm25_body_weight = 1.0
+bm25_concept_type_weight = 0.0
+bm25_k1 = 1.2
+bm25_b = 0.75
+```
+
+Environment variable overrides:
+
+```bash
+OKC_SEARCH_BM25_TITLE_WEIGHT=15.0
+OKC_SEARCH_BM25_K1=1.5
+OKC_SEARCH_BM25_B=0.5
+```
+
 ## MCP Server Configuration (Planned)
 
 ```toml

@@ -113,5 +113,23 @@ pub fn run(conn: &Connection) -> Result<(), rusqlite::Error> {
         conn.execute("INSERT INTO schema_version (version) VALUES (1)", [])?;
     }
 
+    // Migration 2: Add concept_type column to FTS5 table
+    // FTS5 virtual tables cannot be altered, so we must drop and recreate
+    if version < 2 {
+        conn.execute("DROP TABLE IF EXISTS document_search", [])?;
+        conn.execute_batch(
+            "CREATE VIRTUAL TABLE document_search USING fts5(
+                path UNINDEXED,
+                title,
+                description,
+                headings,
+                body,
+                concept_type,
+                tokenize='porter unicode61'
+            );",
+        )?;
+        conn.execute("INSERT INTO schema_version (version) VALUES (2)", [])?;
+    }
+
     Ok(())
 }
