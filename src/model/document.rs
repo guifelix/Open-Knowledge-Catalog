@@ -133,6 +133,52 @@ pub struct ParseError {
     pub line: Option<usize>,
 }
 
+/// A resource limit violation error with structured details.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LimitError {
+    /// The name of the limit that was exceeded (e.g., "max_file_size", "max_front_matter_size").
+    pub limit_name: String,
+    /// The configured limit value.
+    pub limit_value: String,
+    /// The actual value that exceeded the limit.
+    pub actual_value: Option<String>,
+    /// Human-readable error message.
+    pub message: String,
+    /// Error code for programmatic handling.
+    pub code: String,
+}
+
+impl LimitError {
+    /// Create a new limit error.
+    pub fn new(limit_name: &str, limit_value: &str, message: &str) -> Self {
+        Self {
+            limit_name: limit_name.to_string(),
+            limit_value: limit_value.to_string(),
+            actual_value: None,
+            message: message.to_string(),
+            code: format!("LIMIT_EXCEEDED_{}", limit_name.to_uppercase()),
+        }
+    }
+
+    /// Set the actual value that exceeded the limit.
+    pub fn with_actual(mut self, actual: &str) -> Self {
+        self.actual_value = Some(actual.to_string());
+        self
+    }
+}
+
+impl std::fmt::Display for LimitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} (limit: {}, code: {})",
+            self.message, self.limit_value, self.code
+        )
+    }
+}
+
+impl std::error::Error for LimitError {}
+
 /// Lightweight document summary for listings.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]

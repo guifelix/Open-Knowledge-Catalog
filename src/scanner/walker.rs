@@ -17,7 +17,7 @@ use ignore::{WalkBuilder, WalkState};
 use tracing::info;
 
 use crate::config::OkcConfig;
-use crate::model::document::FileRecord;
+use crate::model::document::{FileRecord, LimitError};
 
 /// Discovers markdown files in configured repository roots.
 ///
@@ -30,7 +30,7 @@ impl Scanner {
     ///
     /// Returns a sorted vector of [`FileRecord`] with path, size, and mtime.
     /// Respects exclude patterns, size limits, and symlink settings from config.
-    pub fn discover(config: &OkcConfig) -> Vec<FileRecord> {
+    pub fn discover(config: &OkcConfig) -> Result<Vec<FileRecord>, LimitError> {
         let (tx, rx) = mpsc::channel();
         let max_size = config.max_file_size;
         let follow_symlinks = config.follow_symlinks;
@@ -64,6 +64,15 @@ impl Scanner {
                                         if metadata.is_file() {
                                             let size = metadata.len();
                                             if size > max_size {
+                                                let _ = tx.send(Err(LimitError::new(
+                                                    "max_file_size",
+                                                    &max_size.to_string(),
+                                                    &format!(
+                                                        "File exceeds maximum size of {} bytes",
+                                                        max_size
+                                                    ),
+                                                )
+                                                .with_actual(&size.to_string())));
                                                 return WalkState::Continue;
                                             }
 
@@ -78,12 +87,12 @@ impl Scanner {
                                             let rel_path = pathdiff(path, &root_clone)
                                                 .unwrap_or_else(|| path.to_path_buf());
 
-                                            let _ = tx.send(FileRecord {
+                                            let _ = tx.send(Ok(FileRecord {
                                                 path: rel_path.to_string_lossy().to_string(),
                                                 absolute_path: path.to_string_lossy().to_string(),
                                                 size,
                                                 modified_at,
-                                            });
+                                            }));
                                         }
                                     }
                                 }
@@ -98,9 +107,13 @@ impl Scanner {
             }
         });
 
-        let mut files: Vec<FileRecord> = rx.iter().collect();
+        let mut files: Vec<FileRecord> = Vec::new();
+        for result in rx.iter() {
+            let file = result?;
+            files.push(file);
+        }
         files.sort_by(|a, b| a.path.cmp(&b.path));
-        files
+        Ok(files)
     }
 }
 

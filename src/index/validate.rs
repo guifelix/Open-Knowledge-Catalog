@@ -253,7 +253,7 @@ impl RepositoryIndex {
             let extracted = match extractor.extract(full_text.as_bytes()) {
                 Ok(r) => r,
                 Err(e) => {
-                    let category = if e.message.contains("exceeds") {
+                    let category = if e.message.contains("exceed") {
                         "oversized_frontmatter"
                     } else {
                         "invalid_frontmatter"

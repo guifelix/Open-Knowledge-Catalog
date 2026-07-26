@@ -142,7 +142,7 @@ impl RepositoryIndex {
     pub fn scan(&mut self) -> Result<ScanResult, anyhow::Error> {
         let start = std::time::Instant::now();
 
-        let current_files = Scanner::discover(&self.config);
+        let current_files = Scanner::discover(&self.config)?;
         let previous_files = self.load_file_records()?;
         let changes = ChangeDetector::detect(&current_files, &previous_files);
 

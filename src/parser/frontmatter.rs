@@ -11,7 +11,7 @@
 
 use memchr::memchr;
 
-use crate::model::document::ParseError;
+use crate::model::document::{LimitError, ParseError};
 
 const DELIMITER: &[u8] = b"---";
 
@@ -28,7 +28,7 @@ pub struct FrontMatterExtractor {
 impl FrontMatterExtractor {
     /// Create a new extractor with a maximum front-matter size limit.
     ///
-    /// Front-matter exceeding this size will cause a parse error.
+    /// Front-matter exceeding this size will cause a limit error.
     pub fn new(max_size: usize) -> Self {
         Self { max_size }
     }
@@ -85,10 +85,15 @@ impl FrontMatterExtractor {
                 if yaml_len > self.max_size {
                     return Err(ParseError {
                         stage: "frontmatter".into(),
-                        message: format!(
-                            "Front matter exceeds {} bytes (got {})",
-                            self.max_size, yaml_len
-                        ),
+                        message: LimitError::new(
+                            "max_front_matter_size",
+                            &self.max_size.to_string(),
+                            &format!(
+                                "Front matter exceeds {} bytes (got {})",
+                                self.max_size, yaml_len
+                            ),
+                        )
+                        .message,
                         line: None,
                     });
                 }
