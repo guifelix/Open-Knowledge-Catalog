@@ -1357,6 +1357,7 @@ dependencies = [
  "libfuzzer-sys",
  "memchr",
  "notify",
+ "percent-encoding",
  "proptest",
  "pulldown-cmark",
  "r2d2",

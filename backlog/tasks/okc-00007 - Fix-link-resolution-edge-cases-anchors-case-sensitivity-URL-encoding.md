@@ -1,10 +1,10 @@
 ---
 id: OKC-00007
 title: 'Fix link resolution edge cases (anchors, case sensitivity, URL encoding)'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-23 00:49'
-updated_date: '2026-07-25 23:57'
+updated_date: '2026-07-26 18:42'
 labels:
   - correctness
 dependencies: []

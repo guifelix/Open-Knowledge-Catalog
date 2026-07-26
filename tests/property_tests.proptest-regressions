@@ -9,3 +9,4 @@ cc 791a69654974c109640edebeeedd9d7dea61977a835c02a3df2b8220ab1b8d73 # shrinks to
 cc 1878f8746786c7cbadd5d998fbe156a96c5ed185aebc7d6c4bed24bc9bccaa4f # shrinks to base = "a", subdirs = ["a"], file = "a.md"
 cc 029fd3be816dac22bd89f96bac58a5123f8a63d18fc9e7d6e81db1007528753a # shrinks to invalid_utf8 = [194, 128]
 cc ee1fa8c7f378c889500bc8e10e41e777634bf8b3a553d98beb60d97387d7bf3a # shrinks to yaml_content = [], body = ""
+cc 5d685bf4b630473ed537d616e2568dc9de1ac090187f54a8578d8abc53cb5fc1 # shrinks to url = "http://%a0"
