@@ -14,9 +14,19 @@
 //! - `serve` - Start MCP server
 //! - `watch` - File system watching
 
+use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
+
+/// Transport type for MCP server.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum TransportType {
+    /// Standard input/output transport (for Claude Code, local CLI)
+    Stdio,
+    /// HTTP/SSE transport (for web clients, remote access)
+    Http,
+}
 
 /// Top-level CLI structure with all subcommands.
 #[derive(Parser)]
@@ -140,6 +150,15 @@ pub enum Command {
         /// Root directories to scan
         #[arg(short, long)]
         root: Vec<PathBuf>,
+        /// Transport type: stdio (default) or http
+        #[arg(long, value_enum, default_value = "stdio")]
+        transport: TransportType,
+        /// HTTP server host (for http transport)
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+        /// HTTP server port (for http transport)
+        #[arg(long, default_value = "3000")]
+        port: u16,
     },
     /// Watch for file changes and update index incrementally.
     Watch {

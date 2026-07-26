@@ -1,10 +1,10 @@
 ---
 id: OKC-00004
 title: Add MCP server transport (stdio + HTTP)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-23 00:49'
-updated_date: '2026-07-24 01:12'
+updated_date: '2026-07-26 17:45'
 labels:
   - mcp
   - delivery

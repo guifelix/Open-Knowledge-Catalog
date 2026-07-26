@@ -14,15 +14,26 @@
 //! - `traverse` - Graph traversal
 //! - `validate` - Index validation
 //! - `get_stats` - Index statistics
+//!
+//! Transport options:
+//! - stdio (for Claude Code, local CLI)
+//! - HTTP/SSE (for web clients, remote access)
 
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex, PoisonError};
+use std::time::Duration;
 
+use axum::Router;
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     schemars, tool, tool_handler, tool_router,
+    transport::streamable_http_server::session::local::LocalSessionManager,
+    transport::streamable_http_server::tower::{StreamableHttpServerConfig, StreamableHttpService},
 };
 use serde::{Deserialize, Serialize};
+use tokio::net::TcpListener;
+use tokio_util::sync::CancellationToken;
 
 use crate::config::OkcConfig;
 use crate::service::OkcService;
@@ -47,8 +58,47 @@ impl McpServer {
             tool_router: Self::tool_router(),
         })
     }
-}
 
+    /// Run the MCP server with stdio transport (for Claude Code, etc.)
+    pub async fn serve_stdio(self) -> Result<(), anyhow::Error> {
+        let (stdin, stdout) = rmcp::transport::io::stdio();
+        rmcp::service::serve_server(self, (stdin, stdout)).await?;
+        Ok(())
+    }
+
+    /// Run the MCP server with HTTP/SSE transport.
+    ///
+    /// This starts an HTTP server that implements the MCP Streamable HTTP transport,
+    /// allowing web clients and remote AI assistants to connect.
+    pub async fn serve_http(self, addr: SocketAddr) -> Result<(), anyhow::Error> {
+        let config = StreamableHttpServerConfig::default()
+            .with_stateful_mode(true)
+            .with_allowed_hosts(vec!["localhost".to_string(), "127.0.0.1".to_string()])
+            .with_allowed_origins(vec![
+                "http://localhost".to_string(),
+                "http://127.0.0.1".to_string(),
+            ]);
+
+        let session_manager = Arc::new(LocalSessionManager::default());
+        let service_factory = move || Ok::<_, std::io::Error>(self.clone());
+
+        let http_service = StreamableHttpService::new(service_factory, session_manager, config);
+
+        let router = Router::new().nest_service("/mcp", http_service);
+
+        let listener = TcpListener::bind(addr).await?;
+        tracing::info!("MCP HTTP server listening on http://{}/mcp", addr);
+
+        let ct = CancellationToken::new();
+        axum::serve(listener, router)
+            .with_graceful_shutdown(async move {
+                ct.cancelled().await;
+            })
+            .await?;
+
+        Ok(())
+    }
+}
 #[derive(Deserialize, schemars::JsonSchema)]
 struct ScanParams {
     roots: Vec<String>,

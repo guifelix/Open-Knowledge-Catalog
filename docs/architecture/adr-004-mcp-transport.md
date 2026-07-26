@@ -219,7 +219,7 @@ Command::Serve { root } => {
 | Prompts | Pre-built prompts for "explain this module", "find related" | Planned |
 | Progress | Stream scan progress for large repos | Planned |
 | Cancellation | Cancel long searches | Supported by rmcp |
-| HTTP/SSE | Remote MCP server for team sharing | Future |
+| HTTP/SSE | Remote MCP server for team sharing | ✅ **Implemented** |
 | Auth | Token-based for remote access | Future |
 
 ## Related ADRs

@@ -7,11 +7,12 @@
 //! See the library crate documentation for architecture details.
 
 use crate::config::OkcConfig;
+use crate::transport::cli::{Cli, Command, TransportType};
 use clap::Parser;
+use std::net::SocketAddr;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 use crate::service::OkcService;
-use crate::transport::cli::{Cli, Command};
 
 mod config;
 mod index;
@@ -35,7 +36,7 @@ fn main() -> anyhow::Result<()> {
     // Extract root directories from the command
     let roots = match &cli.command {
         Command::Scan { root } => root.clone(),
-        Command::Serve { root } => root.clone(),
+        Command::Serve { root, .. } => root.clone(),
         Command::Watch { root, .. } => root.clone(),
         _ => vec![],
     };
@@ -294,7 +295,12 @@ fn main() -> anyhow::Result<()> {
             service.watch(!skip_initial)?;
         }
 
-        Command::Serve { root } => {
+        Command::Serve {
+            root,
+            transport,
+            host,
+            port,
+        } => {
             let roots = if root.is_empty() {
                 vec![std::env::current_dir()?]
             } else {
@@ -303,11 +309,22 @@ fn main() -> anyhow::Result<()> {
             config.roots = roots;
 
             let server = crate::transport::mcp::McpServer::new(&config)?;
-            let rt = tokio::runtime::Runtime::new()?;
-            rt.block_on(async {
-                let (stdin, stdout) = rmcp::transport::io::stdio();
-                rmcp::service::serve_server(server, (stdin, stdout)).await
-            })?;
+
+            match transport {
+                TransportType::Stdio => {
+                    let rt = tokio::runtime::Runtime::new()?;
+                    rt.block_on(async {
+                        let (stdin, stdout) = rmcp::transport::io::stdio();
+                        rmcp::service::serve_server(server, (stdin, stdout)).await
+                    })?;
+                }
+                TransportType::Http => {
+                    let addr: SocketAddr = format!("{}:{}", host, port).parse()?;
+                    tracing::info!("Starting MCP HTTP server on http://{}", addr);
+                    let rt = tokio::runtime::Runtime::new()?;
+                    rt.block_on(server.serve_http(addr))?;
+                }
+            }
         }
     }
 

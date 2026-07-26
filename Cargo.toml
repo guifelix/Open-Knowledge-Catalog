@@ -41,6 +41,11 @@ tokio-util = "0.7"
 # CLI
 clap = { version = "4", features = ["derive"] }
 
+# HTTP Server
+axum = "0.8"
+tower = "0.4"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+
 # Error handling
 thiserror = "2"
 anyhow = "1"
@@ -65,7 +70,6 @@ proptest = "1"
 libfuzzer-sys = "0.4"
 criterion = { version = "0.5", features = ["html_reports"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-axum = "0.8"
 tokio-util = "0.7"
 
 # Fuzz targets moved to `cargo fuzz` workflow (run with `cargo fuzz run`)
