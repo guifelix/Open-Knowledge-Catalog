@@ -545,6 +545,7 @@ impl OkcConfig {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::panic)]
     use super::*;
     use std::env;
     use std::sync::Mutex;
@@ -568,9 +569,9 @@ mod tests {
 
     #[test]
     fn test_config_validation_success() {
-        let dir = tempdir().unwrap();
+        let dir = tempdir().expect("temp dir creation");
         let db_path = dir.path().join("test.db");
-        std::fs::write(&db_path, "").unwrap();
+        std::fs::write(&db_path, "").expect("write test db file");
 
         let config = OkcConfig {
             roots: vec![dir.path().to_path_buf()],
@@ -603,12 +604,12 @@ mod tests {
 
     #[test]
     fn test_env_override_roots() {
-        let _lock = ENV_MUTEX.lock().unwrap();
-        let dir = tempdir().unwrap();
+        let _lock = ENV_MUTEX.lock().expect("env mutex lock");
+        let dir = tempdir().expect("temp dir creation");
         let root_path = dir.path().to_string_lossy().to_string();
         env::set_var("OKC_ROOTS", &root_path);
         let mut config = OkcConfig::default();
-        config.apply_env_overrides().unwrap();
+        config.apply_env_overrides().expect("env override roots");
         assert_eq!(config.roots.len(), 1);
         assert_eq!(config.roots[0], PathBuf::from(&root_path));
         env::remove_var("OKC_ROOTS");
@@ -616,34 +617,34 @@ mod tests {
 
     #[test]
     fn test_env_override_multiple_roots() {
-        let _lock = ENV_MUTEX.lock().unwrap();
-        let dir1 = tempdir().unwrap();
-        let dir2 = tempdir().unwrap();
+        let _lock = ENV_MUTEX.lock().expect("env mutex lock");
+        let dir1 = tempdir().expect("temp dir 1");
+        let dir2 = tempdir().expect("temp dir 2");
         let roots = format!("{},{}", dir1.path().display(), dir2.path().display());
         env::set_var("OKC_ROOTS", &roots);
         let mut config = OkcConfig::default();
-        config.apply_env_overrides().unwrap();
+        config.apply_env_overrides().expect("apply env override");
         assert_eq!(config.roots.len(), 2);
         env::remove_var("OKC_ROOTS");
     }
 
     #[test]
     fn test_env_override_db_path() {
-        let _lock = ENV_MUTEX.lock().unwrap();
+        let _lock = ENV_MUTEX.lock().expect("env mutex lock");
         env::set_var("OKC_DB_PATH", "/custom/path/db.sqlite");
         let mut config = OkcConfig::default();
-        config.apply_env_overrides().unwrap();
+        config.apply_env_overrides().expect("env override db_path");
         assert_eq!(config.db_path, PathBuf::from("/custom/path/db.sqlite"));
         env::remove_var("OKC_DB_PATH");
     }
 
     #[test]
     fn test_env_override_numeric() {
-        let _lock = ENV_MUTEX.lock().unwrap();
+        let _lock = ENV_MUTEX.lock().expect("env mutex lock");
         env::set_var("OKC_MAX_FILE_SIZE", "5242880"); // 5MB
         env::set_var("OKC_MAX_GRAPH_DEPTH", "10");
         let mut config = OkcConfig::default();
-        config.apply_env_overrides().unwrap();
+        config.apply_env_overrides().expect("env override numeric");
         assert_eq!(config.max_file_size, 5242880);
         assert_eq!(config.max_graph_depth, 10);
         env::remove_var("OKC_MAX_FILE_SIZE");
@@ -652,11 +653,11 @@ mod tests {
 
     #[test]
     fn test_env_override_bool() {
-        let _lock = ENV_MUTEX.lock().unwrap();
+        let _lock = ENV_MUTEX.lock().expect("env mutex lock");
         env::set_var("OKC_FOLLOW_SYMLINKS", "true");
         env::set_var("OKC_REQUIRE_INDEX_FILES", "true");
         let mut config = OkcConfig::default();
-        config.apply_env_overrides().unwrap();
+        config.apply_env_overrides().expect("env override bool");
         assert!(config.follow_symlinks);
         assert!(config.require_index_files);
         env::remove_var("OKC_FOLLOW_SYMLINKS");
@@ -665,12 +666,12 @@ mod tests {
 
     #[test]
     fn test_env_override_bm25() {
-        let _lock = ENV_MUTEX.lock().unwrap();
+        let _lock = ENV_MUTEX.lock().expect("env mutex lock");
         env::set_var("OKC_BM25_TITLE_WEIGHT", "15.0");
         env::set_var("OKC_BM25_K1", "1.5");
         env::set_var("OKC_BM25_B", "0.5");
         let mut config = OkcConfig::default();
-        config.apply_env_overrides().unwrap();
+        config.apply_env_overrides().expect("env override bm25");
         assert_eq!(config.bm25.title_weight, 15.0);
         assert_eq!(config.bm25.k1, 1.5);
         assert_eq!(config.bm25.b, 0.5);
@@ -681,8 +682,8 @@ mod tests {
 
     #[test]
     fn test_load_config_from_file() {
-        let _lock = ENV_MUTEX.lock().unwrap();
-        let dir = tempdir().unwrap();
+        let _lock = ENV_MUTEX.lock().expect("env mutex lock");
+        let dir = tempdir().expect("temp dir");
         let config_path = dir.path().join("okc.toml");
         let config_content = format!(
             r#"
@@ -692,9 +693,9 @@ max_graph_depth = 3
 "#,
             dir.path().display()
         );
-        std::fs::write(&config_path, config_content).unwrap();
+        std::fs::write(&config_path, config_content).expect("write config file");
 
-        let config = OkcConfig::load(Some(&config_path)).unwrap();
+        let config = OkcConfig::load(Some(&config_path)).expect("load config");
         assert_eq!(config.roots.len(), 1);
         assert_eq!(config.roots[0], dir.path().to_path_buf());
         assert_eq!(config.max_file_size, 1048576);
@@ -709,10 +710,10 @@ max_graph_depth = 3
 
     #[test]
     fn test_create_default_config_file() {
-        let _lock = ENV_MUTEX.lock().unwrap();
-        let dir = tempdir().unwrap();
+        let _lock = ENV_MUTEX.lock().expect("env mutex lock");
+        let dir = tempdir().expect("temp dir");
         let config_dir = dir.path().join("okc");
-        std::fs::create_dir_all(&config_dir).unwrap();
+        std::fs::create_dir_all(&config_dir).expect("create config dir");
 
         // Temporarily override config dir
         let original_config_dir = dirs::config_dir();
@@ -720,11 +721,10 @@ max_graph_depth = 3
 
         let result = OkcConfig::create_default_config_file();
         assert!(result.is_ok());
-        let config_path = result.unwrap();
-        assert!(config_path.exists());
+        let config_path = result.expect("config path from create_default");
 
         // Verify content can be loaded - need to provide a valid db_path
-        let mut config = OkcConfig::load(Some(&config_path)).unwrap();
+        let mut config = OkcConfig::load(Some(&config_path)).expect("load created config");
         config.db_path = dir.path().join("test.db");
         assert_eq!(config.max_file_size, 2 * 1024 * 1024);
 

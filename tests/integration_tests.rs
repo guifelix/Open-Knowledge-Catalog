@@ -1,6 +1,6 @@
 //! Integration tests for OKF retrieval using fixture repositories
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(clippy::expect_used, clippy::panic)]
 
 use okc::{config::OkcConfig, service::OkcService};
 use std::collections::HashMap;
@@ -8,17 +8,17 @@ use tempfile::TempDir;
 
 /// Test fixture for the simple repository
 fn setup_simple_repo() -> TempDir {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("temp dir for simple repo");
     let source = std::path::Path::new("tests/fixtures/simple");
-    copy_dir_all(source, temp_dir.path()).unwrap();
+    copy_dir_all(source, temp_dir.path()).expect("copy simple fixture");
     temp_dir
 }
 
 /// Test fixture for edge cases
 fn setup_edge_cases_repo() -> TempDir {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("temp dir for edge cases");
     let source = std::path::Path::new("tests/fixtures/edge-cases");
-    copy_dir_all(source, temp_dir.path()).unwrap();
+    copy_dir_all(source, temp_dir.path()).expect("copy edge cases fixture");
     temp_dir
 }
 
@@ -49,13 +49,13 @@ fn test_direct_concept_lookup() {
     let repo = setup_simple_repo();
     let config = mkconfig(&repo);
 
-    let mut service = OkcService::open(&config).unwrap();
-    service.scan().unwrap();
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
 
     // Search for monthly recurring revenue
     let results = service
         .search("monthly recurring revenue", None, None, None, 10)
-        .unwrap();
+        .expect("search monthly recurring revenue");
 
     assert!(
         !results.results.is_empty(),
@@ -81,18 +81,18 @@ fn test_hierarchical_browsing() {
     let repo = setup_simple_repo();
     let config = mkconfig(&repo);
 
-    let mut service = OkcService::open(&config).unwrap();
-    service.scan().unwrap();
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
 
     // Browse root
-    let root = service.browse("", 1, 100).unwrap();
+    let root = service.browse("", 1, 100).expect("browse root");
     assert!(root.directories.contains(&"metrics".to_string()));
     assert!(root.directories.contains(&"datasets".to_string()));
     assert!(root.directories.contains(&"policies".to_string()));
     assert!(root.directories.contains(&"glossary".to_string()));
 
     // Browse metrics directory
-    let metrics = service.browse("metrics", 1, 100).unwrap();
+    let metrics = service.browse("metrics", 1, 100).expect("browse metrics");
     assert_eq!(metrics.path, "metrics");
     assert!(metrics
         .documents
@@ -113,11 +113,11 @@ fn test_relationship_reasoning() {
     let repo = setup_simple_repo();
     let config = mkconfig(&repo);
 
-    let mut service = OkcService::open(&config).unwrap();
-    service.scan().unwrap();
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
 
     // Get links from monthly revenue
-    let links = service.get_links("metrics/monthly-revenue.md").unwrap();
+    let links = service.get_links("metrics/monthly-revenue.md").expect("get links");
 
     // Should link to customer-orders dataset
     let has_customer_orders = links
@@ -134,8 +134,8 @@ fn test_exact_metadata_query() {
     let repo = setup_simple_repo();
     let config = mkconfig(&repo);
 
-    let mut service = OkcService::open(&config).unwrap();
-    service.scan().unwrap();
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
 
     // Query for published finance metrics
     // Note: "status" is a special case mapped to parse_status, so use a custom field
@@ -152,7 +152,7 @@ fn test_exact_metadata_query() {
             &["path".to_string(), "title".to_string(), "owner".to_string()],
             100,
         )
-        .unwrap();
+        .expect("query metadata");
 
     assert!(
         !results.results.is_empty(),
@@ -161,7 +161,7 @@ fn test_exact_metadata_query() {
     for result in &results.results {
         if let Some(path) = result.get("path") {
             assert!(
-                path.as_str().unwrap().contains("metrics/"),
+                path.as_str().expect("path should be string").contains("metrics/"),
                 "Should be in metrics dir: {}",
                 path
             );
@@ -179,10 +179,10 @@ fn test_repository_validation() {
         ..Default::default()
     };
 
-    let mut service = OkcService::open(&config).unwrap();
-    service.scan().unwrap();
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
 
-    let issues = service.validate().unwrap();
+    let issues = service.validate().expect("validate");
 
     // Should find broken links
     let broken_links: Vec<_> = issues
@@ -227,10 +227,10 @@ fn test_validation_oversized_frontmatter() {
         ..Default::default()
     };
 
-    let mut service = OkcService::open(&config).unwrap();
-    service.scan().unwrap();
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
 
-    let issues = service.validate().unwrap();
+    let issues = service.validate().expect("validate");
 
     let oversized: Vec<_> = issues
         .iter()
@@ -250,12 +250,12 @@ fn test_validation_missing_metadata() {
         &missing_path,
         "---\ntags: [test]\n---\n\nNo title or type.\n",
     )
-    .unwrap();
+    .expect("write missing metadata file");
 
-    let mut service = OkcService::open(&config).unwrap();
-    service.scan().unwrap();
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
 
-    let issues = service.validate().unwrap();
+    let issues = service.validate().expect("validate");
 
     let missing: Vec<_> = issues
         .iter()
@@ -269,13 +269,13 @@ fn test_circular_links_handled() {
     let repo = setup_edge_cases_repo();
     let config = mkconfig(&repo);
 
-    let mut service = OkcService::open(&config).unwrap();
-    service.scan().unwrap();
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
 
     // Traverse should handle circular links without infinite loop
     let traverse = service
         .traverse("metrics/circular-a.md", &["links_to".to_string()], 3, 50)
-        .unwrap();
+        .expect("traverse circular");
 
     // Should find both A and B but not loop infinitely
     let paths: Vec<_> = traverse.nodes.iter().map(|n| n.path.clone()).collect();
@@ -291,8 +291,8 @@ fn test_get_document_with_metadata() {
     let repo = setup_simple_repo();
     let config = mkconfig(&repo);
 
-    let mut service = OkcService::open(&config).unwrap();
-    service.scan().unwrap();
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
 
     let doc = service
         .get_document(
@@ -300,7 +300,7 @@ fn test_get_document_with_metadata() {
             &["metadata".to_string(), "headings".to_string()],
             12000,
         )
-        .unwrap();
+        .expect("get document");
 
     assert_eq!(doc.path, "metrics/monthly-revenue.md");
     assert_eq!(doc.metadata.concept_type, Some("Metric".to_string()));
@@ -327,15 +327,15 @@ fn test_get_section() {
     let repo = setup_simple_repo();
     let config = mkconfig(&repo);
 
-    let mut service = OkcService::open(&config).unwrap();
-    service.scan().unwrap();
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
 
     let section = service
         .get_section("metrics/monthly-revenue.md", "Definition", 5000)
-        .unwrap();
+        .expect("get section");
 
     assert!(section.is_some());
-    let (heading, content) = section.unwrap();
+    let (heading, content) = section.expect("section should be Some");
     assert_eq!(heading, "Definition");
     assert!(content.contains("Monthly Revenue represents the total recognized recurring revenue"));
 }
@@ -345,11 +345,11 @@ fn test_search_with_filters() {
     let repo = setup_simple_repo();
     let config = mkconfig(&repo);
 
-    let mut service = OkcService::open(&config).unwrap();
-    service.scan().unwrap();
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
 
     // First test basic search
-    let basic_results = service.search("revenue", None, None, None, 10).unwrap();
+    let basic_results = service.search("revenue", None, None, None, 10).expect("basic search");
     println!(
         "Basic search results: {} matches",
         basic_results.total_matches
@@ -366,7 +366,7 @@ fn test_search_with_filters() {
     // Search with type filter
     let results = service
         .search("revenue", None, Some(&["Metric".to_string()]), None, 10)
-        .unwrap();
+        .expect("search with type filter");
     println!("Filtered search results: {} matches", results.total_matches);
     for r in &results.results {
         println!(
@@ -385,7 +385,7 @@ fn test_search_with_filters() {
     // Search with path prefix
     let results = service
         .search("revenue", Some("metrics"), None, None, 10)
-        .unwrap();
+        .expect("search with path prefix");
     println!(
         "Path prefix search results: {} matches",
         results.total_matches
@@ -405,12 +405,12 @@ fn test_backlinks() {
     let repo = setup_simple_repo();
     let config = mkconfig(&repo);
 
-    let mut service = OkcService::open(&config).unwrap();
-    service.scan().unwrap();
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
 
     let _backlinks = service
         .get_backlinks("metrics/monthly-revenue.md", 50)
-        .unwrap();
+        .expect("get backlinks");
 
     // Should find backlinks from datasets that link to it
     // Note: in our simple fixture, datasets don't link back, but the reverse link is stored
@@ -422,7 +422,7 @@ fn test_backlinks() {
             2,
             50,
         )
-        .unwrap();
+        .expect("traverse with backlinks");
 
     let paths: Vec<_> = traverse.nodes.iter().map(|n| n.path.clone()).collect();
     assert!(paths.contains(&"metrics/monthly-revenue.md".to_string()));
@@ -431,7 +431,7 @@ fn test_backlinks() {
 #[test]
 fn test_stats() {
     let repo = setup_simple_repo();
-    let temp_dir = tempfile::TempDir::new().unwrap();
+    let temp_dir = tempfile::TempDir::new().expect("temp dir for stats");
     let db_path = temp_dir.path().join("test.db");
     let config = OkcConfig {
         roots: vec![repo.path().to_path_buf()],
@@ -439,8 +439,8 @@ fn test_stats() {
         ..Default::default()
     };
 
-    let mut service = OkcService::open(&config).unwrap();
-    let scan_result = service.scan().unwrap();
+    let mut service = OkcService::open(&config).expect("open service");
+    let scan_result = service.scan().expect("scan");
 
     assert!(scan_result.total_files > 0);
     assert!(
@@ -450,7 +450,7 @@ fn test_stats() {
     );
     assert_eq!(scan_result.parse_failures, 0);
 
-    let stats = service.get_stats().unwrap();
+    let stats = service.get_stats().expect("get stats");
     assert!(stats.document_count > 0);
     assert!(stats.link_count > 0);
 }

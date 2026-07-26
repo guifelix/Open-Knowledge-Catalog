@@ -286,6 +286,7 @@ fn slugify(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::panic)]
     use super::*;
     use crate::model::document::{CodeBlock, Table, TableAlignment};
 
@@ -308,7 +309,7 @@ Some text after table.
         assert_eq!(headings[0].title, "Header");
 
         // Find the section with the table
-        let section = sections.iter().find(|s| s.heading == "Header").unwrap();
+        let section = sections.iter().find(|s| s.heading == "Header").expect("section Header should exist");
         assert_eq!(section.tables.len(), 1);
 
         let table = &section.tables[0];
@@ -339,7 +340,7 @@ Some text after table.
         let (_headings, _links, _text, sections, _tables, _code_blocks) =
             MarkdownParser::parse(markdown);
 
-        let section = sections.iter().find(|s| s.heading == "Header").unwrap();
+        let section = sections.iter().find(|s| s.heading == "Header").expect("section Header in alignment test");
         assert_eq!(section.tables.len(), 1);
 
         let table = &section.tables[0];
@@ -370,7 +371,7 @@ Some text after.
         let (_headings, _links, _text, sections, _tables, _code_blocks) =
             MarkdownParser::parse(markdown);
 
-        let section = sections.iter().find(|s| s.heading == "Header").unwrap();
+        let section = sections.iter().find(|s| s.heading == "Header").expect("section Header in code block basic test");
         assert_eq!(section.code_blocks.len(), 1);
 
         let code_block = &section.code_blocks[0];
@@ -393,7 +394,7 @@ fn main() {
         let (_headings, _links, _text, sections, _tables, _code_blocks) =
             MarkdownParser::parse(markdown);
 
-        let section = sections.iter().find(|s| s.heading == "Header").unwrap();
+        let section = sections.iter().find(|s| s.heading == "Header").expect("section Header in code block filename test");
         assert_eq!(section.code_blocks.len(), 1);
 
         let code_block = &section.code_blocks[0];
@@ -413,7 +414,7 @@ plain text code block
         let (_headings, _links, _text, sections, _tables, _code_blocks) =
             MarkdownParser::parse(markdown);
 
-        let section = sections.iter().find(|s| s.heading == "Header").unwrap();
+        let section = sections.iter().find(|s| s.heading == "Header").expect("section Header in no language test");
         assert_eq!(section.code_blocks.len(), 1);
 
         let code_block = &section.code_blocks[0];
@@ -488,11 +489,11 @@ let x = 1;
         assert_eq!(headings[2].level, 3);
 
         // H2 section should have the table
-        let h2_section = sections.iter().find(|s| s.heading == "H2").unwrap();
+        let h2_section = sections.iter().find(|s| s.heading == "H2").expect("H2 section should exist");
         assert_eq!(h2_section.tables.len(), 1);
 
         // H3 section should have the code block
-        let h3_section = sections.iter().find(|s| s.heading == "H3").unwrap();
+        let h3_section = sections.iter().find(|s| s.heading == "H3").expect("H3 section should exist");
         assert_eq!(h3_section.code_blocks.len(), 1);
     }
 }

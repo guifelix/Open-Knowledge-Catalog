@@ -2,7 +2,7 @@
 //!
 //! Tests all MCP tools via stdio transport, verifying responses match service-layer output.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(clippy::expect_used, clippy::panic)]
 
 use okc::{config::OkcConfig, service::OkcService};
 use rmcp::{
@@ -20,9 +20,9 @@ use tokio::process::Command;
 
 /// Test fixture for the simple repository
 fn setup_simple_repo() -> TempDir {
-    let temp_dir = TempDir::new().unwrap();
+    let temp_dir = TempDir::new().expect("create temp dir for simple repo");
     let source = std::path::Path::new("tests/fixtures/simple");
-    copy_dir_all(source, temp_dir.path()).unwrap();
+    copy_dir_all(source, temp_dir.path()).expect("copy simple fixture");
     temp_dir
 }
 
@@ -94,7 +94,7 @@ async fn call_tool(
 ) -> anyhow::Result<Value> {
     let mut params = CallToolRequestParams::new(tool_name.to_string());
     if let Some(args) = arguments {
-        params = params.with_arguments(args.as_object().unwrap().clone());
+        params = params.with_arguments(args.as_object().expect("args should be object").clone());
     }
 
     let result = client.call_tool(params).await?;
@@ -150,7 +150,7 @@ async fn test_mcp_stdio_transport_all_tools() -> anyhow::Result<()> {
         result.get("directories").is_some(),
         "browse should return directories"
     );
-    let dirs = result["directories"].as_array().unwrap();
+    let dirs = result["directories"].as_array().expect("directories should be array");
     assert!(
         dirs.iter().any(|d| d.as_str() == Some("metrics")),
         "should have metrics dir"
@@ -191,7 +191,7 @@ async fn test_mcp_stdio_transport_all_tools() -> anyhow::Result<()> {
     assert_eq!(result["heading"], "Definition");
     assert!(result["content"]
         .as_str()
-        .unwrap()
+        .expect("content should be a string")
         .contains("Monthly Revenue represents"));
 
     // Test search tool
@@ -296,7 +296,7 @@ async fn test_mcp_error_missing_document() -> anyhow::Result<()> {
                     "max_chars": 12000
                 })
                 .as_object()
-                .unwrap()
+                .expect("json should be object")
                 .clone(),
             ),
         )
@@ -334,7 +334,7 @@ async fn test_mcp_error_invalid_path() -> anyhow::Result<()> {
                     "path": "invalid/../../../etc/passwd"
                 })
                 .as_object()
-                .unwrap()
+                .expect("json should be object")
                 .clone(),
             ),
         )

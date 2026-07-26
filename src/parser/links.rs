@@ -307,7 +307,6 @@ pub fn extract_wiki_links(text: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
 
     #[test]
