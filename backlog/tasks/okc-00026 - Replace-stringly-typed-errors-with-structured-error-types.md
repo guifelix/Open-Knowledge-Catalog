@@ -8,7 +8,7 @@ updated_date: '2026-07-23 19:04'
 labels:
   - quality
 dependencies: []
-priority: high
+priority: medium
 type: enhancement
 ordinal: 9400
 ---

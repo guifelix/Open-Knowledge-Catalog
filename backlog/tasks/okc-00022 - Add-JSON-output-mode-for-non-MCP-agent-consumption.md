@@ -8,7 +8,7 @@ updated_date: '2026-07-23 19:04'
 labels:
   - agent-ux
 dependencies: []
-priority: high
+priority: medium
 type: feature
 ordinal: 8400
 ---

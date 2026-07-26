@@ -14,7 +14,7 @@ dependencies:
   - OKC-00001
 documentation:
   - docs/metadata-querying.md
-priority: high
+priority: low
 type: feature
 ordinal: 38000
 ---

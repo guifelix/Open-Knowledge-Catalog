@@ -8,7 +8,7 @@ updated_date: '2026-07-25 23:57'
 labels:
   - ux
 dependencies: []
-priority: medium
+priority: high
 type: feature
 ordinal: 2400
 ---
