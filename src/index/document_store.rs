@@ -12,7 +12,7 @@ use crate::index::traits::{DocumentRecord, DocumentStore, Result};
 use crate::model::document::{
     HeadingInfo, IndexStats, LinkInfo, MetadataQueryResponse, ParseError,
 };
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{params, OptionalExtension, Transaction};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
@@ -171,6 +171,27 @@ impl DocumentStore for SqliteDocumentStore {
         Ok(())
     }
 
+    fn upsert_document_tx(&self, tx: &Transaction, doc: &DocumentRecord) -> Result<()> {
+        tx.execute(
+            "INSERT OR REPLACE INTO documents
+             (path, parent_path, title, type, description, body_text, file_size, modified_at, content_hash, parse_status)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                doc.path,
+                doc.parent_path,
+                doc.title,
+                doc.concept_type,
+                doc.description,
+                doc.body_text,
+                doc.file_size as i64,
+                doc.modified_at,
+                doc.content_hash,
+                doc.parse_status,
+            ],
+        )?;
+        Ok(())
+    }
+
     fn get_document(&self, path: &str) -> Result<Option<DocumentRecord>> {
         let conn = self.get_conn()?;
         let mut stmt = conn.prepare(
@@ -201,6 +222,17 @@ impl DocumentStore for SqliteDocumentStore {
         let conn = self.get_conn()?;
         conn.execute("DELETE FROM documents WHERE path = ?1", params![path])?;
         Ok(())
+    }
+
+    fn delete_document_tx(&self, tx: &Transaction, path: &str) -> Result<()> {
+        tx.execute("DELETE FROM documents WHERE path = ?1", params![path])?;
+        Ok(())
+    }
+
+    fn get_doc_id_tx(&self, tx: &Transaction, path: &str) -> Result<i64> {
+        let mut stmt = tx.prepare("SELECT id FROM documents WHERE path = ?1")?;
+        let id: i64 = stmt.query_row([path], |row| row.get(0))?;
+        Ok(id)
     }
 
     fn list_documents(
@@ -264,6 +296,20 @@ impl DocumentStore for SqliteDocumentStore {
         Ok(())
     }
 
+    fn insert_tags_tx(&self, tx: &Transaction, doc_id: i64, tags: &[String]) -> Result<()> {
+        tx.execute(
+            "DELETE FROM document_tags WHERE document_id = ?1",
+            params![doc_id],
+        )?;
+        for tag in tags {
+            tx.execute(
+                "INSERT OR IGNORE INTO document_tags (document_id, tag) VALUES (?1, ?2)",
+                params![doc_id, tag],
+            )?;
+        }
+        Ok(())
+    }
+
     fn get_tags(&self, doc_id: i64) -> Result<Vec<String>> {
         let conn = self.get_conn()?;
         let mut stmt = conn.prepare("SELECT tag FROM document_tags WHERE document_id = ?1")?;
@@ -291,6 +337,25 @@ impl DocumentStore for SqliteDocumentStore {
         )?;
         for heading in headings {
             conn.execute(
+                "INSERT INTO headings (document_id, level, title, anchor, position) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![doc_id, heading.level as i32, heading.title, heading.anchor, 0],
+            )?;
+        }
+        Ok(())
+    }
+
+    fn insert_headings_tx(
+        &self,
+        tx: &Transaction,
+        doc_id: i64,
+        headings: &[HeadingInfo],
+    ) -> Result<()> {
+        tx.execute(
+            "DELETE FROM headings WHERE document_id = ?1",
+            params![doc_id],
+        )?;
+        for heading in headings {
+            tx.execute(
                 "INSERT INTO headings (document_id, level, title, anchor, position) VALUES (?1, ?2, ?3, ?4, ?5)",
                 params![doc_id, heading.level as i32, heading.title, heading.anchor, 0],
             )?;
@@ -459,6 +524,30 @@ impl DocumentStore for SqliteDocumentStore {
         Ok(())
     }
 
+    fn insert_links_tx(&self, tx: &Transaction, doc_id: i64, links: &[LinkInfo]) -> Result<()> {
+        tx.execute(
+            "DELETE FROM links WHERE source_document_id = ?1",
+            params![doc_id],
+        )?;
+        for link in links {
+            let is_external = link.external_url.is_some();
+            tx.execute(
+                r#"
+                INSERT INTO links (source_document_id, target_path, target_anchor, external_url, exists_in_repository)
+                VALUES (?1, ?2, ?3, ?4, ?5)
+                "#,
+                params![
+                    doc_id,
+                    if is_external { None } else { link.target_path.clone() },
+                    link.target_anchor.clone(),
+                    if is_external { link.target_path.clone() } else { link.external_url.clone() },
+                    if is_external { 1 } else { link.exists_in_repository as i32 },
+                ],
+            )?;
+        }
+        Ok(())
+    }
+
     fn get_links(&self, doc_id: i64) -> Result<Vec<LinkInfo>> {
         let conn = self.get_conn()?;
         let mut stmt = conn.prepare(
@@ -507,6 +596,26 @@ impl DocumentStore for SqliteDocumentStore {
         Ok(())
     }
 
+    fn insert_metadata_fields_tx(
+        &self,
+        tx: &Transaction,
+        doc_id: i64,
+        fields: &BTreeMap<String, serde_json::Value>,
+    ) -> Result<()> {
+        tx.execute(
+            "DELETE FROM metadata_fields WHERE document_id = ?1",
+            params![doc_id],
+        )?;
+        for (key, value) in fields {
+            let val_str = serde_json::to_string(value).unwrap_or_else(|_| "null".to_string());
+            tx.execute(
+                "INSERT INTO metadata_fields (document_id, key, value) VALUES (?1, ?2, ?3)",
+                params![doc_id, key, val_str],
+            )?;
+        }
+        Ok(())
+    }
+
     fn get_metadata_fields(&self, doc_id: i64) -> Result<BTreeMap<String, serde_json::Value>> {
         let conn = self.get_conn()?;
         let mut stmt =
@@ -537,6 +646,22 @@ impl DocumentStore for SqliteDocumentStore {
         conn.execute("DELETE FROM scan_errors WHERE path = ?1", params![path])?;
         for err in errors {
             conn.execute(
+                "INSERT INTO scan_errors (path, stage, message, line) VALUES (?1, ?2, ?3, ?4)",
+                params![path, err.stage, err.message, err.line.map(|l| l as i64)],
+            )?;
+        }
+        Ok(())
+    }
+
+    fn insert_scan_errors_tx(
+        &self,
+        tx: &Transaction,
+        path: &str,
+        errors: &[ParseError],
+    ) -> Result<()> {
+        tx.execute("DELETE FROM scan_errors WHERE path = ?1", params![path])?;
+        for err in errors {
+            tx.execute(
                 "INSERT INTO scan_errors (path, stage, message, line) VALUES (?1, ?2, ?3, ?4)",
                 params![path, err.stage, err.message, err.line.map(|l| l as i64)],
             )?;

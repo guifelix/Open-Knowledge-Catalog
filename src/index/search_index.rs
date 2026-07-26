@@ -14,7 +14,7 @@ use crate::index::traits::{Result, SearchFilters, SearchIndex, SearchableDocumen
 use crate::model::document::{IndexStats, SearchResponse, SearchResult};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::params;
+use rusqlite::{params, Transaction};
 use std::sync::Arc;
 
 /// FTS5-based search index with thread-safe connection pool.
@@ -88,9 +88,32 @@ impl SearchIndex for SqliteSearchIndex {
         Ok(())
     }
 
+    fn index_document_tx(&self, tx: &Transaction, doc: &SearchableDocument) -> Result<()> {
+        tx.execute(
+            r#"
+            INSERT OR REPLACE INTO document_search (path, title, description, headings, body, concept_type)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            "#,
+            params![
+                doc.path,
+                doc.title.clone().unwrap_or_default(),
+                doc.description.clone().unwrap_or_default(),
+                doc.headings,
+                doc.body,
+                doc.concept_type.clone().unwrap_or_default(),
+            ],
+        )?;
+        Ok(())
+    }
+
     fn remove_document(&self, path: &str) -> Result<()> {
         let conn = self.get_conn()?;
         conn.execute("DELETE FROM document_search WHERE path = ?1", params![path])?;
+        Ok(())
+    }
+
+    fn remove_document_tx(&self, tx: &Transaction, path: &str) -> Result<()> {
+        tx.execute("DELETE FROM document_search WHERE path = ?1", params![path])?;
         Ok(())
     }
 

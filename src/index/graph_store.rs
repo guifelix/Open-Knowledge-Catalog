@@ -9,7 +9,7 @@
 use crate::index::traits::{GraphStore, Result};
 use crate::model::document::{Link, LinkInfo, ValidationIssue};
 use crate::model::graph::{GraphEdge, TraverseNode, TraverseResponse};
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{params, OptionalExtension, Transaction};
 use std::collections::VecDeque;
 use std::sync::Arc;
 
@@ -99,6 +99,50 @@ impl GraphStore for SqliteGraphStore {
             "DELETE FROM links WHERE source_document_id = (SELECT id FROM documents WHERE path = ?1)",
             params![source_path],
         )?;
+        Ok(())
+    }
+
+    fn remove_links_tx(&self, tx: &Transaction, source_path: &str) -> Result<()> {
+        tx.execute(
+            "DELETE FROM links WHERE source_document_id = (SELECT id FROM documents WHERE path = ?1)",
+            params![source_path],
+        )?;
+        Ok(())
+    }
+
+    fn store_links_tx(&self, tx: &Transaction, source_path: &str, links: &[Link]) -> Result<()> {
+        let source_id = tx
+            .query_row(
+                "SELECT id FROM documents WHERE path = ?1",
+                params![source_path],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()?;
+
+        let Some(source_id) = source_id else {
+            return Ok(());
+        };
+
+        tx.execute(
+            "DELETE FROM links WHERE source_document_id = ?1",
+            params![source_id],
+        )?;
+
+        for link in links {
+            tx.execute(
+                r#"
+                INSERT INTO links (source_document_id, target_path, target_anchor, external_url, exists_in_repository)
+                VALUES (?1, ?2, ?3, ?4, ?5)
+                "#,
+                params![
+                    source_id,
+                    if link.is_external { None } else { Some(&link.target) },
+                    link.target_anchor.clone(),
+                    if link.is_external { Some(&link.target) } else { None },
+                    if link.is_external { 1 } else { link.exists_in_repository as i32 },
+                ],
+            )?;
+        }
         Ok(())
     }
 

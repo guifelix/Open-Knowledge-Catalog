@@ -174,28 +174,46 @@ impl RepositoryIndex {
 
     /// Process a set of file changes (added, modified, deleted) incrementally.
     /// Used by both full `scan()` and the incremental watcher.
+    /// This method
+    /// wraps all changes in a single transaction for atomicity.
     pub fn process_changes(
         &mut self,
         changes: &FileChanges,
         known_paths: &[String],
     ) -> Result<ProcessChangesResult, anyhow::Error> {
-        // Use the parser module to parse all changed files
+        self.process_changes_transactional(changes, known_paths)
+    }
+
+    /// Internal method that processes changes within a database transaction.
+    fn process_changes_transactional(
+        &mut self,
+        changes: &FileChanges,
+        known_paths: &[String],
+    ) -> Result<ProcessChangesResult, anyhow::Error> {
+        // Get a connection from the pool and start a transaction
+        let mut conn = self.pool.get()?;
+        let tx = conn.transaction()?;
+
+        // Use the parser module to parse all changed files (outside transaction for I/O)
         let (parsed_docs, result) = process_changes(&self.config, changes, known_paths);
 
-        // Handle deletions
+        // Handle deletions within transaction
         for path in &changes.deleted {
             info!("Removing deleted document: {path}");
-            self.document_store.delete_document(path)?;
-            self.search_index.remove_document(path)?;
+            self.document_store.delete_document_tx(&tx, path)?;
+            self.search_index.remove_document_tx(&tx, path)?;
             if let Some(ref gs) = self.graph_store {
-                gs.remove_links(path)?;
+                gs.remove_links_tx(&tx, path)?;
             }
         }
 
-        // Store parsed documents
+        // Store parsed documents within transaction
         for parsed in parsed_docs {
-            self.store_parsed_document(&parsed)?;
+            self.store_parsed_document_tx(&tx, &parsed)?;
         }
+
+        // Commit the transaction
+        tx.commit()?;
 
         Ok(result)
     }
@@ -290,6 +308,108 @@ impl RepositoryIndex {
         self.search_index.index_document(&searchable)?;
 
         Ok(())
+    }
+
+    /// Transactional version of store_parsed_document for use within a transaction.
+    fn store_parsed_document_tx(
+        &self,
+        tx: &rusqlite::Transaction,
+        parsed: &crate::index::parser::ParsedDocument,
+    ) -> Result<(), anyhow::Error> {
+        use crate::index::traits::DocumentRecord;
+
+        // Create document record
+        let doc_record = DocumentRecord {
+            id: 0, // Will be assigned by database
+            path: parsed.path.clone(),
+            parent_path: parsed.parent_path.clone(),
+            title: parsed.title.clone(),
+            concept_type: parsed.concept_type.clone(),
+            description: parsed.description.clone(),
+            body_text: parsed.markdown_body.clone(),
+            file_size: parsed.size,
+            modified_at: parsed.modified_at,
+            content_hash: parsed.content_hash.clone(),
+            parse_status: parse_status_to_str(&parsed.parse_status).to_string(),
+        };
+
+        // Upsert document within transaction
+        self.document_store.upsert_document_tx(tx, &doc_record)?;
+
+        // Get the document ID
+        let doc_id = self.get_doc_id_tx(tx, &parsed.path)?;
+
+        // Store tags
+        if !parsed.tags.is_empty() {
+            self.document_store
+                .insert_tags_tx(tx, doc_id, &parsed.tags)?;
+        }
+
+        // Store headings
+        if !parsed.headings.is_empty() {
+            self.document_store
+                .insert_headings_tx(tx, doc_id, &parsed.headings)?;
+        }
+
+        // Store links
+        if !parsed.links.is_empty() {
+            self.document_store
+                .insert_links_tx(tx, doc_id, &parsed.links)?;
+            if let Some(ref gs) = self.graph_store {
+                // Convert LinkInfo to Link for graph store
+                let links: Vec<crate::model::document::Link> = parsed
+                    .links
+                    .iter()
+                    .map(|l| crate::model::document::Link {
+                        raw: String::new(),
+                        target: l
+                            .target_path
+                            .clone()
+                            .unwrap_or_else(|| l.external_url.clone().unwrap_or_default()),
+                        target_anchor: l.target_anchor.clone(),
+                        is_external: l.external_url.is_some(),
+                        exists_in_repository: l.exists_in_repository,
+                    })
+                    .collect();
+                gs.store_links_tx(tx, &parsed.path, &links)?;
+            }
+        }
+
+        // Store metadata fields
+        if !parsed.custom_fields.is_empty() {
+            self.document_store
+                .insert_metadata_fields_tx(tx, doc_id, &parsed.custom_fields)?;
+        }
+
+        // Store scan errors
+        if !parsed.parse_errors.is_empty() {
+            self.document_store
+                .insert_scan_errors_tx(tx, &parsed.path, &parsed.parse_errors)?;
+        }
+
+        // Index for search
+        let searchable = crate::index::traits::SearchableDocument {
+            path: parsed.path.clone(),
+            title: parsed.title.clone(),
+            description: parsed.description.clone(),
+            headings: parsed
+                .headings
+                .iter()
+                .map(|h| h.title.clone())
+                .collect::<Vec<_>>()
+                .join(" "),
+            body: parsed.body_text.clone(),
+            concept_type: parsed.concept_type.clone(),
+        };
+        self.search_index.index_document_tx(tx, &searchable)?;
+
+        Ok(())
+    }
+
+    fn get_doc_id_tx(&self, tx: &rusqlite::Transaction, path: &str) -> Result<i64, anyhow::Error> {
+        let mut stmt = tx.prepare("SELECT id FROM documents WHERE path = ?1")?;
+        let id: i64 = stmt.query_row([path], |row| row.get(0))?;
+        Ok(id)
     }
 
     fn get_doc_id(&self, path: &str) -> Result<i64, anyhow::Error> {
