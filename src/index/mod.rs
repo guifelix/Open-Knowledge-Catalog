@@ -14,6 +14,7 @@
 //! - [`migrations`] - Database schema migrations
 //! - [`parser`] - Document parsing (front-matter, markdown, links)
 
+pub mod content_hash;
 pub mod database;
 pub mod document_store;
 pub mod export;

@@ -16,6 +16,7 @@ use crate::model::document::{
     SearchResponse, Table, ValidationIssue,
 };
 use crate::model::graph::TraverseResponse;
+use rusqlite::Transaction;
 use std::collections::{BTreeMap, HashMap};
 
 /// Document suitable for full-text search indexing.
@@ -121,6 +122,31 @@ pub trait DocumentStore: Send + Sync {
     /// Delete scan errors for a document.
     fn delete_scan_errors(&self, path: &str) -> Result<()>;
 
+    /// Transactional versions for atomic batch operations
+    fn delete_document_tx(&self, tx: &Transaction, path: &str) -> Result<()>;
+    fn upsert_document_tx(&self, tx: &Transaction, doc: &DocumentRecord) -> Result<()>;
+    fn insert_tags_tx(&self, tx: &Transaction, doc_id: i64, tags: &[String]) -> Result<()>;
+    fn insert_headings_tx(
+        &self,
+        tx: &Transaction,
+        doc_id: i64,
+        headings: &[HeadingInfo],
+    ) -> Result<()>;
+    fn insert_links_tx(&self, tx: &Transaction, doc_id: i64, links: &[LinkInfo]) -> Result<()>;
+    fn insert_metadata_fields_tx(
+        &self,
+        tx: &Transaction,
+        doc_id: i64,
+        fields: &BTreeMap<String, serde_json::Value>,
+    ) -> Result<()>;
+    fn insert_scan_errors_tx(
+        &self,
+        tx: &Transaction,
+        path: &str,
+        errors: &[ParseError],
+    ) -> Result<()>;
+    fn get_doc_id_tx(&self, tx: &Transaction, path: &str) -> Result<i64>;
+
     /// Query metadata with filters.
     fn query_metadata(
         &self,
@@ -171,6 +197,10 @@ pub trait SearchIndex: Send + Sync {
     /// Search the index with query and filters.
     fn search(&self, query: &str, filters: &SearchFilters, limit: usize) -> Result<SearchResponse>;
 
+    /// Transactional versions for atomic batch operations
+    fn index_document_tx(&self, tx: &Transaction, doc: &SearchableDocument) -> Result<()>;
+    fn remove_document_tx(&self, tx: &Transaction, path: &str) -> Result<()>;
+
     /// Get search index statistics.
     fn stats(&self) -> Result<IndexStats>;
 }
@@ -188,6 +218,10 @@ pub trait GraphStore: Send + Sync {
     fn get_links(&self, path: &str) -> Result<Vec<LinkInfo>>;
     /// Get backlinks to a document.
     fn get_backlinks(&self, path: &str, limit: usize) -> Result<Vec<LinkInfo>>;
+
+    /// Transactional versions for atomic batch operations
+    fn store_links_tx(&self, tx: &Transaction, source_path: &str, links: &[Link]) -> Result<()>;
+    fn remove_links_tx(&self, tx: &Transaction, source_path: &str) -> Result<()>;
 
     /// Traverse the graph from a starting node.
     fn traverse(

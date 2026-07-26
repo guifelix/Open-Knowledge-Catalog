@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::config::OkcConfig;
+use crate::index::content_hash::{compute_content_hash_default, HashConfig};
 use crate::model::document::{
     FileRecord, FrontMatter, Heading, HeadingInfo, Link, LinkInfo, ParseError, ParseStatus,
     ProcessChangesResult, ScanResult,
@@ -164,7 +165,7 @@ impl DocumentParser {
             })
             .collect();
 
-        let content_hash = blake3::hash(body.as_bytes()).to_hex().to_string();
+        let content_hash = compute_content_hash_default(body.as_bytes());
         let parent_path = Path::new(&file.path)
             .parent()
             .map(|p| p.to_string_lossy().to_string())
