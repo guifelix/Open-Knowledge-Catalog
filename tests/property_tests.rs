@@ -2,12 +2,13 @@
 
 #![allow(clippy::needless_pass_by_value)]
 #![allow(clippy::map_unwrap_or)]
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use okc::model::document::FileRecord;
 use okc::model::Link as ModelLink;
 use okc::parser::frontmatter::FrontMatterExtractor;
 use okc::parser::links::{normalize_path, LinkResolver};
 use okc::parser::yaml::YamlParser;
+use okc::scanner::changes::{ChangeDetector, FileChanges};
 use proptest::prelude::*;
 use proptest::test_runner::TestCaseResult;
 use std::path::Path;
@@ -353,5 +354,407 @@ proptest! {
         body in ".{0,100}"
     ) {
         prop_multiple_delimiters(content1, content2, body)?;
+    }
+}
+
+// Property tests for change detection edge cases
+fn prop_change_detector_identical_files_unchanged(
+    mut files: Vec<(String, u64, i64)>,
+) -> TestCaseResult {
+    // Deduplicate by path — ChangeDetector operates on path identity
+    files.sort_by(|a, b| a.0.cmp(&b.0));
+    files.dedup_by(|a, b| a.0 == b.0);
+    let current: Vec<FileRecord> = files
+        .iter()
+        .map(|(path, size, modified_at)| FileRecord {
+            path: path.clone(),
+            absolute_path: path.clone(),
+            size: *size,
+            modified_at: *modified_at,
+        })
+        .collect();
+    let previous = current.clone();
+
+    let changes = ChangeDetector::detect(&current, &previous);
+
+    prop_assert_eq!(changes.added.len(), 0);
+    prop_assert_eq!(changes.modified.len(), 0);
+    prop_assert_eq!(changes.deleted.len(), 0);
+    prop_assert_eq!(changes.unchanged.len(), current.len());
+    Ok(())
+}
+
+fn prop_change_detector_new_files_added(
+    mut current_files: Vec<(String, u64, i64)>,
+    mut new_files: Vec<(String, u64, i64)>,
+) -> TestCaseResult {
+    // Deduplicate by path — ChangeDetector operates on path identity
+    current_files.sort_by(|a, b| a.0.cmp(&b.0));
+    current_files.dedup_by(|a, b| a.0 == b.0);
+    new_files.sort_by(|a, b| a.0.cmp(&b.0));
+    new_files.dedup_by(|a, b| a.0 == b.0);
+    // Ensure no path overlap
+    let current_paths: std::collections::HashSet<_> =
+        current_files.iter().map(|(p, _, _)| p).collect();
+    let new_paths: std::collections::HashSet<_> = new_files.iter().map(|(p, _, _)| p).collect();
+    if !current_paths.is_disjoint(&new_paths) {
+        return Ok(()); // Skip overlapping paths
+    }
+
+    let current: Vec<FileRecord> = current_files
+        .iter()
+        .map(|(path, size, modified_at)| FileRecord {
+            path: path.clone(),
+            absolute_path: path.clone(),
+            size: *size,
+            modified_at: *modified_at,
+        })
+        .collect();
+
+    let mut previous = current.clone();
+    for (path, size, modified_at) in &new_files {
+        previous.push(FileRecord {
+            path: path.clone(),
+            absolute_path: path.clone(),
+            size: *size,
+            modified_at: *modified_at,
+        });
+    }
+
+    let changes = ChangeDetector::detect(&previous, &current);
+
+    prop_assert_eq!(changes.added.len(), new_files.len());
+    prop_assert_eq!(changes.modified.len(), 0);
+    prop_assert_eq!(changes.deleted.len(), 0);
+    Ok(())
+}
+
+fn prop_change_detector_deleted_files(
+    mut current_files: Vec<(String, u64, i64)>,
+    deleted_count: usize,
+) -> TestCaseResult {
+    if current_files.is_empty() {
+        return Ok(());
+    }
+
+    // Deduplicate by path
+    current_files.sort_by(|a, b| a.0.cmp(&b.0));
+    current_files.dedup_by(|a, b| a.0 == b.0);
+
+    let delete_count = deleted_count.min(current_files.len());
+    let mut previous = Vec::new();
+    let mut current = Vec::new();
+
+    for (i, (path, size, modified_at)) in current_files.iter().enumerate() {
+        let record = FileRecord {
+            path: path.clone(),
+            absolute_path: path.clone(),
+            size: *size,
+            modified_at: *modified_at,
+        };
+        if i < delete_count {
+            previous.push(record);
+        } else {
+            previous.push(record.clone());
+            current.push(record);
+        }
+    }
+
+    let changes = ChangeDetector::detect(&current, &previous);
+
+    prop_assert_eq!(changes.deleted.len(), delete_count);
+    prop_assert_eq!(changes.added.len(), 0);
+    prop_assert_eq!(changes.modified.len(), 0);
+    Ok(())
+}
+
+fn prop_change_detector_modified_files(
+    mut files: Vec<(String, u64, i64)>,
+    mut modified_indices: Vec<usize>,
+) -> TestCaseResult {
+    if files.is_empty() {
+        return Ok(());
+    }
+
+    // Deduplicate by path — duplicates break index-based modified tracking
+    files.sort_by(|a, b| a.0.cmp(&b.0));
+    files.dedup_by(|a, b| a.0 == b.0);
+
+    // Deduplicate and clamp indices
+    modified_indices.sort();
+    modified_indices.dedup();
+    let expected_modified = modified_indices
+        .iter()
+        .filter(|&&i| i < files.len())
+        .count();
+
+    let mut current = Vec::new();
+    let mut previous = Vec::new();
+
+    for (i, (path, size, modified_at)) in files.iter().enumerate() {
+        let record = FileRecord {
+            path: path.clone(),
+            absolute_path: path.clone(),
+            size: *size,
+            modified_at: *modified_at,
+        };
+        previous.push(record.clone());
+
+        if modified_indices.contains(&i) {
+            // Modify the file (change size or mtime)
+            current.push(FileRecord {
+                path: path.clone(),
+                absolute_path: path.clone(),
+                size: size + 1,               // Change size
+                modified_at: modified_at + 1, // Change mtime
+            });
+        } else {
+            current.push(record);
+        }
+    }
+
+    let changes = ChangeDetector::detect(&current, &previous);
+
+    prop_assert_eq!(changes.modified.len(), expected_modified);
+    prop_assert_eq!(changes.added.len(), 0);
+    prop_assert_eq!(changes.deleted.len(), 0);
+    Ok(())
+}
+
+fn prop_change_detector_deterministic(
+    current: Vec<(String, u64, i64)>,
+    previous: Vec<(String, u64, i64)>,
+) -> TestCaseResult {
+    let current_records: Vec<FileRecord> = current
+        .iter()
+        .map(|(path, size, modified_at)| FileRecord {
+            path: path.clone(),
+            absolute_path: path.clone(),
+            size: *size,
+            modified_at: *modified_at,
+        })
+        .collect();
+    let previous_records: Vec<FileRecord> = previous
+        .iter()
+        .map(|(path, size, modified_at)| FileRecord {
+            path: path.clone(),
+            absolute_path: path.clone(),
+            size: *size,
+            modified_at: *modified_at,
+        })
+        .collect();
+
+    let changes1 = ChangeDetector::detect(&current_records, &previous_records);
+    let changes2 = ChangeDetector::detect(&current_records, &previous_records);
+
+    prop_assert_eq!(changes1.added.len(), changes2.added.len());
+    prop_assert_eq!(changes1.modified.len(), changes2.modified.len());
+    prop_assert_eq!(changes1.deleted.len(), changes2.deleted.len());
+    prop_assert_eq!(changes1.unchanged.len(), changes2.unchanged.len());
+    Ok(())
+}
+
+fn prop_change_detector_empty_current(previous: Vec<(String, u64, i64)>) -> TestCaseResult {
+    let previous_records: Vec<FileRecord> = previous
+        .iter()
+        .map(|(path, size, modified_at)| FileRecord {
+            path: path.clone(),
+            absolute_path: path.clone(),
+            size: *size,
+            modified_at: *modified_at,
+        })
+        .collect();
+
+    let changes = ChangeDetector::detect(&[], &previous_records);
+
+    prop_assert_eq!(changes.added.len(), 0);
+    prop_assert_eq!(changes.modified.len(), 0);
+    prop_assert_eq!(changes.deleted.len(), previous.len());
+    prop_assert_eq!(changes.unchanged.len(), 0);
+    Ok(())
+}
+
+fn prop_change_detector_empty_previous(current: Vec<(String, u64, i64)>) -> TestCaseResult {
+    let current_records: Vec<FileRecord> = current
+        .iter()
+        .map(|(path, size, modified_at)| FileRecord {
+            path: path.clone(),
+            absolute_path: path.clone(),
+            size: *size,
+            modified_at: *modified_at,
+        })
+        .collect();
+
+    let changes = ChangeDetector::detect(&current_records, &[]);
+
+    prop_assert_eq!(changes.added.len(), current.len());
+    prop_assert_eq!(changes.modified.len(), 0);
+    prop_assert_eq!(changes.deleted.len(), 0);
+    prop_assert_eq!(changes.unchanged.len(), 0);
+    Ok(())
+}
+
+fn prop_change_detector_size_only_change(files: Vec<(String, u64, i64)>) -> TestCaseResult {
+    if files.is_empty() {
+        return Ok(());
+    }
+
+    let mut current = Vec::new();
+    let mut previous = Vec::new();
+
+    for (path, size, modified_at) in &files {
+        previous.push(FileRecord {
+            path: path.clone(),
+            absolute_path: path.clone(),
+            size: *size,
+            modified_at: *modified_at,
+        });
+        current.push(FileRecord {
+            path: path.clone(),
+            absolute_path: path.clone(),
+            size: *size + 100,         // Only size changes
+            modified_at: *modified_at, // Same mtime
+        });
+    }
+
+    let changes = ChangeDetector::detect(&current, &previous);
+
+    prop_assert_eq!(changes.modified.len(), files.len());
+    prop_assert_eq!(changes.added.len(), 0);
+    prop_assert_eq!(changes.deleted.len(), 0);
+    Ok(())
+}
+
+fn prop_change_detector_mtime_only_change(files: Vec<(String, u64, i64)>) -> TestCaseResult {
+    if files.is_empty() {
+        return Ok(());
+    }
+
+    let mut current = Vec::new();
+    let mut previous = Vec::new();
+
+    for (path, size, modified_at) in &files {
+        previous.push(FileRecord {
+            path: path.clone(),
+            absolute_path: path.clone(),
+            size: *size,
+            modified_at: *modified_at,
+        });
+        current.push(FileRecord {
+            path: path.clone(),
+            absolute_path: path.clone(),
+            size: *size,                      // Same size
+            modified_at: *modified_at + 3600, // Only mtime changes (1 hour)
+        });
+    }
+
+    let changes = ChangeDetector::detect(&current, &previous);
+
+    prop_assert_eq!(changes.modified.len(), files.len());
+    prop_assert_eq!(changes.added.len(), 0);
+    prop_assert_eq!(changes.deleted.len(), 0);
+    Ok(())
+}
+
+// Change detector property tests
+proptest! {
+    #[test]
+    fn change_detector_identical_files_unchanged(
+        files in prop::collection::vec(
+            ("[a-z/]+\\.md", 1u64..10000u64, 1i64..1000000i64),
+            0..20
+        )
+    ) {
+        prop_change_detector_identical_files_unchanged(files)?;
+    }
+
+    #[test]
+    fn change_detector_new_files_added(
+        current_files in prop::collection::vec(
+            ("[a-z/]+\\.md", 1u64..10000u64, 1i64..1000000i64),
+            0..10
+        ),
+        new_files in prop::collection::vec(
+            ("[a-z/]+\\.md", 1u64..10000u64, 1i64..1000000i64),
+            0..10
+        )
+    ) {
+        prop_change_detector_new_files_added(current_files, new_files)?;
+    }
+
+    #[test]
+    fn change_detector_deleted_files(
+        current_files in prop::collection::vec(
+            ("[a-z/]+\\.md", 1u64..10000u64, 1i64..1000000i64),
+            1..20
+        ),
+        deleted_count in 0..20usize
+    ) {
+        prop_change_detector_deleted_files(current_files, deleted_count)?;
+    }
+
+    #[test]
+    fn change_detector_modified_files(
+        files in prop::collection::vec(
+            ("[a-z/]+\\.md", 1u64..10000u64, 1i64..1000000i64),
+            1..20
+        ),
+        modified_indices in prop::collection::vec(0..20usize, 0..20)
+    ) {
+        prop_change_detector_modified_files(files, modified_indices)?;
+    }
+
+    #[test]
+    fn change_detector_deterministic(
+        current in prop::collection::vec(
+            ("[a-z/]+\\.md", 1u64..10000u64, 1i64..1000000i64),
+            0..20
+        ),
+        previous in prop::collection::vec(
+            ("[a-z/]+\\.md", 1u64..10000u64, 1i64..1000000i64),
+            0..20
+        )
+    ) {
+        prop_change_detector_deterministic(current, previous)?;
+    }
+
+    #[test]
+    fn change_detector_empty_current(
+        previous in prop::collection::vec(
+            ("[a-z/]+\\.md", 1u64..10000u64, 1i64..1000000i64),
+            0..20
+        )
+    ) {
+        prop_change_detector_empty_current(previous)?;
+    }
+
+    #[test]
+    fn change_detector_empty_previous(
+        current in prop::collection::vec(
+            ("[a-z/]+\\.md", 1u64..10000u64, 1i64..1000000i64),
+            0..20
+        )
+    ) {
+        prop_change_detector_empty_previous(current)?;
+    }
+
+    #[test]
+    fn change_detector_size_only_change(
+        files in prop::collection::vec(
+            ("[a-z/]+\\.md", 1u64..10000u64, 1i64..1000000i64),
+            1..20
+        )
+    ) {
+        prop_change_detector_size_only_change(files)?;
+    }
+
+    #[test]
+    fn change_detector_mtime_only_change(
+        files in prop::collection::vec(
+            ("[a-z/]+\\.md", 1u64..10000u64, 1i64..1000000i64),
+            1..20
+        )
+    ) {
+        prop_change_detector_mtime_only_change(files)?;
     }
 }

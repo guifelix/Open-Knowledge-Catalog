@@ -10,3 +10,7 @@ cc 1878f8746786c7cbadd5d998fbe156a96c5ed185aebc7d6c4bed24bc9bccaa4f # shrinks to
 cc 029fd3be816dac22bd89f96bac58a5123f8a63d18fc9e7d6e81db1007528753a # shrinks to invalid_utf8 = [194, 128]
 cc ee1fa8c7f378c889500bc8e10e41e777634bf8b3a553d98beb60d97387d7bf3a # shrinks to yaml_content = [], body = ""
 cc 5d685bf4b630473ed537d616e2568dc9de1ac090187f54a8578d8abc53cb5fc1 # shrinks to url = "http://%a0"
+cc 393affb5b935c808df8e357cedc2da9e7620a22f34afd2428bb73234da042105 # shrinks to files = [("a.md", 1, 1), ("/.md", 1, 1), ("/.md", 1, 1)], modified_indices = [2, 2]
+cc 9de76c99a07976426d3ec4c664a6946c55e42cdb785b1b6b49731a689139fd6b # shrinks to files = [("///.md", 1, 1), ("///.md", 1, 2)]
+cc eb6ce658939127d1dcb4f4592310579e95f6794e1a12d424b21b00f3079e9348 # shrinks to current_files = [("//.md", 1, 1), ("a.md", 1, 1), ("a.md", 1, 1), ("a.md", 1, 1), ("//.md", 1, 1)], deleted_count = 1
+cc cc22071af0feb352e834fea0cec68d8a1e5db918c70fb83026a47f5c315bcccd # shrinks to current_files = [("/.md", 1, 1), ("/.md", 1, 2)], new_files = []

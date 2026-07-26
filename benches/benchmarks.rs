@@ -12,10 +12,7 @@
 //!
 //! Corpora: small (10), medium (50), large (200) documents.
 
-#![allow(clippy::unwrap_used)]
-#![allow(clippy::expect_used)]
-#![allow(clippy::panic)]
-#![allow(clippy::default_constructed_unit_structs)]
+#![allow(clippy::default_constructed_unit_structs, clippy::expect_used, clippy::panic)]
 
 use std::path::Path;
 
@@ -116,6 +113,116 @@ fn generate_docs(root: &Path, count: usize) {
         content.push_str("See the architecture document for more details.\n");
 
         let filename = format!("doc_{}.md", i);
+        std::fs::write(root.join(&filename), content)
+            .unwrap_or_else(|e| panic!("write {}: {}", filename, e));
+    }
+}
+
+/// Generate large technical documents with tables, code blocks, and complex structures.
+fn generate_technical_docs(root: &Path, count: usize) {
+    let types = [
+        "API Reference",
+        "Architecture Decision",
+        "Technical Specification",
+        "Data Model",
+        "Integration Guide",
+    ];
+    let tag_sets: &[&[&str]] = &[
+        &["api", "reference", "rest"],
+        &["architecture", "decision", "adr"],
+        &["specification", "technical", "design"],
+        &["data", "model", "schema"],
+        &["integration", "guide", "webhook"],
+    ];
+
+    let words = [
+        "metric",
+        "optimization",
+        "pipeline",
+        "schema",
+        "query",
+        "index",
+        "throughput",
+        "latency",
+        "cache",
+        "buffer",
+    ];
+
+    for i in 0..count {
+        let ct = types[i % types.len()];
+        let tags = tag_sets[i % tag_sets.len()];
+        let title = format!("{} {}", ct, i);
+
+        let mut content = String::new();
+        content.push_str("---\n");
+        content.push_str(&format!("type: {}\n", ct));
+        content.push_str(&format!("title: \"{}\"\n", title));
+        content.push_str(
+            "description: \"Large technical document for benchmarking\"\n",
+        );
+        content.push_str("tags:\n");
+        for t in tags {
+            content.push_str(&format!("  - {}\n", t));
+        }
+        content.push_str("---\n\n");
+        content.push_str(&format!("# {}\n\n", title));
+
+        // Add multiple sections with tables and code blocks
+        for section in 0..5 {
+            content.push_str(&format!(
+                "## Section {}: {}\n\n",
+                section + 1,
+                words[(i + section) % words.len()]
+            ));
+            content.push_str("This section contains detailed technical information.\n\n");
+
+            // Add a table
+            content.push_str("### Data Table\n\n");
+            content.push_str("| Column A | Column B | Column C | Column D |\n");
+            content.push_str("|----------|----------|----------|----------|\n");
+            for row in 0..20 {
+                content.push_str(&format!(
+                    "| Value {} | Value {} | Value {} | Value {} |\n",
+                    row,
+                    row + 1,
+                    row + 2,
+                    row + 3
+                ));
+            }
+            content.push('\n');
+
+            // Add a code block
+            content.push_str("### Code Example\n\n");
+            content.push_str("```rust\n");
+            content.push_str(&format!("// Example {} for {}\n", section, ct));
+            content.push_str("fn example() -> Result<(), Error> {\n");
+            content.push_str("    let data = fetch_data()?;\n");
+            content.push_str("    process(data)?;\n");
+            content.push_str("    Ok(())\n");
+            content.push_str("}\n");
+            content.push_str("```\n\n");
+
+            // Add a list
+            content.push_str("### Key Points\n\n");
+            for point in 0..10 {
+                content.push_str(&format!(
+                    "- Point {}: Important detail about {}\n",
+                    point,
+                    words[(i + point) % words.len()]
+                ));
+            }
+            content.push('\n');
+        }
+
+        // Add cross-references
+        content.push_str("## Related Documents\n\n");
+        for j in 0..3 {
+            let idx = (i + j + 1) % count;
+            let lt = types[idx % types.len()];
+            content.push_str(&format!("- [{} {}](tech_{}.md)\n", lt, idx, idx));
+        }
+
+        let filename = format!("tech_{}.md", i);
         std::fs::write(root.join(&filename), content)
             .unwrap_or_else(|e| panic!("write {}: {}", filename, e));
     }
@@ -420,6 +527,54 @@ fn bench_export(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_technical_docs(c: &mut Criterion) {
+    let mut group = c.benchmark_group("technical_docs");
+    group.sampling_mode(SamplingMode::Auto);
+
+    // Use smaller sizes for technical docs since they're larger
+    let tech_sizes = [10, 50, 100];
+
+    for size in tech_sizes {
+        let dir = TempDir::new().expect("temp dir");
+        generate_technical_docs(dir.path(), size);
+        let config = bench_config(dir.path());
+
+        // Benchmark full scan of technical documents
+        group.bench_with_input(BenchmarkId::new("scan", size), &size, |b, &_| {
+            b.iter(|| {
+                let mut service = OkcService::open_in_memory(&config).expect("open");
+                black_box(service.scan().expect("scan"));
+            });
+        });
+
+        // Benchmark incremental scan (re-scan after initial)
+        let mut service = OkcService::open_in_memory(&config).expect("open");
+        service.scan().expect("initial scan");
+
+        group.bench_with_input(
+            BenchmarkId::new("incremental_scan", size),
+            &size,
+            |b, &_| {
+                b.iter(|| {
+                    black_box(service.scan().expect("incremental scan"));
+                });
+            },
+        );
+
+        // Benchmark search on technical content
+        group.bench_with_input(BenchmarkId::new("search", size), &size, |b, &_| {
+            b.iter(|| {
+                black_box(
+                    service
+                        .search(black_box("function"), None, None, None, black_box(100))
+                        .expect("search"),
+                );
+            });
+        });
+    }
+    group.finish();
+}
+
 // ---------------------------------------------------------------------------
 // Criterion harness
 // ---------------------------------------------------------------------------
@@ -434,5 +589,6 @@ criterion_group!(
     bench_validate,
     bench_stats,
     bench_export,
+    bench_technical_docs,
 );
 criterion_main!(benches);
