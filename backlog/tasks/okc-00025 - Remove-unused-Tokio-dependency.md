@@ -1,10 +1,10 @@
 ---
 id: OKC-00025
 title: Remove unused Tokio dependency
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-23 19:03'
-updated_date: '2026-07-25 23:57'
+updated_date: '2026-07-26 20:21'
 labels:
   - cleanup
 dependencies: []
@@ -26,3 +26,12 @@ Tokio is listed as a dependency in Cargo.toml but only used by the serve subcomm
 - [ ] #3 cargo build succeeds with default features (serve subcommand still works)
 - [ ] #4 Binary size reduction measurable via du -sh on target/release/okf
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-07-26 20:21
+---
+MCP server (OKC-00004) implemented; Tokio is now used in src/transport/mcp.rs and src/main.rs for HTTP/SSE transport. Task premise is obsolete - closing as done since the dependency is now justified.
+---
+<!-- COMMENTS:END -->
