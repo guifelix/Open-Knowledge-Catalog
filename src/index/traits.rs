@@ -12,8 +12,8 @@
 #![allow(dead_code)]
 
 use crate::model::document::{
-    HeadingInfo, IndexStats, Link, LinkInfo, MetadataQueryResponse, ParseError, SearchResponse,
-    ValidationIssue,
+    CodeBlock, HeadingInfo, IndexStats, Link, LinkInfo, MetadataQueryResponse, ParseError,
+    SearchResponse, Table, ValidationIssue,
 };
 use crate::model::graph::TraverseResponse;
 use std::collections::{BTreeMap, HashMap};
@@ -81,6 +81,20 @@ pub trait DocumentStore: Send + Sync {
     fn get_headings(&self, doc_id: i64) -> Result<Vec<HeadingInfo>>;
     /// Delete all headings for a document.
     fn delete_headings(&self, doc_id: i64) -> Result<()>;
+
+    /// Insert tables for a document.
+    fn insert_tables(&self, doc_id: i64, tables: &[Table]) -> Result<()>;
+    /// Get tables for a document.
+    fn get_tables(&self, doc_id: i64) -> Result<Vec<Table>>;
+    /// Delete all tables for a document.
+    fn delete_tables(&self, doc_id: i64) -> Result<()>;
+
+    /// Insert code blocks for a document.
+    fn insert_code_blocks(&self, doc_id: i64, code_blocks: &[CodeBlock]) -> Result<()>;
+    /// Get code blocks for a document.
+    fn get_code_blocks(&self, doc_id: i64) -> Result<Vec<CodeBlock>>;
+    /// Delete all code blocks for a document.
+    fn delete_code_blocks(&self, doc_id: i64) -> Result<()>;
 
     /// Insert links for a document.
     fn insert_links(&self, doc_id: i64, links: &[LinkInfo]) -> Result<()>;

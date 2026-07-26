@@ -1,10 +1,10 @@
 ---
 id: OKC-00034
 title: 'Enhance Markdown Parser for Technical Content (Headings, Tables, Code Blocks)'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-25 19:20'
-updated_date: '2026-07-25 23:57'
+updated_date: '2026-07-26 21:05'
 labels:
   - parser
   - core

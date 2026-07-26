@@ -60,6 +60,48 @@ pub struct Heading {
     pub position: usize,
 }
 
+/// A table extracted from markdown content.
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct Table {
+    /// Table headers.
+    pub headers: Vec<String>,
+    /// Table rows (each row is a vector of cell contents).
+    pub rows: Vec<Vec<String>>,
+    /// Column alignments (None, Left, Center, Right).
+    pub alignments: Vec<TableAlignment>,
+    /// Byte position in the document.
+    pub position: usize,
+}
+
+/// Table column alignment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+pub enum TableAlignment {
+    /// No explicit alignment.
+    None,
+    /// Left-aligned.
+    Left,
+    /// Center-aligned.
+    Center,
+    /// Right-aligned.
+    Right,
+}
+
+/// A fenced code block extracted from markdown content.
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct CodeBlock {
+    /// Programming language (from fence info string).
+    pub language: Option<String>,
+    /// Optional filename (from fence info string, e.g., `rust:filename.rs`).
+    pub filename: Option<String>,
+    /// Code content.
+    pub content: String,
+    /// Byte position in the document.
+    pub position: usize,
+}
+
 /// A link extracted from markdown content.
 #[derive(Debug, Clone)]
 pub struct Link {
@@ -109,6 +151,10 @@ pub struct Section {
     pub content: String,
     /// Byte position of section start.
     pub start_position: usize,
+    /// Tables found in this section.
+    pub tables: Vec<Table>,
+    /// Code blocks found in this section.
+    pub code_blocks: Vec<CodeBlock>,
 }
 
 /// Result of front-matter and markdown parsing.

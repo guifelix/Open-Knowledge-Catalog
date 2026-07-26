@@ -252,7 +252,7 @@ impl RepositoryIndex {
                 Err(e) => return Err(e.into()),
             };
 
-        let (_, _, _, sections) = MarkdownParser::parse(&body_text);
+        let (_, _, _, sections, _tables, _code_blocks) = MarkdownParser::parse(&body_text);
 
         for section in &sections {
             if section.heading.eq_ignore_ascii_case(heading) {

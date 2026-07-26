@@ -6,6 +6,8 @@
 //! - `headings` - Heading hierarchy for each document
 //! - `links` - Internal and external link relationships
 //! - `metadata_fields` - Custom front-matter fields
+//! - `tables` - Extracted markdown tables with headers and rows
+//! - `code_blocks` - Fenced code blocks with language and filename metadata
 //! - `document_search` - FTS5 full-text search index
 //! - `scan_errors` - Parse error tracking
 //! - `schema_version` - Migration version tracking
@@ -62,6 +64,26 @@ pub fn run(conn: &Connection) -> Result<(), rusqlite::Error> {
             FOREIGN KEY(source_document_id) REFERENCES documents(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS tables (
+            document_id INTEGER NOT NULL,
+            section_heading TEXT,
+            headers TEXT NOT NULL, -- JSON array of header strings
+            rows TEXT NOT NULL, -- JSON array of row arrays
+            alignments TEXT NOT NULL, -- JSON array of alignment strings
+            position INTEGER,
+            FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS code_blocks (
+            document_id INTEGER NOT NULL,
+            section_heading TEXT,
+            language TEXT,
+            filename TEXT,
+            content TEXT NOT NULL,
+            position INTEGER,
+            FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE
+        );
+
         CREATE TABLE IF NOT EXISTS metadata_fields (
             document_id INTEGER NOT NULL,
             key TEXT NOT NULL,
@@ -87,7 +109,9 @@ pub fn run(conn: &Connection) -> Result<(), rusqlite::Error> {
          CREATE INDEX IF NOT EXISTS idx_links_source ON links(source_document_id);
          CREATE INDEX IF NOT EXISTS idx_links_target ON links(target_path);
          CREATE INDEX IF NOT EXISTS idx_metadata_fields_doc ON metadata_fields(document_id);
-         CREATE INDEX IF NOT EXISTS idx_metadata_fields_key ON metadata_fields(key);",
+         CREATE INDEX IF NOT EXISTS idx_metadata_fields_key ON metadata_fields(key);
+         CREATE INDEX IF NOT EXISTS idx_tables_doc ON tables(document_id);
+         CREATE INDEX IF NOT EXISTS idx_code_blocks_doc ON code_blocks(document_id);",
     )?;
 
     conn.execute_batch(

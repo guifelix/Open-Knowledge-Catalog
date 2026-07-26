@@ -127,7 +127,8 @@ impl DocumentParser {
             ""
         };
 
-        let (headings, links, body_text, _sections) = MarkdownParser::parse(markdown_body);
+        let (headings, links, body_text, _sections, _tables, _code_blocks) =
+            MarkdownParser::parse(markdown_body);
 
         // Convert Heading to HeadingInfo
         let heading_infos: Vec<HeadingInfo> = headings
