@@ -10,6 +10,8 @@
 //! - Links (internal and external)
 //! - Custom front-matter fields
 
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
 
 use super::database::RepositoryIndex;
@@ -21,7 +23,8 @@ impl RepositoryIndex {
     /// headings, body_text, links, and front-matter custom fields.
     #[allow(dead_code)]
     pub fn export_to_json(&self) -> Result<serde_json::Value, anyhow::Error> {
-        let mut stmt = self.conn.prepare(
+        let conn = self.pool().get()?;
+        let mut stmt = conn.prepare(
             "SELECT path, title, type, description, body_text, file_size, modified_at, parse_status
              FROM documents
              ORDER BY path",
@@ -47,7 +50,8 @@ impl RepositoryIndex {
             let path = doc["path"].as_str().unwrap_or("").to_string();
 
             // Attach tags
-            let mut tag_stmt = self.conn.prepare(
+            let conn = self.pool().get()?;
+            let mut tag_stmt = conn.prepare(
                 "SELECT tag FROM document_tags dt
                  JOIN documents d ON d.id = dt.document_id
                  WHERE d.path = ?1",
@@ -60,7 +64,8 @@ impl RepositoryIndex {
                 .map(|m| m.insert("tags".to_string(), serde_json::json!(tags)));
 
             // Attach headings
-            let mut h_stmt = self.conn.prepare(
+            let conn = self.pool().get()?;
+            let mut h_stmt = conn.prepare(
                 "SELECT h.level, h.title, h.anchor FROM headings h
                  JOIN documents d ON d.id = h.document_id
                  WHERE d.path = ?1
@@ -80,7 +85,8 @@ impl RepositoryIndex {
                 .map(|m| m.insert("headings".to_string(), serde_json::json!(headings)));
 
             // Attach metadata custom fields
-            let mut m_stmt = self.conn.prepare(
+            let conn = self.pool().get()?;
+            let mut m_stmt = conn.prepare(
                 "SELECT key, value FROM metadata_fields mf
                  JOIN documents d ON d.id = mf.document_id
                  WHERE d.path = ?1",
@@ -100,7 +106,8 @@ impl RepositoryIndex {
                 .map(|m| m.insert("custom".to_string(), serde_json::Value::Object(custom)));
 
             // Attach links
-            let mut l_stmt = self.conn.prepare(
+            let conn = self.pool().get()?;
+            let mut l_stmt = conn.prepare(
                 "SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository
                  FROM links l
                  JOIN documents d ON d.id = l.source_document_id

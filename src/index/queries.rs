@@ -5,6 +5,8 @@
 
 use std::collections::HashMap;
 
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
 
 use super::database::RepositoryIndex;
@@ -34,7 +36,8 @@ impl RepositoryIndex {
         };
 
         let subdirs = if depth > 0 {
-            let mut stmt = self.conn.prepare(
+            let conn = self.pool().get()?;
+            let mut stmt = conn.prepare(
                 "SELECT DISTINCT parent_path FROM documents
                  WHERE parent_path LIKE ?1 AND parent_path != ?2
                  ORDER BY parent_path LIMIT ?3",
@@ -55,7 +58,8 @@ impl RepositoryIndex {
             vec![]
         };
 
-        let mut stmt = self.conn.prepare(
+        let conn = self.pool().get()?;
+        let mut stmt = conn.prepare(
             "SELECT path, title, type, description FROM documents
              WHERE parent_path = ?1 ORDER BY path LIMIT ?2",
         )?;
@@ -98,7 +102,8 @@ impl RepositoryIndex {
         include: &[String],
         max_body_chars: usize,
     ) -> Result<DocumentDetail, anyhow::Error> {
-        let mut stmt = self.conn.prepare(
+        let conn = self.pool().get()?;
+        let mut stmt = conn.prepare(
             "SELECT id, path, title, type, description, body_text, file_size, modified_at, parse_status
              FROM documents WHERE path = ?1",
         )?;
@@ -131,9 +136,9 @@ impl RepositoryIndex {
 
         let mut tags = vec![];
         if include.contains(&"metadata".to_string()) {
-            let mut tag_stmt = self
-                .conn
-                .prepare("SELECT tag FROM document_tags WHERE document_id = ?1")?;
+            let conn = self.pool().get()?;
+            let mut tag_stmt =
+                conn.prepare("SELECT tag FROM document_tags WHERE document_id = ?1")?;
             tags = tag_stmt
                 .query_map(params![id], |row| row.get::<_, String>(0))?
                 .filter_map(|r| r.ok())
@@ -142,9 +147,9 @@ impl RepositoryIndex {
 
         let mut custom = std::collections::BTreeMap::new();
         if include.contains(&"metadata".to_string()) {
-            let mut field_stmt = self
-                .conn
-                .prepare("SELECT key, value FROM metadata_fields WHERE document_id = ?1")?;
+            let conn = self.pool().get()?;
+            let mut field_stmt =
+                conn.prepare("SELECT key, value FROM metadata_fields WHERE document_id = ?1")?;
             for row in field_stmt.query_map(params![id], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
             })? {
@@ -157,7 +162,8 @@ impl RepositoryIndex {
 
         let mut headings = vec![];
         if include.contains(&"headings".to_string()) {
-            let mut h_stmt = self.conn.prepare(
+            let conn = self.pool().get()?;
+            let mut h_stmt = conn.prepare(
                 "SELECT level, title, anchor FROM headings WHERE document_id = ?1 ORDER BY position",
             )?;
             headings = h_stmt
@@ -174,9 +180,9 @@ impl RepositoryIndex {
 
         let mut errors = vec![];
         {
-            let mut e_stmt = self
-                .conn
-                .prepare("SELECT stage, message, line FROM scan_errors WHERE path = ?1")?;
+            let conn = self.pool().get()?;
+            let mut e_stmt =
+                conn.prepare("SELECT stage, message, line FROM scan_errors WHERE path = ?1")?;
             errors = e_stmt
                 .query_map(params![doc_path], |row| {
                     Ok(ParseError {
@@ -231,9 +237,8 @@ impl RepositoryIndex {
         heading: &str,
         max_chars: usize,
     ) -> Result<Option<(String, String)>, anyhow::Error> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT body_text, title FROM documents WHERE path = ?1")?;
+        let conn = self.pool().get()?;
+        let mut stmt = conn.prepare("SELECT body_text, title FROM documents WHERE path = ?1")?;
 
         let (body_text, _doc_title): (String, Option<String>) =
             match stmt.query_row(params![doc_path], |row| {
@@ -370,7 +375,8 @@ impl RepositoryIndex {
         let mut param_vec = params_refs.clone();
         param_vec.push(&limit_val);
 
-        let mut stmt = self.conn.prepare(&full_sql)?;
+        let conn = self.pool().get()?;
+        let mut stmt = conn.prepare(&full_sql)?;
         let rows = stmt.query_map(param_vec.as_slice(), |row| {
             let path: String = row.get(0)?;
             let title: Option<String> = row.get(1)?;
@@ -535,7 +541,8 @@ impl RepositoryIndex {
         let params_refs: Vec<&dyn rusqlite::types::ToSql> =
             param_values.iter().map(|p| p.as_ref()).collect();
 
-        let mut stmt = self.conn.prepare(&sql)?;
+        let conn = self.pool().get()?;
+        let mut stmt = conn.prepare(&sql)?;
         let mut results = Vec::new();
 
         let rows = stmt.query_map(params_refs.as_slice(), |row| {
@@ -571,7 +578,8 @@ impl RepositoryIndex {
         &self,
         limit: usize,
     ) -> Result<Vec<DocumentSummary>, anyhow::Error> {
-        let mut stmt = self.conn.prepare(
+        let conn = self.pool().get()?;
+        let mut stmt = conn.prepare(
             "SELECT path, title, type, description FROM documents
              ORDER BY modified_at DESC LIMIT ?1",
         )?;

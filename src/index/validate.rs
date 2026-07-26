@@ -13,6 +13,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
 
 use super::database::RepositoryIndex;
@@ -134,28 +136,35 @@ impl RepositoryIndex {
             return Vec::new();
         }
         let mut issues = Vec::new();
-        let stmt = self
-            .conn
-            .prepare("SELECT DISTINCT parent_path FROM documents WHERE parent_path != ''")
-            .ok();
-        let Some(mut stmt) = stmt else {
-            return issues;
-        };
-        let dirs: Vec<String> = stmt
-            .query_map([], |row| row.get::<_, String>(0))
+        let dirs: Vec<String> = self
+            .pool()
+            .get()
             .ok()
-            .map(|rows| rows.filter_map(|r| r.ok()).collect())
+            .and_then(|conn| {
+                conn.prepare("SELECT DISTINCT parent_path FROM documents WHERE parent_path != ''")
+                    .ok()
+                    .and_then(|mut stmt| {
+                        stmt.query_map([], |row| row.get::<_, String>(0))
+                            .ok()
+                            .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                    })
+            })
             .unwrap_or_default();
 
         for dir in dirs {
             let index_path = format!("{}/index.md", dir.trim_end_matches('/'));
             let exists: bool = self
-                .conn
-                .query_row(
-                    "SELECT COUNT(*) > 0 FROM documents WHERE path = ?1",
-                    params![index_path],
-                    |row| row.get(0),
-                )
+                .pool()
+                .get()
+                .ok()
+                .and_then(|conn| {
+                    conn.query_row(
+                        "SELECT COUNT(*) > 0 FROM documents WHERE path = ?1",
+                        params![index_path],
+                        |row| row.get(0),
+                    )
+                    .ok()
+                })
                 .unwrap_or(false);
 
             if !exists {
@@ -173,13 +182,17 @@ impl RepositoryIndex {
 
     fn validate_files(&self) -> Vec<ValidationIssue> {
         let paths: Vec<String> = self
-            .conn
-            .prepare("SELECT path FROM documents ORDER BY path")
+            .pool()
+            .get()
             .ok()
-            .and_then(|mut stmt| {
-                stmt.query_map([], |row| row.get::<_, String>(0))
+            .and_then(|conn| {
+                conn.prepare("SELECT path FROM documents ORDER BY path")
                     .ok()
-                    .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                    .and_then(|mut stmt| {
+                        stmt.query_map([], |row| row.get::<_, String>(0))
+                            .ok()
+                            .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                    })
             })
             .unwrap_or_default();
 
@@ -189,15 +202,19 @@ impl RepositoryIndex {
         let mut issues = Vec::new();
 
         let content_hashes: HashMap<String, String> = self
-            .conn
-            .prepare("SELECT path, content_hash FROM documents")
+            .pool()
+            .get()
             .ok()
-            .and_then(|mut stmt| {
-                stmt.query_map([], |row| {
-                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-                })
-                .ok()
-                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+            .and_then(|conn| {
+                conn.prepare("SELECT path, content_hash FROM documents")
+                    .ok()
+                    .and_then(|mut stmt| {
+                        stmt.query_map([], |row| {
+                            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                        })
+                        .ok()
+                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                    })
             })
             .unwrap_or_default();
 
@@ -352,20 +369,22 @@ impl RepositoryIndex {
             None => return self.validate_files(),
         };
 
-        let mut stmt = match self
-            .conn
-            .prepare("SELECT path, content_hash FROM documents")
-        {
-            Ok(s) => s,
-            Err(_) => return self.validate_files(),
-        };
-
-        let current: HashMap<String, String> = match stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        }) {
-            Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
-            Err(_) => return self.validate_files(),
-        };
+        let current: HashMap<String, String> = self
+            .pool()
+            .get()
+            .ok()
+            .and_then(|conn| {
+                conn.prepare("SELECT path, content_hash FROM documents")
+                    .ok()
+                    .and_then(|mut stmt| {
+                        stmt.query_map([], |row| {
+                            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                        })
+                        .ok()
+                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                    })
+            })
+            .unwrap_or_default();
 
         let changed: HashSet<String> = current
             .into_iter()

@@ -6,36 +6,39 @@
 //! Provides full-text search across document paths, titles, descriptions,
 //! headings, and body content with support for path prefix filtering,
 //! type/tag filtering, and relevance ranking.
+//!
+//! Thread Safety: Uses a connection pool (r2d2) for thread-safe access.
 
 use crate::index::traits::{Result, SearchFilters, SearchIndex, SearchableDocument};
 use crate::model::document::{IndexStats, SearchResponse, SearchResult};
-use rusqlite::{params, Connection};
-use std::sync::{Mutex, PoisonError};
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::params;
+use std::sync::Arc;
 
-/// FTS5-based search index with thread-safe connection.
+/// FTS5-based search index with thread-safe connection pool.
 ///
 /// Uses SQLite's FTS5 virtual table for efficient full-text search.
 /// The index is updated incrementally during document processing.
 pub struct SqliteSearchIndex {
-    conn: Mutex<Connection>,
+    pool: Arc<Pool<SqliteConnectionManager>>,
 }
 
 impl SqliteSearchIndex {
-    /// Create a new search index with the given database connection.
+    /// Create a new search index with the given connection pool.
     #[allow(dead_code)]
-    pub fn new(conn: Connection) -> Self {
-        Self {
-            conn: Mutex::new(conn),
-        }
+    pub fn new(pool: Arc<Pool<SqliteConnectionManager>>) -> Self {
+        Self { pool }
+    }
+
+    fn get_conn(&self) -> Result<r2d2::PooledConnection<SqliteConnectionManager>> {
+        Ok(self.pool.get()?)
     }
 }
 
 impl SearchIndex for SqliteSearchIndex {
     fn init(&self) -> Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
+        let conn = self.get_conn()?;
         conn.execute_batch(
             r#"
             CREATE VIRTUAL TABLE IF NOT EXISTS document_search USING fts5(
@@ -52,10 +55,7 @@ impl SearchIndex for SqliteSearchIndex {
     }
 
     fn index_document(&self, doc: &SearchableDocument) -> Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
+        let conn = self.get_conn()?;
         conn.execute(
             r#"
             INSERT OR REPLACE INTO document_search (path, title, description, headings, body)
@@ -73,10 +73,7 @@ impl SearchIndex for SqliteSearchIndex {
     }
 
     fn remove_document(&self, path: &str) -> Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
+        let conn = self.get_conn()?;
         conn.execute("DELETE FROM document_search WHERE path = ?1", params![path])?;
         Ok(())
     }
@@ -154,10 +151,7 @@ impl SearchIndex for SqliteSearchIndex {
         let mut param_vec = params_refs.clone();
         param_vec.push(&limit_val);
 
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
+        let conn = self.get_conn()?;
         let mut stmt = conn.prepare(&full_sql)?;
         let results: Vec<SearchResult> = stmt
             .query_map(param_vec.as_slice(), |row| {
@@ -193,10 +187,7 @@ impl SearchIndex for SqliteSearchIndex {
     }
 
     fn stats(&self) -> Result<IndexStats> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e: PoisonError<_>| anyhow::anyhow!("Mutex poisoned: {}", e))?;
+        let conn = self.get_conn()?;
         let doc_count: i64 =
             conn.query_row("SELECT COUNT(*) FROM documents", [], |row| row.get(0))?;
         let error_count: i64 =

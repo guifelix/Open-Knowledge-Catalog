@@ -11,10 +11,16 @@
 //!
 //! Uses SQLite with WAL mode for concurrent read access and supports
 //! both file-based and in-memory storage for testing.
+//!
+//! Thread Safety: Uses a connection pool (r2d2) for thread-safe access.
+//! All stores share the same pool, enabling concurrent reads through
+//! SQLite's WAL mode while serializing writes.
 
 use std::path::Path;
 use std::sync::Arc;
 
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::Connection;
 use tracing::info;
 
@@ -28,13 +34,16 @@ use crate::model::document::{FileRecord, ParseStatus, ProcessChangesResult, Scan
 use crate::scanner::changes::{ChangeDetector, FileChanges};
 use crate::scanner::walker::Scanner;
 
-/// Primary repository index backed by SQLite.
+/// Primary repository index backed by SQLite with connection pooling.
 ///
 /// Manages document storage, full-text search, link graph, and metadata.
 /// Coordinates with [`SqliteGraphStore`] for graph operations and
 /// [`SqliteSearchIndex`] for full-text search.
+///
+/// Thread Safety: Implements `Send + Sync` - all internal components
+/// use a shared connection pool with WAL mode for concurrent access.
 pub struct RepositoryIndex {
-    pub(crate) conn: Connection,
+    pool: Arc<Pool<SqliteConnectionManager>>,
     pub(crate) document_store: SqliteDocumentStore,
     pub(crate) search_index: SqliteSearchIndex,
     pub(crate) graph_store: Option<SqliteGraphStore>,
@@ -42,25 +51,36 @@ pub struct RepositoryIndex {
 }
 
 impl RepositoryIndex {
+    /// Get a reference to the connection pool for direct queries.
+    pub fn pool(&self) -> &Arc<Pool<SqliteConnectionManager>> {
+        &self.pool
+    }
+
     /// Open a new repository index at the configured database path.
     ///
     /// Initializes the schema if needed (via migrations) and prepares
     /// the graph store connection.
     pub fn open(config: &OkcConfig) -> Result<Self, anyhow::Error> {
-        let conn = Connection::open(&config.db_path)?;
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
+        // Create connection manager with WAL mode and foreign keys
+        let manager = SqliteConnectionManager::file(&config.db_path).with_init(|conn| {
+            conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
+            Ok(())
+        });
 
-        // Create separate connections for each store
-        let doc_conn = Connection::open(&config.db_path)?;
-        let search_conn = Connection::open(&config.db_path)?;
-        let graph_conn = Connection::open(&config.db_path)?;
+        let pool = Arc::new(Pool::new(manager)?);
 
-        let document_store = SqliteDocumentStore::new(doc_conn);
-        let search_index = SqliteSearchIndex::new(search_conn);
-        let graph_store = SqliteGraphStore::new(graph_conn);
+        // Initialize schema on a connection from the pool
+        {
+            let conn = pool.get()?;
+            crate::index::migrations::run(&conn)?;
+        }
+
+        let document_store = SqliteDocumentStore::new(pool.clone());
+        let search_index = SqliteSearchIndex::new(pool.clone());
+        let graph_store = SqliteGraphStore::new(pool.clone());
 
         let index = Self {
-            conn,
+            pool,
             document_store,
             search_index,
             graph_store: Some(graph_store),
@@ -72,26 +92,30 @@ impl RepositoryIndex {
 
     /// Open an in-memory repository index for testing.
     ///
-    /// Uses an in-memory SQLite database with the same schema.
+    /// Uses an in-memory SQLite database with shared cache to allow
+    /// multiple connections to the same in-memory DB.
     /// The graph store is not available in this mode.
     #[allow(dead_code)]
     pub fn open_in_memory(config: &OkcConfig) -> Result<Self, anyhow::Error> {
         // Use shared cache URI to allow multiple connections to the same in-memory DB
-        let conn = Connection::open("file::memory:?cache=shared")?;
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
+        let manager = SqliteConnectionManager::memory().with_init(|conn| {
+            conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
+            Ok(())
+        });
 
-        // Run migrations on the first connection
-        crate::index::migrations::run(&conn)?;
+        let pool = Arc::new(Pool::new(manager)?);
 
-        // Create separate connections for each store that share the same in-memory DB
-        let doc_conn = Connection::open("file::memory:?cache=shared")?;
-        let search_conn = Connection::open("file::memory:?cache=shared")?;
+        // Run migrations on a connection from the pool
+        {
+            let conn = pool.get()?;
+            crate::index::migrations::run(&conn)?;
+        }
 
-        let document_store = SqliteDocumentStore::new(doc_conn);
-        let search_index = SqliteSearchIndex::new(search_conn);
+        let document_store = SqliteDocumentStore::new(pool.clone());
+        let search_index = SqliteSearchIndex::new(pool.clone());
 
         let index = Self {
-            conn,
+            pool,
             document_store,
             search_index,
             graph_store: None,
@@ -102,7 +126,6 @@ impl RepositoryIndex {
     }
 
     fn ensure_schema(&self) -> Result<(), anyhow::Error> {
-        crate::index::migrations::run(&self.conn)?;
         self.document_store.init()?;
         self.search_index.init()?;
         if let Some(ref gs) = self.graph_store {
@@ -270,18 +293,15 @@ impl RepositoryIndex {
     }
 
     fn get_doc_id(&self, path: &str) -> Result<i64, anyhow::Error> {
-        // We need to query the document ID from the database
-        let mut stmt = self
-            .conn
-            .prepare("SELECT id FROM documents WHERE path = ?1")?;
+        let conn = self.pool.get()?;
+        let mut stmt = conn.prepare("SELECT id FROM documents WHERE path = ?1")?;
         let id: i64 = stmt.query_row([path], |row| row.get(0))?;
         Ok(id)
     }
 
     fn load_file_records(&self) -> Result<Vec<FileRecord>, anyhow::Error> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT path, file_size, modified_at FROM documents")?;
+        let conn = self.pool.get()?;
+        let mut stmt = conn.prepare("SELECT path, file_size, modified_at FROM documents")?;
         let records = stmt
             .query_map([], |row| {
                 Ok(FileRecord {
@@ -297,7 +317,8 @@ impl RepositoryIndex {
 
     /// Load all known document paths (for link-resolution in incremental updates).
     pub fn load_paths(&self) -> Result<Vec<String>, anyhow::Error> {
-        let mut stmt = self.conn.prepare("SELECT path FROM documents")?;
+        let conn = self.pool.get()?;
+        let mut stmt = conn.prepare("SELECT path FROM documents")?;
         let paths = stmt
             .query_map([], |row| row.get::<_, String>(0))?
             .collect::<Result<Vec<_>, _>>()?;
@@ -312,3 +333,7 @@ fn parse_status_to_str(status: &ParseStatus) -> &'static str {
         ParseStatus::Failed => "failed",
     }
 }
+
+// Implement Send + Sync for RepositoryIndex since all internal components are thread-safe
+unsafe impl Send for RepositoryIndex {}
+unsafe impl Sync for RepositoryIndex {}

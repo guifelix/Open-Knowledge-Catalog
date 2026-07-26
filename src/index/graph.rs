@@ -2,6 +2,8 @@
 //!
 //! Public API: get_links, get_backlinks, traverse_graph.
 
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
 
 use super::database::RepositoryIndex;
@@ -14,7 +16,8 @@ impl RepositoryIndex {
     /// Returns all links originating from the given document with
     /// resolution status (exists in repo, external, broken).
     pub fn get_links(&self, doc_path: &str) -> Result<Vec<LinkInfo>, anyhow::Error> {
-        let mut stmt = self.conn.prepare(
+        let conn = self.pool().get()?;
+        let mut stmt = conn.prepare(
             "SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository
              FROM links l
              JOIN documents d ON d.id = l.source_document_id
@@ -44,7 +47,8 @@ impl RepositoryIndex {
         doc_path: &str,
         limit: usize,
     ) -> Result<Vec<LinkInfo>, anyhow::Error> {
-        let mut stmt = self.conn.prepare(
+        let conn = self.pool().get()?;
+        let mut stmt = conn.prepare(
             "SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository
              FROM links l
              WHERE l.target_path = ?1
@@ -94,8 +98,8 @@ impl RepositoryIndex {
                 continue;
             }
 
-            let title = self
-                .conn
+            let conn = self.pool().get()?;
+            let title = conn
                 .query_row(
                     "SELECT title, type FROM documents WHERE path = ?1",
                     params![current_path],
@@ -139,43 +143,50 @@ impl RepositoryIndex {
                 link_condition
             );
 
-            if let Ok(mut stmt) = self.conn.prepare(&sql) {
-                if let Ok(rows) = stmt.query_map(
+            // First query: forward links
+            {
+                let conn = self.pool().get()?;
+                let mut stmt = conn.prepare(&sql)?;
+                let rows = stmt.query_map(
                     params![current_path, (effective_max_nodes - visited.len()) as i64],
                     |row| row.get::<_, String>(0),
-                ) {
-                    for target in rows.flatten() {
-                        if !visited.contains(&target) {
-                            edges.push(GraphEdge {
-                                source: current_path.clone(),
-                                target: target.clone(),
-                                relation: "links_to".to_string(),
-                            });
-                            queue.push_back((target, depth + 1));
-                        }
+                )?;
+                for target in rows.flatten() {
+                    if !visited.contains(&target) {
+                        edges.push(GraphEdge {
+                            source: current_path.clone(),
+                            target: target.clone(),
+                            relation: "links_to".to_string(),
+                        });
+                        queue.push_back((target, depth + 1));
                     }
                 }
             }
 
-            if let Ok(mut stmt) = self.conn.prepare(
-                "SELECT d.path FROM links l
-                 JOIN documents d ON d.id = l.source_document_id
-                 WHERE l.target_path = ?1
-                 LIMIT ?2",
-            ) {
-                if let Ok(rows) = stmt.query_map(
-                    params![current_path, (effective_max_nodes - visited.len()) as i64],
-                    |row| row.get::<_, String>(0),
-                ) {
-                    for source in rows.flatten() {
-                        if !visited.contains(&source) {
-                            edges.push(GraphEdge {
-                                source: source.clone(),
-                                target: current_path.clone(),
-                                relation: "linked_from".to_string(),
-                            });
-                            queue.push_back((source, depth + 1));
-                        }
+            // Second query: backlinks
+            {
+                let conn = self.pool().get()?;
+                let mut stmt = conn.prepare(
+                    "SELECT d.path FROM links l
+                     JOIN documents d ON d.id = l.source_document_id
+                     WHERE l.target_path = ?1
+                     LIMIT ?2",
+                )?;
+                let rows: Vec<String> = stmt
+                    .query_map(
+                        params![current_path, (effective_max_nodes - visited.len()) as i64],
+                        |row| row.get::<_, String>(0),
+                    )?
+                    .filter_map(|r| r.ok())
+                    .collect();
+                for source in rows {
+                    if !visited.contains(&source) {
+                        edges.push(GraphEdge {
+                            source: source.clone(),
+                            target: current_path.clone(),
+                            relation: "linked_from".to_string(),
+                        });
+                        queue.push_back((source, depth + 1));
                     }
                 }
             }
