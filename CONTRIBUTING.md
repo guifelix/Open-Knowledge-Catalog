@@ -4,8 +4,6 @@ Thank you for your interest in contributing! This document provides guidelines f
 
 ## Ways to Contribute
 
-- **Bug Reports**: Found an issue? [Open an issue](https://github.com/guifelix/open-knowledge-catalog/issues)
-- **Feature Requests**: Have an idea? [Start a discussion](https://github.com/guifelix/open-knowledge-catalog/discussions)
 - **Code Contributions**: Fix bugs, add features, improve documentation
 - **Documentation**: Improve README, add examples, write tutorials
 - **Testing**: Add test cases, improve test coverage
@@ -79,7 +77,6 @@ The CI pipeline runs `cargo audit` on every PR and push to main. Any vulnerabili
 ### PR Requirements
 
 - Clear, descriptive title
-- Link to related issue (if applicable)
 - Tests for new functionality
 - Updated documentation (README, doc comments)
 - No clippy warnings
@@ -154,6 +151,4 @@ This project follows the [Contributor Covenant](https://www.contributor-covenant
 
 ## Questions?
 
-- Open a [discussion](https://github.com/guifelix/open-knowledge-catalog/discussions)
-- Check existing [issues](https://github.com/guifelix/open-knowledge-catalog/issues)
 - Review the [architecture docs](docs/implementation-plan.md) and [library analysis](docs/library-analysis.md)
