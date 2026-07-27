@@ -1,5 +1,7 @@
 //! Inline tests for configuration module.
 
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+
 use super::{Bm25Config, ConfigError, OkcConfig};
 use std::env;
 use std::path::PathBuf;
