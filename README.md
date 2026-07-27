@@ -5,7 +5,7 @@
 [![CI](https://github.com/guifelix/Open-Knowledge-Catalog/actions/workflows/ci.yml/badge.svg)](https://github.com/guifelix/Open-Knowledge-Catalog/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A local-first tool that allows AI agents to safely browse, parse, search, and reason over an [Open Knowledge Format (OKF)](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) repository.
+A local-first tool that allows AI agents to safely browse, parse, search, and reason over an [Open Knowledge Format (OKF)](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) repository — via CLI, MCP server, or filesystem watcher.
 
 ## Overview
 
@@ -40,10 +40,31 @@ OKF files → scanner & parser → structured index → bounded AI tool calls �
 
 ## Features
 
-### Core Operations (11 AI-facing MCP tools)
+### CLI Commands (13 subcommands)
 
-| Operation | Purpose |
-|-----------|---------|
+| Command | Purpose |
+|---------|---------|
+| `okc scan` | Index a knowledge repository |
+| `okc browse` | Browse the directory hierarchy |
+| `okc get` | Retrieve a document with metadata, headings, and/or body |
+| `okc section` | Extract a specific Markdown section |
+| `okc search` | Full-text search with BM25 ranking and filters |
+| `okc metadata` | Structured metadata queries with filtering and projection |
+| `okc links` | Outgoing links from a document |
+| `okc backlinks` | Documents referencing a concept |
+| `okc traverse` | Explore related concepts via graph edges |
+| `okc validate` | 8-category repository validation |
+| `okc stats` | Repository statistics |
+| `okc serve` | Start MCP server (stdio or HTTP/SSE) |
+| `okc watch` | File system watching with incremental updates |
+
+### MCP Tools (11 AI-facing operations)
+
+When running as an MCP server (`okc serve`), these tools are exposed to AI agents:
+
+| Tool | Description |
+|------|-------------|
+| `scan` | Scan/re-scan root directories and index documents |
 | `browse_directory` | Inspect one area of the OKF hierarchy |
 | `get_document` | Retrieve one known concept with metadata, headings, and/or body |
 | `get_section` | Extract a specific Markdown section without the full document |
@@ -52,9 +73,35 @@ OKF files → scanner & parser → structured index → bounded AI tool calls �
 | `get_links` | Outgoing links from a document |
 | `get_backlinks` | Documents referencing a concept |
 | `traverse_graph` | Explore related concepts via graph edges |
-| `scan` | Scan/re-scan root directories and index documents |
 | `get_stats` | Repository statistics (file counts, link counts, etc.) |
 | `validate_repository` | Report structural problems (broken links, malformed YAML, missing index files) |
+
+### MCP Server Transport
+
+Run the MCP server in two modes:
+
+```bash
+# stdio (default) — for AI agents that launch the binary directly
+okc serve
+
+# HTTP/SSE — for web clients, remote access
+okc serve --transport http --host 0.0.0.0 --port 3001
+```
+
+### Filesystem Watcher
+
+Keep your index up to date automatically:
+
+```bash
+okc watch                    # Watch configured roots
+okc watch --root ./knowledge --debounce 300 --reconcile 600
+```
+
+Features: debounced event batching, editor temp-file filtering (`.swp`, `~`, `.tmp`), gitignore-aware exclusion, periodic full reconciliation, incremental index updates.
+
+### Incremental Scanning
+
+Content-hash based change detection (Blake3 sampling) enables fast re-scans — unchanged files are skipped entirely.
 
 ### Supported OKF Format
 
@@ -98,6 +145,25 @@ Revenue is recognized when...
 - Relative links between documents are resolved and validated
 - Custom front-matter fields are preserved as generic metadata
 
+### Repository Validation
+
+`okc validate` checks 8 categories of structural problems — broken links, malformed YAML, circular references, duplicate content, missing index files, and more. Supports `--json` for machine-parseable output:
+
+```bash
+okc validate --json
+```
+
+### Response Size Limits
+
+Configurable limits prevent excessive output:
+
+- `max_response_chars`: 500,000 characters
+- `max_scan_results`: 1,000 entries
+- `max_graph_depth`: 5
+- `max_graph_nodes`: 100
+
+Responses include `truncated: true` when limits are hit.
+
 ## Installation
 
 ### From crates.io (recommended)
@@ -134,16 +200,69 @@ cargo build --release
 # Create a knowledge repository
 mkdir -p my-knowledge/{metrics,datasets}
 
-# Scan it
+# Scan and index it
 okc scan --root my-knowledge
 
-# Query it
+# Browse the hierarchy
 okc browse
+
+# Search
 okc search "revenue recognition"
+
+# Retrieve a document
 okc get metrics/monthly-revenue.md --include metadata,headings,body
+
+# Extract a section
+okc section metrics/monthly-revenue.md "Definition"
+
+# Structured query
 okc metadata --filter type=Metric --filter tags_contains=finance
+
+# Link navigation
+okc links metrics/monthly-revenue.md
+okc backlinks metrics/monthly-revenue.md
+
+# Graph traversal
+okc traverse metrics/monthly-revenue.md --max-depth 3
+
+# Validate
 okc validate
+
+# Statistics
+okc stats
+
+# Start MCP server
+okc serve
+
+# Watch for changes
+okc watch
 ```
+
+## Configuration
+
+OKC reads a TOML config file from `~/.config/okc/config.toml`, `./okc.toml`, or a path specified via `--config`:
+
+```toml
+[scanner]
+roots = ["./knowledge"]
+exclude_patterns = [".git/", "node_modules/"]
+max_file_size = 2097152           # 2 MB
+max_front_matter_size = 65536     # 64 KB
+follow_symlinks = false
+
+[indexer]
+max_scan_results = 1000
+max_graph_depth = 5
+max_graph_nodes = 100
+max_response_chars = 500000
+
+[validation]
+require_index_files = false
+```
+
+Global CLI flags: `--root`, `--config`, `--db-path`.
+
+See [docs/configuration.md](docs/configuration.md) for full details.
 
 ## Documentation
 
@@ -161,20 +280,25 @@ okc validate
 
 | Layer | Library |
 |-------|---------|
-| Filesystem | `ignore` |
-| Front-matter | `memchr` + custom |
+| Filesystem traversal | `ignore` |
+| Filesystem watching | `notify` |
+| Front-matter parsing | `memchr` + custom |
 | YAML | `saphyr` |
+| TOML config | `toml` + `figment` |
 | Markdown | `pulldown-cmark` |
-| Storage | `rusqlite` (SQLite + FTS5) |
-| Hashing | `blake3` |
+| Storage | `rusqlite` (SQLite + FTS5 with BM25) |
+| Connection pooling | `r2d2` + `r2d2_sqlite` |
+| Content hashing | `blake3` |
+| URL encoding | `percent-encoding` |
 | CLI | `clap` |
 | MCP | `rmcp` |
-| Async | `tokio` |
+| Async runtime | `tokio` + `tokio-util` |
+| HTTP server | `axum` + `tower` / `tower-http` |
+| Serialization | `serde` + `serde_json` |
 | Errors | `thiserror` + `anyhow` + `miette` |
-| Logging | `tracing` |
+| Logging | `tracing` + `tracing-subscriber` |
 | Schema | `schemars` |
-| Config | `figment` |
-| Paths | `camino` |
+| Paths | `camino` + `dirs` |
 
 ## Development
 
@@ -188,6 +312,12 @@ cargo fmt --check
 # Lint
 cargo clippy -- -D warnings
 
+# Run benchmarks
+cargo bench --features benchmarks
+
+# Run fuzz targets (requires nightly)
+cargo +nightly fuzz run frontmatter
+
 # Generate docs
 cargo doc --no-deps --open
 ```
@@ -200,7 +330,7 @@ cargo doc --no-deps --open
 | 2: Markdown Structure | ✅ Done |
 | 3: Persistent Index | ✅ Done |
 | 4: AI-Facing Operations | ✅ Done |
-| 5: Continuous Updates | ✅ Done |
+| 5: Continuous Updates (watch, incremental scan) | ✅ Done |
 | 6: Advanced Retrieval | 🔮 Future |
 
 See [docs/roadmap.md](docs/roadmap.md) for details.
