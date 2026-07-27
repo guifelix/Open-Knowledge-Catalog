@@ -6,7 +6,8 @@
 use okc::model::document::FileRecord;
 use okc::model::Link as ModelLink;
 use okc::parser::frontmatter::FrontMatterExtractor;
-use okc::parser::links::{normalize_path, LinkResolver};
+use okc::parser::link_utils::{normalize_path, split_anchor};
+use okc::parser::links::LinkResolver;
 use okc::parser::yaml::YamlParser;
 use okc::scanner::changes::{ChangeDetector, FileChanges};
 use proptest::prelude::*;
