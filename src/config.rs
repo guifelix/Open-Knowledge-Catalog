@@ -495,6 +495,16 @@ impl OkcConfig {
             ));
         }
 
+        // Validate db_path parent directory exists or can be created
+        if let Some(parent) = self.db_path.parent() {
+            if !parent.as_os_str().is_empty() && !parent.exists() {
+                return Err(ConfigError::ValidationError(format!(
+                    "Database parent directory does not exist: {}",
+                    parent.display()
+                )));
+            }
+        }
+
         Ok(())
     }
 
