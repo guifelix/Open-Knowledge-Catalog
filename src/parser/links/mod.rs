@@ -117,7 +117,7 @@ impl LinkResolver {
                 if link.is_external {
                     return link.clone();
                 }
-                let resolved = Self::resolve(source_path, &link.raw);
+                let resolved = Self::resolve(source_path, &link.target);
                 let (target_path, target_anchor) = split_anchor(&resolved);
                 let exists = Self::check_exists(target_path, known_files);
 

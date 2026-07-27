@@ -1,3 +1,10 @@
+//! Unit tests for [`LinkResolver`] and link utility functions.
+//!
+//! Covers: relative/absolute path resolution, external URL pass-through,
+//! path traversal prevention, anchor fragment handling, percent-encoded
+//! path decoding, case-insensitive matching, wiki-link extraction, broken
+//! link handling, self-reference filtering, and cycle detection.
+
 use super::*;
 use crate::model::Link;
 use std::collections::HashMap;
@@ -267,14 +274,14 @@ fn test_broken_link_warning_and_marked() {
     let raw_links = vec![
         Link {
             raw: "costs.md".to_string(),
-            target: "".to_string(),
+            target: "costs.md".to_string(),
             target_anchor: None,
             is_external: false,
             exists_in_repository: false,
         },
         Link {
             raw: "nonexistent.md".to_string(),
-            target: "".to_string(),
+            target: "nonexistent.md".to_string(),
             target_anchor: None,
             is_external: false,
             exists_in_repository: false,
