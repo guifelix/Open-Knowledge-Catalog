@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@backend-agent'
 created_date: '2026-07-26 22:47'
-updated_date: '2026-07-26 22:49'
+updated_date: '2026-07-27 16:22'
 labels:
   - refactor
   - tech-debt
@@ -79,3 +79,13 @@ Files to split (lines as of 2026-07-26):
 - [ ] #5 cargo fmt --check and cargo clippy -- -D warnings pass
 - [ ] #6 Each file is split in its own commit with descriptive message
 <!-- DOD:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Fix DoD #2 violations and dead_code cleanup post-split:
+1. Add doc comments to 5 files missing them (4 MCP tool handlers + links/tests.rs)
+2. Clean up dead_code allowances where unused items can be removed or made pub(crate)
+3. Consolidate if any sub-modules are trivially small (evaluate)
+4. Verify cargo check, fmt, clippy, test pass
+<!-- SECTION:PLAN:END -->
