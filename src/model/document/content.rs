@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 
 /// A heading extracted from markdown content.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct Heading {
     /// Heading level (1-6).
     pub level: u32,
@@ -22,7 +21,6 @@ pub struct Heading {
 
 /// A table extracted from markdown content.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct Table {
     /// Table headers.
     pub headers: Vec<String>,
@@ -36,7 +34,6 @@ pub struct Table {
 
 /// Table column alignment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
 pub enum TableAlignment {
     /// No explicit alignment.
     None,
@@ -50,7 +47,6 @@ pub enum TableAlignment {
 
 /// A fenced code block extracted from markdown content.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct CodeBlock {
     /// Programming language (from fence info string).
     pub language: Option<String>,
@@ -78,7 +74,6 @@ pub struct Link {
 }
 
 /// Fully parsed document with all extracted structure.
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct ParsedDocument {
     /// Document path.
@@ -101,7 +96,6 @@ pub struct ParsedDocument {
 
 /// A logical section of a document (heading + content).
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct Section {
     /// Section heading text.
     pub heading: String,

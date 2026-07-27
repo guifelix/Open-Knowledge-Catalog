@@ -21,7 +21,6 @@ pub struct FileRecord {
 }
 
 /// Lightweight document summary for listings.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentSummary {
     /// Document path.

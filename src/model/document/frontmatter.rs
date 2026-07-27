@@ -8,7 +8,6 @@ use std::collections::BTreeMap;
 
 /// Parsed front-matter metadata from a document.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct FrontMatter {
     /// Document concept type (e.g., "concept", "reference", "tutorial").
     pub concept_type: Option<String>,
