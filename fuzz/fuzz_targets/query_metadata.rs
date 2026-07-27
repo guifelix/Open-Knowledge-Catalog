@@ -4,6 +4,7 @@
 use libfuzzer_sys::fuzz_target;
 use okc::index::RepositoryIndex;
 use okc::config::OkcConfig;
+use serde_json::Value;
 use std::collections::HashMap;
 use tempfile::TempDir;
 
@@ -16,7 +17,7 @@ fuzz_target!(|data: &[u8]| {
     config.db_path = db_path;
     config.roots = vec![temp_dir.path().to_path_buf()];
     
-    let mut index = match RepositoryIndex::open(&config) {
+    let index = match RepositoryIndex::open(&config) {
         Ok(idx) => idx,
         Err(_) => return,
     };
@@ -30,7 +31,7 @@ fuzz_target!(|data: &[u8]| {
         
         // Try to use the key as a filter - this should not cause SQL injection
         let mut filters = HashMap::new();
-        filters.insert(key.to_string(), "test_value".to_string());
+        filters.insert(key.to_string(), Value::String("test_value".to_string()));
         
         // This should not panic or cause SQL injection
         let _ = index.query_metadata(&filters, &["path".to_string()], 10);

@@ -1,7 +1,7 @@
 // Fuzz target for path normalization
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use okc::parser::links::normalize_path;
+use okc::parser::link_utils::normalize_path;
 use std::path::Path;
 
 fuzz_target!(|data: &[u8]| {
