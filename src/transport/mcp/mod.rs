@@ -19,6 +19,8 @@
 //! - stdio (for Claude Code, local CLI)
 //! - HTTP/SSE (for web clients, remote access)
 
+pub(crate) mod types;
+
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -26,7 +28,7 @@ use std::time::Duration;
 
 use axum::Router;
 use rmcp::{
-    handler::server::{router::tool::ToolRouter, wrapper::Parameters},
+    handler::server::{router::tool::ToolRouter, wrapper::Parameters, ServerHandler},
     schemars, tool, tool_handler, tool_router,
     transport::streamable_http_server::session::local::LocalSessionManager,
     transport::streamable_http_server::tower::{StreamableHttpServerConfig, StreamableHttpService},
@@ -37,6 +39,15 @@ use tokio_util::sync::CancellationToken;
 
 use crate::config::OkcConfig;
 use crate::service::OkcService;
+
+use self::types::{
+    BacklinkParams, BrowseParams, BrowseResultOutput, DirectoryDocumentOutput,
+    DocumentDetailOutput, GetDocumentParams, GetSectionParams, GraphEdgeOutput, HeadingInfoOutput,
+    LinkInfoOutput, LinkParams, MetadataParams, MetadataResponseOutput, ScanParams,
+    ScanResultOutput, SearchParams, SearchResponseOutput, SearchResultOutput, SectionOutput,
+    StatsOutput, TraverseNodeOutput, TraverseParams, TraverseResponseOutput, ValidateIssueOutput,
+    ValidateOutput, ValidateSummaryOutput,
+};
 
 /// MCP server wrapping the OKC service.
 ///
@@ -98,208 +109,6 @@ impl McpServer {
 
         Ok(())
     }
-}
-#[derive(Deserialize, schemars::JsonSchema)]
-struct ScanParams {
-    roots: Vec<String>,
-    db_path: Option<String>,
-}
-
-#[derive(Serialize, schemars::JsonSchema)]
-struct ScanResultOutput {
-    total_files: usize,
-    added: usize,
-    modified: usize,
-    deleted: usize,
-    parse_failures: usize,
-    broken_links: usize,
-    total_links: usize,
-    duration_secs: f64,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-struct BrowseParams {
-    path: Option<String>,
-    depth: Option<usize>,
-    limit: Option<usize>,
-}
-
-#[derive(Serialize, schemars::JsonSchema)]
-struct BrowseResultOutput {
-    path: String,
-    summary_document: Option<String>,
-    directories: Vec<String>,
-    documents: Vec<DirectoryDocumentOutput>,
-    truncated: bool,
-}
-
-#[derive(Serialize, schemars::JsonSchema)]
-struct DirectoryDocumentOutput {
-    path: String,
-    title: Option<String>,
-    concept_type: Option<String>,
-    description: Option<String>,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-struct GetDocumentParams {
-    path: String,
-    include: Option<Vec<String>>,
-    max_chars: Option<usize>,
-}
-
-#[derive(Serialize, schemars::JsonSchema)]
-struct DocumentDetailOutput {
-    path: String,
-    title: Option<String>,
-    concept_type: Option<String>,
-    description: Option<String>,
-    tags: Vec<String>,
-    file_size: u64,
-    modified_at: i64,
-    parse_status: String,
-    headings: Vec<HeadingInfoOutput>,
-    body: Option<String>,
-    truncated: bool,
-}
-
-#[derive(Serialize, schemars::JsonSchema)]
-struct HeadingInfoOutput {
-    level: u32,
-    title: String,
-    anchor: Option<String>,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-struct GetSectionParams {
-    path: String,
-    heading: String,
-    max_chars: Option<usize>,
-}
-
-#[derive(Serialize, schemars::JsonSchema)]
-struct SectionOutput {
-    heading: String,
-    content: String,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-struct SearchParams {
-    query: String,
-    path_prefix: Option<String>,
-    types: Option<Vec<String>>,
-    tags: Option<Vec<String>>,
-    limit: Option<usize>,
-}
-
-#[derive(Serialize, schemars::JsonSchema)]
-struct SearchResultOutput {
-    path: String,
-    title: Option<String>,
-    concept_type: Option<String>,
-    score: f64,
-    excerpt: String,
-}
-
-#[derive(Serialize, schemars::JsonSchema)]
-struct SearchResponseOutput {
-    results: Vec<SearchResultOutput>,
-    total_matches: usize,
-    truncated: bool,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-struct MetadataParams {
-    filter: Option<Vec<String>>,
-    select: Option<Vec<String>>,
-    limit: Option<usize>,
-}
-
-#[derive(Serialize, schemars::JsonSchema)]
-struct MetadataResponseOutput {
-    results: Vec<serde_json::Value>,
-    total_matches: usize,
-    truncated: bool,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-struct LinkParams {
-    path: String,
-}
-
-#[derive(Serialize, schemars::JsonSchema)]
-struct LinkInfoOutput {
-    target_path: Option<String>,
-    target_anchor: Option<String>,
-    external_url: Option<String>,
-    exists_in_repository: bool,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-struct BacklinkParams {
-    path: String,
-    limit: Option<usize>,
-}
-
-#[derive(Deserialize, schemars::JsonSchema)]
-struct TraverseParams {
-    start: String,
-    relations: Option<Vec<String>>,
-    max_depth: Option<usize>,
-    max_nodes: Option<usize>,
-}
-
-#[derive(Serialize, schemars::JsonSchema)]
-struct TraverseNodeOutput {
-    path: String,
-    title: Option<String>,
-    concept_type: Option<String>,
-    depth: usize,
-}
-
-#[derive(Serialize, schemars::JsonSchema)]
-struct GraphEdgeOutput {
-    source: String,
-    target: String,
-    relation: String,
-}
-
-#[derive(Serialize, schemars::JsonSchema)]
-struct TraverseResponseOutput {
-    nodes: Vec<TraverseNodeOutput>,
-    edges: Vec<GraphEdgeOutput>,
-    truncated: bool,
-}
-
-#[derive(Serialize, schemars::JsonSchema)]
-struct StatsOutput {
-    document_count: usize,
-    error_count: usize,
-    link_count: usize,
-    heading_count: usize,
-}
-
-#[derive(Serialize, schemars::JsonSchema)]
-struct ValidateOutput {
-    summary: ValidateSummaryOutput,
-    issues: Vec<ValidateIssueOutput>,
-}
-
-#[derive(Serialize, schemars::JsonSchema)]
-struct ValidateSummaryOutput {
-    total_issues: usize,
-    errors: usize,
-    warnings: usize,
-    infos: usize,
-}
-
-#[derive(Serialize, schemars::JsonSchema)]
-struct ValidateIssueOutput {
-    path: String,
-    severity: String,
-    category: String,
-    message: String,
-    line: Option<usize>,
 }
 
 #[tool_router]
@@ -478,7 +287,7 @@ impl McpServer {
             limit,
         }): Parameters<MetadataParams>,
     ) -> String {
-        let select = select.unwrap_or_default();
+        let _select = select.unwrap_or_default();
         let limit = limit.unwrap_or(100);
         let filters: HashMap<String, serde_json::Value> = filter
             .unwrap_or_default()
@@ -486,7 +295,9 @@ impl McpServer {
             .filter_map(|f| {
                 let mut parts = f.splitn(2, '=');
                 match (parts.next(), parts.next()) {
-                    (Some(k), Some(v)) => Some((k.to_string(), serde_json::Value::String(v.to_string()))),
+                    (Some(k), Some(v)) => {
+                        Some((k.to_string(), serde_json::Value::String(v.to_string())))
+                    }
                     _ => None,
                 }
             })
@@ -640,4 +451,4 @@ impl McpServer {
 }
 
 #[tool_handler]
-impl rmcp::handler::server::ServerHandler for McpServer {}
+impl ServerHandler for McpServer {}
