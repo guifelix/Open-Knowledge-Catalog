@@ -480,20 +480,20 @@ impl McpServer {
     ) -> String {
         let select = select.unwrap_or_default();
         let limit = limit.unwrap_or(100);
-        let filters: HashMap<String, String> = filter
+        let filters: HashMap<String, serde_json::Value> = filter
             .unwrap_or_default()
             .into_iter()
             .filter_map(|f| {
                 let mut parts = f.splitn(2, '=');
                 match (parts.next(), parts.next()) {
-                    (Some(k), Some(v)) => Some((k.to_string(), v.to_string())),
+                    (Some(k), Some(v)) => Some((k.to_string(), serde_json::Value::String(v.to_string()))),
                     _ => None,
                 }
             })
             .collect();
 
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
-        match svc.query_metadata(&filters, &select, limit) {
+        match svc.query_metadata(&filters, limit) {
             Ok(r) => serde_json::to_string(&MetadataResponseOutput {
                 results: r.results,
                 total_matches: r.total_matches,

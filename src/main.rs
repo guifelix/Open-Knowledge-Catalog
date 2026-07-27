@@ -162,12 +162,15 @@ fn main() -> anyhow::Result<()> {
         }
         Command::Metadata {
             filter,
-            select,
+            select: _select,
             limit,
         } => {
             let service = OkcService::open(&config)?;
-            let filters: std::collections::HashMap<String, String> = filter.into_iter().collect();
-            let result = service.query_metadata(&filters, &select, limit)?;
+            let filters: std::collections::HashMap<String, serde_json::Value> = filter
+                .into_iter()
+                .filter_map(|(k, v)| Some((k, serde_json::Value::String(v))))
+                .collect();
+            let result = service.query_metadata(&filters, limit)?;
             println!("Metadata query results: {} matches", result.total_matches);
             for r in &result.results {
                 println!("  {}", r);
