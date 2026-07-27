@@ -16,7 +16,7 @@ status: published
 
 The tool is designed for AI agents to use via CLI or future MCP server. All operations return structured data with source paths for traceability.
 
-## Core Operations (9 AI-facing tools)
+## Core Operations (11 AI-facing MCP tools)
 
 | Operation | CLI Command | Purpose |
 |-----------|-------------|---------|
@@ -28,6 +28,8 @@ The tool is designed for AI agents to use via CLI or future MCP server. All oper
 | `get_links` | `okc links <path>` | Outgoing links from a document |
 | `get_backlinks` | `okc backlinks <path>` | Documents referencing a concept |
 | `traverse_graph` | `okc traverse <path> [--max-depth] [--max-nodes]` | Explore related concepts |
+| `scan` | `okc scan --root <path>` | Scan/re-scan root directories and index |
+| `get_stats` | `okc stats` | Repository statistics |
 | `validate_repository` | `okc validate` | Report structural problems |
 
 ## Agent Workflows
@@ -86,16 +88,12 @@ The tool is designed for AI agents to use via CLI or future MCP server. All oper
 2. Group broken links by source document
 3. Explain affected concepts
 
-## CLI JSON Output (for non-MCP agents)
+## CLI Output (for non-MCP agents)
 
-All subcommands support `--json` flag for machine-parseable output:
+Subcommands output structured text by default. The `validate` subcommand also supports
+`--json` for machine-parseable output:
 
 ```bash
-okc search "revenue" --json
-okc get metrics/monthly-revenue.md --json
-okc browse metrics --json
-okc metadata --filter type=Metric --json
-okc links metrics/monthly-revenue.md --json
 okc validate --json
 ```
 
@@ -122,9 +120,9 @@ Error format:
 }
 ```
 
-## MCP Server (Planned)
+## MCP Server
 
-When MCP transport is implemented, agents will use tools directly:
+The MCP server is fully implemented. AI agents connect via Model Context Protocol and use tools directly:
 
 ```json
 {
@@ -133,16 +131,33 @@ When MCP transport is implemented, agents will use tools directly:
 }
 ```
 
-Tools available:
-- `browse_directory`
-- `get_document`
-- `get_section`
-- `search_documents`
-- `query_metadata`
-- `get_links`
-- `get_backlinks`
-- `traverse_graph`
-- `validate_repository`
+### MCP Tools (11 total)
+
+| Tool | Description |
+|------|-------------|
+| `scan` | Scan/re-scan a root directory and index documents |
+| `browse_directory` | Inspect one area of the OKF hierarchy |
+| `get_document` | Retrieve one known concept with metadata, headings, and/or body |
+| `get_section` | Extract a specific Markdown section without the full document |
+| `search_documents` | Full-text search with optional path/type/tag filters |
+| `query_metadata` | Exact structured filtering on front-matter fields |
+| `get_links` | Outgoing links from a document |
+| `get_backlinks` | Documents referencing a concept |
+| `traverse_graph` | Explore related concepts via graph edges |
+| `get_stats` | Repository statistics (file counts, link counts, etc.) |
+| `validate_repository` | Report structural problems (broken links, malformed YAML) |
+
+### Transport Options
+
+Start the server:
+
+```bash
+# stdio (for AI agents that launch the binary directly)
+okc serve
+
+# HTTP (for remote agent access)
+okc serve --transport http --host 0.0.0.0 --port 3001
+```
 
 ## AI Usage Principles
 

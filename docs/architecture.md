@@ -263,7 +263,7 @@ Content hash includes `parser_version` and `index_schema_version` so parser/sche
 
 ## AI Tool Interface
 
-### Core Operations (9 tools)
+### Core Operations (11 MCP tools)
 
 | Operation | Purpose |
 |-----------|---------|
@@ -279,8 +279,8 @@ Content hash includes `parser_version` and `index_schema_version` so parser/sche
 
 ### Transport Options
 
-- **MCP Server** (planned) — for AI agents via Model Context Protocol
-- **CLI JSON** — `okc <command> --json` for direct agent consumption
+- **MCP Server** (`okc serve`) — for AI agents via Model Context Protocol (stdio or HTTP transport)
+- **CLI** — `okc <command>` for direct shell consumption
 - **Native Rust** — library API for embedded use
 
 ## Security & Resource Limits

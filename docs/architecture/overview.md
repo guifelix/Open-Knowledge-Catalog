@@ -46,7 +46,7 @@ graph TB
         FRONTMATTER["FrontMatterExtractor (YAML)"]
         LINKRESOLVER["LinkResolver (wiki-links, URLs)"]
         MARKDOWNPARSER["MarkdownParser (headings, sections)"]
-        YAMLPARSER["YamlParser (serde_yaml)"]
+        YAMLPARSER["YamlParser (saphyr)"]
         FILEWATCHER["File Watcher (notify crate)"]
     end
 

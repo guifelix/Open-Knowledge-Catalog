@@ -21,7 +21,7 @@ status: published
 ## Quick Start
 
 ```bash
-git clone https://github.com/your-org/open-knowledge-catalog
+git clone https://github.com/guifelix/Open-Knowledge-Catalog
 cd open-knowledge-catalog
 cargo build --release
 ```
@@ -177,10 +177,13 @@ See `docs/configuration.md` for all options.
 ## Release Process
 
 1. Update version in `Cargo.toml`
-2. Update `CHANGELOG.md`
-3. Tag release: `git tag v0.x.x`
-4. Push tag: `git push origin v0.x.x`
-5. CI builds and publishes binary
+2. Generate changelog: `git cliff --unreleased --tag v0.x.x --prepend CHANGELOG.md`
+3. Review and commit the updated `CHANGELOG.md`
+4. Tag release: `git tag -a v0.x.x -m "v0.x.x"`
+5. Push tag: `git push origin v0.x.x`
+6. CI builds, publishes to crates.io, and creates a GitHub Release
+
+See [docs/release-process.md](release-process.md) for the full checklist.
 
 ## Useful Commands
 

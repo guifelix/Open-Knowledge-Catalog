@@ -21,11 +21,11 @@ okc --help
 Global options:
 - `--root <PATH>` - Root directory to scan (can be specified multiple times)
 - `--db-path <PATH>` - SQLite database path (default: `okc_index.db`)
-- `--config <PATH>` - Configuration file (not yet implemented)
+- `--config <PATH>` - Configuration file (default: `~/.config/okc/config.toml` or `./okc.toml`)
 
-## Configuration File (Planned)
+## Configuration File
 
-Future versions will support a TOML config file at `~/.config/okc/config.toml` or via `--config`:
+OKC reads a TOML config file from `~/.config/okc/config.toml`, `./okc.toml`, or a path specified via `--config`:
 
 ```toml
 [scanner]
@@ -133,20 +133,24 @@ OKC_SEARCH_BM25_K1=1.5
 OKC_SEARCH_BM25_B=0.5
 ```
 
-## MCP Server Configuration (Planned)
+## MCP Server Configuration
+
+The MCP server is fully implemented with two transport options:
 
 ```toml
 [mcp]
-# Transport: "stdio" | "http" | "sse"
+# Transport: "stdio" | "http"
 transport = "stdio"
 
-# HTTP/SSE only
+# HTTP only
 host = "127.0.0.1"
-port = 3000
+port = 3001
 
 # Request timeout
 timeout_seconds = 30
 ```
+
+Use `okc serve --transport http` to start the HTTP server, or `okc serve` with the default stdio transport.
 
 ## Defaults
 

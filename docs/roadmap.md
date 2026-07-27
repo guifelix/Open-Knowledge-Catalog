@@ -38,7 +38,7 @@ status: published
 - ✅ `get_links` / `get_backlinks`
 - ✅ `traverse_graph`
 - ✅ `validate_repository`
-- 🔲 MCP server transport
+- ✅ MCP server transport (stdio + HTTP)
 
 ## Phase 5 - Continuous Updates
 - ✅ Filesystem watcher (`notify`)
@@ -70,15 +70,8 @@ status: published
 ## Known Issues (Tracked in Backlog)
 
 - **OKC-00001**: SQL injection in `query_metadata`
-- **OKC-00002**: Thread safety (RefCell → Mutex/RwLock)
 - **OKC-00003**: FTS5 BM25 relevance ranking
-- **OKC-00005**: Filesystem watcher
-- **OKC-00006**: Input validation & size limits
 - **OKC-00007**: Link resolution edge cases
 - **OKC-00008**: YAML aliases/anchors/merge keys
-- **OKC-00014**: Trait interfaces for storage backends
-- **OKC-00022**: JSON output mode for CLI
-- **OKC-00026**: Structured error types
-- **OKC-00033**: MAANG-level code quality remediation (CI, path traversal, unwrap, docs, etc.)
 
 See `backlog/tasks/` for full task list.

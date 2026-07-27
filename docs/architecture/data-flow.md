@@ -285,7 +285,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    REQUEST["CLI/MCP\nexport cmd"] --> SERVICE["OkcService\n.export_json()"]
+    REQUEST["CLI\nexport cmd"] --> SERVICE["OkcService\n.export_json()"]
     SERVICE --> REPO["RepositoryIndex\n.export_json()"]
     REPO --> EXPORT["Export\n(JSON)"]
     EXPORT --> SERIALIZE["Serialize full index:\n- All documents\n- All links\n- Graph edges\n- Metadata\n- Stats"]

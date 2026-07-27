@@ -40,7 +40,7 @@ OKF files → scanner & parser → structured index → bounded AI tool calls �
 
 ## Features
 
-### Core Operations (9 AI-facing tools)
+### Core Operations (11 AI-facing MCP tools)
 
 | Operation | Purpose |
 |-----------|---------|
@@ -52,6 +52,8 @@ OKF files → scanner & parser → structured index → bounded AI tool calls �
 | `get_links` | Outgoing links from a document |
 | `get_backlinks` | Documents referencing a concept |
 | `traverse_graph` | Explore related concepts via graph edges |
+| `scan` | Scan/re-scan root directories and index documents |
+| `get_stats` | Repository statistics (file counts, link counts, etc.) |
 | `validate_repository` | Report structural problems (broken links, malformed YAML, missing index files) |
 
 ### Supported OKF Format

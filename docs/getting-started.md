@@ -22,7 +22,7 @@ status: published
 ### Build from Source
 
 ```bash
-git clone https://github.com/your-org/open-knowledge-catalog
+git clone https://github.com/guifelix/Open-Knowledge-Catalog
 cd open-knowledge-catalog
 cargo build --release
 ```
@@ -175,11 +175,11 @@ okc --help
 Global options:
 - `--root <PATH>` - Root directory to scan (can be specified multiple times)
 - `--db-path <PATH>` - SQLite database path (default: `okc_index.db`)
-- `--config <PATH>` - Configuration file (not yet implemented)
+- `--config <PATH>` - Configuration file (default: `~/.config/okc/config.toml` or `./okc.toml`)
 
-## Configuration File (Planned)
+## Configuration
 
-Future versions will support a TOML config file:
+The tool supports a TOML config file with layered overrides (file → environment variables → CLI flags):
 
 ```toml
 [scanner]

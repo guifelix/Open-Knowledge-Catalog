@@ -58,11 +58,11 @@ Implement an **MCP server** using the `rmcp` crate as the primary AI integration
 - **Transport complexity**: stdio for local, HTTP/SSE for remote
 - **Schema drift**: Rust types must match schema expectations
 - **Debugging**: Harder than CLI (stdio transport)
-- **Single-threaded by default**: `Mutex<OkcService>` for thread safety
+- **Single-threaded by default**: `Arc<Mutex<OkcService>>` for thread safety
 
 ## Implementation
 
-### Server Structure (`transport/mcp.rs`)
+### Server Structure (`transport/mcp/mod.rs`)
 
 ```rust
 use rmcp::{
@@ -187,7 +187,7 @@ Command::Serve { root } => {
 }
 ```
 
-## Tool Set (9 Core Tools)
+## Tool Set (11 Core Tools)
 
 | Tool | Purpose | Key Parameters |
 |------|---------|----------------|
