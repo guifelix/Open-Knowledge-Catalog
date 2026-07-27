@@ -155,7 +155,7 @@ fn test_exact_metadata_query() {
     // So we don't filter by status here
 
     let results = service
-        .query_metadata(&filters, 100)
+        .query_metadata(&filters, &[], 100)
         .expect("query metadata");
 
     assert!(

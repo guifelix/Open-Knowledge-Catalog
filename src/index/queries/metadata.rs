@@ -2,20 +2,94 @@
 
 use crate::index::database::RepositoryIndex;
 use crate::model::document::MetadataQueryResponse;
-use rusqlite::params;
+
+/// Valid column names for the documents table to prevent SQL injection.
+const VALID_DOCUMENT_COLUMNS: &[&str] = &[
+    "path",
+    "title",
+    "type",
+    "description",
+    "file_size",
+    "modified_at",
+    "content_hash",
+    "parse_status",
+    "parent_path",
+    "id",
+];
+
+/// Default select fields when none are specified.
+const DEFAULT_SELECT: &[&str] = &[
+    "path",
+    "title",
+    "type",
+    "description",
+    "file_size",
+    "modified_at",
+    "parse_status",
+];
 
 /// Structured metadata query with filtering and projection.
 ///
 /// - `filters`: Key-value pairs to match against front-matter fields
+/// - `select`: Fields to return (empty = all default fields)
 /// - `limit`: Maximum rows to return
 pub fn query_metadata(
     index: &RepositoryIndex,
     filters: &std::collections::HashMap<String, serde_json::Value>,
+    select: &[String],
     limit: usize,
 ) -> Result<MetadataQueryResponse, anyhow::Error> {
     let conn = index.pool().get()?;
 
-    let mut sql = String::from("SELECT d.path, d.title, d.type, d.description, d.file_size, d.modified_at, d.parse_status FROM documents d");
+    // Determine which fields to select
+    let fields: Vec<String> = if select.is_empty() {
+        DEFAULT_SELECT.iter().map(|s| s.to_string()).collect()
+    } else {
+        select.to_vec()
+    };
+
+    // Build SELECT columns with SQL-injection-safe validation
+    let mut select_cols: Vec<String> = Vec::new();
+    let mut custom_field_joins: Vec<(String, String)> = Vec::new();
+    let mut custom_field_count = 0usize;
+
+    for field in &fields {
+        match field.as_str() {
+            "owner" => {
+                let alias = format!("mf_{}", custom_field_count);
+                select_cols.push(format!("{}.value AS {}", alias, field));
+                custom_field_joins.push(("owner".to_string(), alias));
+                custom_field_count += 1;
+            }
+            "status" => {
+                let alias = format!("mf_{}", custom_field_count);
+                select_cols.push(format!("{}.value AS {}", alias, field));
+                custom_field_joins.push(("status".to_string(), alias));
+                custom_field_count += 1;
+            }
+            f if VALID_DOCUMENT_COLUMNS.contains(&f) => {
+                select_cols.push(format!("d.{}", f));
+            }
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Invalid select field: '{}'. Valid fields: {}",
+                    field,
+                    VALID_DOCUMENT_COLUMNS.join(", ")
+                ));
+            }
+        }
+    }
+
+    let mut sql = format!("SELECT {} FROM documents d", select_cols.join(", "));
+
+    // Add custom field joins
+    for (key, alias) in &custom_field_joins {
+        sql.push_str(&format!(
+            " LEFT JOIN metadata_fields {} ON {}.document_id = d.id AND {}.key = '{}'",
+            alias, alias, alias, key
+        ));
+    }
+
     let mut conditions = Vec::new();
     let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
 
@@ -40,7 +114,7 @@ pub fn query_metadata(
             }
             _ => {
                 // Custom metadata field
-                let alias = format!("mf_{}", conditions.len());
+                let alias = format!("mf_{}", param_values.len());
                 sql.push_str(&format!(
                     " LEFT JOIN metadata_fields {} ON {}.document_id = d.id AND {}.key = ?{}",
                     alias,
@@ -59,6 +133,10 @@ pub fn query_metadata(
         sql.push_str(&format!(" WHERE {}", conditions.join(" AND ")));
     }
 
+    if filters.contains_key("tags_contains") {
+        sql.push_str(" GROUP BY d.id");
+    }
+
     sql.push_str(&format!(" LIMIT ?{}", param_values.len() + 1));
     param_values.push(Box::new(limit as i64));
 
@@ -70,31 +148,51 @@ pub fn query_metadata(
 
     let rows = stmt.query_map(params_refs.as_slice(), |row| {
         let mut map = serde_json::Map::new();
-        map.insert("path".to_string(), serde_json::Value::String(row.get(0)?));
-        map.insert(
-            "title".to_string(),
-            serde_json::Value::String(row.get::<_, Option<String>>(1)?.unwrap_or_default()),
-        );
-        map.insert(
-            "type".to_string(),
-            serde_json::Value::String(row.get::<_, Option<String>>(2)?.unwrap_or_default()),
-        );
-        map.insert(
-            "description".to_string(),
-            serde_json::Value::String(row.get::<_, Option<String>>(3)?.unwrap_or_default()),
-        );
-        map.insert(
-            "file_size".to_string(),
-            serde_json::Value::Number(serde_json::Number::from(row.get::<_, i64>(4)?)),
-        );
-        map.insert(
-            "modified_at".to_string(),
-            serde_json::Value::Number(serde_json::Number::from(row.get::<_, i64>(5)?)),
-        );
-        map.insert(
-            "parse_status".to_string(),
-            serde_json::Value::String(row.get(6)?),
-        );
+        for (i, field) in fields.iter().enumerate() {
+            match field.as_str() {
+                "path" | "parse_status" => {
+                    map.insert(
+                        field.clone(),
+                        serde_json::Value::String(row.get::<_, String>(i)?),
+                    );
+                }
+                "title" | "type" | "description" | "content_hash" | "parent_path" => {
+                    map.insert(
+                        field.clone(),
+                        serde_json::Value::String(
+                            row.get::<_, Option<String>>(i)?.unwrap_or_default(),
+                        ),
+                    );
+                }
+                "file_size" => {
+                    map.insert(
+                        field.clone(),
+                        serde_json::Value::Number(serde_json::Number::from(row.get::<_, i64>(i)?)),
+                    );
+                }
+                "modified_at" => {
+                    map.insert(
+                        field.clone(),
+                        serde_json::Value::Number(serde_json::Number::from(row.get::<_, i64>(i)?)),
+                    );
+                }
+                "id" => {
+                    map.insert(
+                        field.clone(),
+                        serde_json::Value::Number(serde_json::Number::from(row.get::<_, i64>(i)?)),
+                    );
+                }
+                // Custom metadata fields (owner, status) — nullable text
+                _ => {
+                    if let Ok(v) = row.get::<_, Option<String>>(i) {
+                        map.insert(
+                            field.clone(),
+                            serde_json::Value::String(v.unwrap_or_default()),
+                        );
+                    }
+                }
+            }
+        }
         Ok(serde_json::Value::Object(map))
     })?;
 

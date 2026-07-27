@@ -26,15 +26,17 @@ impl OkcService {
         self.index.search(query, path_prefix, types, tags, limit)
     }
 
-    /// Structured metadata query with filtering.
+    /// Structured metadata query with filtering and projection.
     ///
     /// - `filters`: Key-value pairs to match against front-matter fields
+    /// - `select`: Fields to return (empty = all default fields)
     /// - `limit`: Maximum rows to return
     pub fn query_metadata(
         &self,
         filters: &HashMap<String, serde_json::Value>,
+        select: &[String],
         limit: usize,
     ) -> Result<MetadataQueryResponse, anyhow::Error> {
-        self.index.query_metadata(filters, limit)
+        self.index.query_metadata(filters, select, limit)
     }
 }

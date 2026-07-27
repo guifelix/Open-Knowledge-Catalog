@@ -287,7 +287,7 @@ impl McpServer {
             limit,
         }): Parameters<MetadataParams>,
     ) -> String {
-        let _select = select.unwrap_or_default();
+        let select = select.unwrap_or_default();
         let limit = limit.unwrap_or(100);
         let filters: HashMap<String, serde_json::Value> = filter
             .unwrap_or_default()
@@ -304,7 +304,7 @@ impl McpServer {
             .collect();
 
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
-        match svc.query_metadata(&filters, limit) {
+        match svc.query_metadata(&filters, &select, limit) {
             Ok(r) => serde_json::to_string(&MetadataResponseOutput {
                 results: r.results,
                 total_matches: r.total_matches,

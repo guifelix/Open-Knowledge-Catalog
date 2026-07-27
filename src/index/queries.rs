@@ -62,9 +62,10 @@ impl super::database::RepositoryIndex {
     pub fn query_metadata(
         &self,
         filters: &std::collections::HashMap<String, serde_json::Value>,
+        select: &[String],
         limit: usize,
     ) -> Result<MetadataQueryResponse, anyhow::Error> {
-        metadata::query_metadata(self, filters, limit)
+        metadata::query_metadata(self, filters, select, limit)
     }
 
     /// Get recently modified documents.
