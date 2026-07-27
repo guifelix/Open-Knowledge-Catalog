@@ -1,0 +1,46 @@
+# git-cliff configuration for OKC
+# https://git-cliff.org/docs/configuration
+
+[changelog]
+header = "# Changelog\n\nAll notable changes to this project are documented here.\n"
+body = """
+{% if not version %}\
+## [unreleased]
+{% else %}\
+## [{{ version }}] — {{ timestamp | date(format="%Y-%m-%d") }}
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | upper_first }}
+{% for commit in commits %}
+- {{ commit.message | upper_first }}{% if commit.breaking %} [breaking]{% endif %}
+{%- endfor %}
+{% endfor %}\
+"""
+trim = true
+postprocess = []  # no extra processing
+
+[git]
+# Parse conventional commits
+conventional_commits = true
+# Filter out chores that aren't meaningful in the changelog
+filter_unconventional = true
+# Split commits into groups by type
+commit_parsers = [
+    { message = "^feat", group = "Added" },
+    { message = "^feature", group = "Added" },
+    { message = "^fix", group = "Fixed" },
+    { message = "^bug", group = "Fixed" },
+    { message = "^perf", group = "Performance" },
+    { message = "^revert", group = "Reverted" },
+    { message = "^refactor", group = "Changed" },
+    { message = "^docs?", group = "Documentation" },
+    { message = "^style", group = "Styling" },
+    { message = "^test", group = "Testing" },
+    { message = "^chore\\(release\\)", group = "Release", skip = true },
+    { message = "^chore\\(deps", group = "Dependencies", skip = true },
+    { message = "^chore", group = "Miscellaneous", skip = true },
+    { message = "^ci", group = "CI/CD", skip = true },
+    { message = ".*", group = "Other" },
+]
+# Filter out these commit types from the changelog entirely
+skip_commits = ["chore\\(release\\)", "chore\\(deps", "ci:", "skip-changelog"]

@@ -1,5 +1,10 @@
 # Open Knowledge Catalog (OKC)
 
+[![Crates.io](https://img.shields.io/crates/v/okc.svg)](https://crates.io/crates/okc)
+[![Crates.io Downloads](https://img.shields.io/crates/d/okc.svg)](https://crates.io/crates/okc)
+[![CI](https://github.com/guifelix/Open-Knowledge-Catalog/actions/workflows/ci.yml/badge.svg)](https://github.com/guifelix/Open-Knowledge-Catalog/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A local-first tool that allows AI agents to safely browse, parse, search, and reason over an [Open Knowledge Format (OKF)](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) repository.
 
 ## Overview
@@ -91,13 +96,39 @@ Revenue is recognized when...
 - Relative links between documents are resolved and validated
 - Custom front-matter fields are preserved as generic metadata
 
+## Installation
+
+### From crates.io (recommended)
+
+```bash
+cargo install okc
+```
+
+### From GitHub Releases
+
+Download the pre-built binary for your platform from the
+[latest release](https://github.com/guifelix/Open-Knowledge-Catalog/releases):
+
+| Platform | Download |
+|----------|----------|
+| Linux (x86_64, glibc) | `okc-x86_64-unknown-linux-gnu` |
+| Linux (x86_64, musl — static) | `okc-x86_64-unknown-linux-musl` |
+| macOS (Intel) | `okc-x86_64-apple-darwin` |
+| macOS (Apple Silicon) | `okc-aarch64-apple-darwin` |
+| Windows (x86_64) | `okc-x86_64-pc-windows-msvc.exe` |
+
+### Build from source
+
+```bash
+git clone https://github.com/guifelix/Open-Knowledge-Catalog
+cd open-knowledge-catalog
+cargo build --release
+# Binary at target/release/okc
+```
+
 ## Quick Start
 
 ```bash
-git clone https://github.com/guifelix/open-knowledge-catalog
-cd open-knowledge-catalog
-cargo build --release
-
 # Create a knowledge repository
 mkdir -p my-knowledge/{metrics,datasets}
 

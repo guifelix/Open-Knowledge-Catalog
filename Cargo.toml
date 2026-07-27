@@ -3,6 +3,12 @@ name = "okc"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.95"
+description = "A local-first tool for AI agents to browse, parse, search, and reason over Open Knowledge Format (OKF) repositories"
+repository = "https://github.com/guifelix/Open-Knowledge-Catalog"
+homepage = "https://github.com/guifelix/Open-Knowledge-Catalog"
+license = "MIT"
+keywords = ["knowledge-management", "okf", "ai-agents", "markdown", "knowledge-base"]
+categories = ["command-line-utilities", "development-tools::cargo-plugins"]
 
 [[bin]]
 name = "okc"

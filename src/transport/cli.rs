@@ -32,6 +32,7 @@ pub enum TransportType {
 #[derive(Parser)]
 #[command(
     name = "okc",
+    version,
     about = "Open Knowledge Catalog - index and query markdown knowledge bases"
 )]
 pub struct Cli {

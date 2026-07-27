@@ -1,0 +1,130 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+
+jobs:
+  # --- Verify before releasing ---
+  ci-check:
+    name: Pre-release CI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --all-targets --all-features
+      - run: cargo test --all-targets --all-features
+
+  # --- Build binaries for each platform ---
+  build:
+    name: Build (${{ matrix.target }})
+    needs: ci-check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            ext: ""
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            ext: ""
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            ext: ""
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            ext: ""
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            ext: ".exe"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install cross-compilation deps (linux musl)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
+      - name: Strip binary (linux/macOS)
+        if: matrix.os != 'windows-latest'
+        run: strip target/${{ matrix.target }}/release/okc${{ matrix.ext }}
+      - name: Package binary
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/okc${{ matrix.ext }} dist/okc-${{ matrix.target }}${{ matrix.ext }}
+      - name: Generate checksum
+        run: |
+          cd dist
+          sha256sum okc-${{ matrix.target }}${{ matrix.ext }} > okc-${{ matrix.target }}${{ matrix.ext }}.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: okc-${{ matrix.target }}
+          path: dist/*
+
+  # --- Create GitHub Release ---
+  github-release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Collect release assets
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f -exec cp {} release-assets/ \;
+      - uses: taiki-e/install-action@git-cliff
+      - name: Generate release notes
+        id: notes
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          NOTES="$(git cliff --config cliff.toml --current --strip header)"
+          cat << EOF >> "$GITHUB_OUTPUT"
+          NOTES<<EOF_NOTES
+          $NOTES
+
+          ### Installation
+
+          \`\`\`bash
+          cargo install okc
+          \`\`\`
+
+          Or download the binary for your platform below.
+          EOF_NOTES
+          EOF
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body: ${{ steps.notes.outputs.NOTES }}
+          files: release-assets/*
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+
+  # --- Publish to crates.io ---
+  crates-io:
+    name: Publish to crates.io
+    needs: ci-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: cargo publish
+        run: cargo publish
