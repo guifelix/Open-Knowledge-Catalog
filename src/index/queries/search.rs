@@ -22,11 +22,11 @@ pub fn search(
     let conn = index.pool().get()?;
 
     let sql = String::from(
-        "SELECT d.path, d.title, d.type, d.description, d.body_text,
-                bm25(search_index) as score
-         FROM documents d
-         JOIN search_index ON d.id = search_index.rowid
-         WHERE search_index MATCH ?1",
+        "SELECT ds.path, ds.title, d.type, d.description, ds.rank,
+                ds.body, COUNT(*) OVER() as total_count
+         FROM document_search ds
+         JOIN documents d ON d.path = ds.path
+         WHERE document_search MATCH ?1",
     );
 
     let mut conditions = vec![];
@@ -84,10 +84,10 @@ pub fn search(
         param_values.iter().map(|p| p.as_ref()).collect();
 
     let full_sql = if conditions.is_empty() {
-        format!("{} ORDER BY score LIMIT ?{}", sql, param_values.len() + 1)
+        format!("{} ORDER BY rank LIMIT ?{}", sql, param_values.len() + 1)
     } else {
         format!(
-            "{} AND {} ORDER BY score LIMIT ?{}",
+            "{} AND {} ORDER BY rank LIMIT ?{}",
             sql,
             conditions.join(" AND "),
             param_values.len() + 1
