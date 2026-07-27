@@ -117,7 +117,9 @@ fn test_relationship_reasoning() {
     service.scan().expect("scan");
 
     // Get links from monthly revenue
-    let links = service.get_links("metrics/monthly-revenue.md").expect("get links");
+    let links = service
+        .get_links("metrics/monthly-revenue.md")
+        .expect("get links");
 
     // Should link to customer-orders dataset
     let has_customer_orders = links
@@ -141,17 +143,19 @@ fn test_exact_metadata_query() {
     // Note: "status" is a special case mapped to parse_status, so use a custom field
     // or don't filter by status
     let mut filters = HashMap::new();
-    filters.insert("type".to_string(), "Metric".to_string());
-    filters.insert("tags_contains".to_string(), "finance".to_string());
+    filters.insert(
+        "type".to_string(),
+        serde_json::Value::String("Metric".to_string()),
+    );
+    filters.insert(
+        "tags_contains".to_string(),
+        serde_json::Value::String("finance".to_string()),
+    );
     // Note: "status" is a special case mapped to parse_status, not the custom field
     // So we don't filter by status here
 
     let results = service
-        .query_metadata(
-            &filters,
-            &["path".to_string(), "title".to_string(), "owner".to_string()],
-            100,
-        )
+        .query_metadata(&filters, 100)
         .expect("query metadata");
 
     assert!(
@@ -161,7 +165,9 @@ fn test_exact_metadata_query() {
     for result in &results.results {
         if let Some(path) = result.get("path") {
             assert!(
-                path.as_str().expect("path should be string").contains("metrics/"),
+                path.as_str()
+                    .expect("path should be string")
+                    .contains("metrics/"),
                 "Should be in metrics dir: {}",
                 path
             );
@@ -349,7 +355,9 @@ fn test_search_with_filters() {
     service.scan().expect("scan");
 
     // First test basic search
-    let basic_results = service.search("revenue", None, None, None, 10).expect("basic search");
+    let basic_results = service
+        .search("revenue", None, None, None, 10)
+        .expect("basic search");
     println!(
         "Basic search results: {} matches",
         basic_results.total_matches

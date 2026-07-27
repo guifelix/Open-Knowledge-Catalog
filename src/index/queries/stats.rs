@@ -8,11 +8,8 @@ use rusqlite::params;
 pub fn get_stats(index: &RepositoryIndex) -> Result<IndexStats, anyhow::Error> {
     let conn = index.pool().get()?;
 
-    let document_count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM documents",
-        [],
-        |row| row.get(0),
-    )?;
+    let document_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM documents", [], |row| row.get(0))?;
 
     let error_count: i64 = conn.query_row(
         "SELECT COUNT(*) FROM documents WHERE parse_status != 'Ok'",
@@ -20,17 +17,10 @@ pub fn get_stats(index: &RepositoryIndex) -> Result<IndexStats, anyhow::Error> {
         |row| row.get(0),
     )?;
 
-    let link_count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM links",
-        [],
-        |row| row.get(0),
-    )?;
+    let link_count: i64 = conn.query_row("SELECT COUNT(*) FROM links", [], |row| row.get(0))?;
 
-    let heading_count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM headings",
-        [],
-        |row| row.get(0),
-    )?;
+    let heading_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM headings", [], |row| row.get(0))?;
 
     Ok(IndexStats {
         document_count: document_count as usize,

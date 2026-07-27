@@ -132,7 +132,10 @@ mod tests {
     fn test_basic_frontmatter() {
         let input = b"---\ntitle: Hello\ntags: [a, b]\n---\n\nBody text";
         let extractor = FrontMatterExtractor::new(4096);
-        let result = extractor.extract(input).expect("extract succeeded").expect("frontmatter present");
+        let result = extractor
+            .extract(input)
+            .expect("extract succeeded")
+            .expect("frontmatter present");
         assert_eq!(result.1, "title: Hello\ntags: [a, b]\n");
         assert!(result.0 > 0);
     }
@@ -141,7 +144,10 @@ mod tests {
     fn test_no_frontmatter() {
         let input = b"Just body text\n\nNo front matter here.";
         let extractor = FrontMatterExtractor::new(4096);
-        assert!(extractor.extract(input).expect("extract succeeded").is_none());
+        assert!(extractor
+            .extract(input)
+            .expect("extract succeeded")
+            .is_none());
     }
 
     #[test]
@@ -155,7 +161,10 @@ mod tests {
     fn test_bom_handling() {
         let input = b"\xef\xbb\xbf---\ntitle: BOM\n---\nBody";
         let extractor = FrontMatterExtractor::new(4096);
-        let result = extractor.extract(input).expect("extract BOM").expect("frontmatter with BOM");
+        let result = extractor
+            .extract(input)
+            .expect("extract BOM")
+            .expect("frontmatter with BOM");
         assert!(result.1.contains("title: BOM"));
     }
 
@@ -163,7 +172,10 @@ mod tests {
     fn test_windows_line_endings() {
         let input = b"---\r\ntitle: CRLF\r\n---\r\nBody";
         let extractor = FrontMatterExtractor::new(4096);
-        let result = extractor.extract(input).expect("extract CRLF").expect("frontmatter with CRLF");
+        let result = extractor
+            .extract(input)
+            .expect("extract CRLF")
+            .expect("frontmatter with CRLF");
         assert!(result.1.contains("title: CRLF"));
     }
 

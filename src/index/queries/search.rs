@@ -21,7 +21,7 @@ pub fn search(
 ) -> Result<SearchResponse, anyhow::Error> {
     let conn = index.pool().get()?;
 
-    let mut sql = String::from(
+    let sql = String::from(
         "SELECT d.path, d.title, d.type, d.description, d.body_text,
                 bm25(search_index) as score
          FROM documents d
@@ -113,7 +113,7 @@ pub fn search(
     let mut total_matches = 0usize;
     let mut results = Vec::new();
     for row in rows {
-        let (path, title, ctype, description, rank, body, total) = row?;
+        let (path, title, ctype, _description, rank, body, total) = row?;
         total_matches = total;
         let excerpt = extract_excerpt(&body, query, 200);
         results.push(SearchResult {

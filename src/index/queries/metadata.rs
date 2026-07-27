@@ -43,7 +43,10 @@ pub fn query_metadata(
                 let alias = format!("mf_{}", conditions.len());
                 sql.push_str(&format!(
                     " LEFT JOIN metadata_fields {} ON {}.document_id = d.id AND {}.key = ?{}",
-                    alias, alias, alias, param_values.len() + 1
+                    alias,
+                    alias,
+                    alias,
+                    param_values.len() + 1
                 ));
                 param_values.push(Box::new(key.clone()));
                 conditions.push(format!("{}.value = ?{}", alias, param_values.len() + 1));
@@ -68,12 +71,30 @@ pub fn query_metadata(
     let rows = stmt.query_map(params_refs.as_slice(), |row| {
         let mut map = serde_json::Map::new();
         map.insert("path".to_string(), serde_json::Value::String(row.get(0)?));
-        map.insert("title".to_string(), serde_json::Value::String(row.get::<_, Option<String>>(1)?.unwrap_or_default()));
-        map.insert("type".to_string(), serde_json::Value::String(row.get::<_, Option<String>>(2)?.unwrap_or_default()));
-        map.insert("description".to_string(), serde_json::Value::String(row.get::<_, Option<String>>(3)?.unwrap_or_default()));
-        map.insert("file_size".to_string(), serde_json::Value::Number(serde_json::Number::from(row.get::<_, i64>(4)?)));
-        map.insert("modified_at".to_string(), serde_json::Value::Number(serde_json::Number::from(row.get::<_, i64>(5)?)));
-        map.insert("parse_status".to_string(), serde_json::Value::String(row.get(6)?));
+        map.insert(
+            "title".to_string(),
+            serde_json::Value::String(row.get::<_, Option<String>>(1)?.unwrap_or_default()),
+        );
+        map.insert(
+            "type".to_string(),
+            serde_json::Value::String(row.get::<_, Option<String>>(2)?.unwrap_or_default()),
+        );
+        map.insert(
+            "description".to_string(),
+            serde_json::Value::String(row.get::<_, Option<String>>(3)?.unwrap_or_default()),
+        );
+        map.insert(
+            "file_size".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(row.get::<_, i64>(4)?)),
+        );
+        map.insert(
+            "modified_at".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(row.get::<_, i64>(5)?)),
+        );
+        map.insert(
+            "parse_status".to_string(),
+            serde_json::Value::String(row.get(6)?),
+        );
         Ok(serde_json::Value::Object(map))
     })?;
 

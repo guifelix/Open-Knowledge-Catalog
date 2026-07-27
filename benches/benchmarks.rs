@@ -12,7 +12,11 @@
 //!
 //! Corpora: small (10), medium (50), large (200) documents.
 
-#![allow(clippy::default_constructed_unit_structs, clippy::expect_used, clippy::panic)]
+#![allow(
+    clippy::default_constructed_unit_structs,
+    clippy::expect_used,
+    clippy::panic
+)]
 
 use std::path::Path;
 
@@ -157,9 +161,7 @@ fn generate_technical_docs(root: &Path, count: usize) {
         content.push_str("---\n");
         content.push_str(&format!("type: {}\n", ct));
         content.push_str(&format!("title: \"{}\"\n", title));
-        content.push_str(
-            "description: \"Large technical document for benchmarking\"\n",
-        );
+        content.push_str("description: \"Large technical document for benchmarking\"\n");
         content.push_str("tags:\n");
         for t in tags {
             content.push_str(&format!("  - {}\n", t));

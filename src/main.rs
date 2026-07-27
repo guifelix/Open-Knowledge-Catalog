@@ -168,7 +168,7 @@ fn main() -> anyhow::Result<()> {
             let service = OkcService::open(&config)?;
             let filters: std::collections::HashMap<String, serde_json::Value> = filter
                 .into_iter()
-                .filter_map(|(k, v)| Some((k, serde_json::Value::String(v))))
+                .map(|(k, v)| (k, serde_json::Value::String(v)))
                 .collect();
             let result = service.query_metadata(&filters, limit)?;
             println!("Metadata query results: {} matches", result.total_matches);

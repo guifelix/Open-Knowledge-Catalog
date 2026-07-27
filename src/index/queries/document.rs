@@ -46,8 +46,7 @@ pub fn get_document(
     let mut tags = vec![];
     if include.contains(&"metadata".to_string()) {
         let conn = index.pool().get()?;
-        let mut tag_stmt =
-            conn.prepare("SELECT tag FROM document_tags WHERE document_id = ?1")?;
+        let mut tag_stmt = conn.prepare("SELECT tag FROM document_tags WHERE document_id = ?1")?;
         tags = tag_stmt
             .query_map(params![id], |row| row.get::<_, String>(0))?
             .filter_map(|r| r.ok())

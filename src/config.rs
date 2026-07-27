@@ -15,52 +15,12 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-/// BM25 search configuration for FTS5 relevance ranking.
-///
-/// Controls field weights and BM25 algorithm parameters (k1, b).
-/// Field weights determine the relative importance of each column in the FTS5 index.
-/// Higher weight = more important for relevance scoring.
-///
-/// Default weights follow the ADR-002 specification:
-/// - title: 10.0 (most important)
-/// - description: 5.0
-/// - headings: 2.0
-/// - body: 1.0 (baseline)
-/// - concept_type: 0.0 (not used for relevance)
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub struct Bm25Config {
-    /// Weight for the title field. Default: 10.0
-    pub title_weight: f64,
-    /// Weight for the description field. Default: 5.0
-    pub description_weight: f64,
-    /// Weight for the headings field. Default: 2.0
-    pub headings_weight: f64,
-    /// Weight for the body field. Default: 1.0
-    pub body_weight: f64,
-    /// Weight for the concept_type field. Default: 0.0 (ignored for relevance)
-    pub concept_type_weight: f64,
-    /// BM25 k1 parameter (term frequency saturation). Default: 1.2
-    /// Higher values = less saturation, more weight to term frequency.
-    pub k1: f64,
-    /// BM25 b parameter (length normalization). Default: 0.75
-    /// 0.0 = no length normalization, 1.0 = full normalization.
-    pub b: f64,
-}
+pub mod bm25;
 
-impl Default for Bm25Config {
-    fn default() -> Self {
-        Self {
-            title_weight: 10.0,
-            description_weight: 5.0,
-            headings_weight: 2.0,
-            body_weight: 1.0,
-            concept_type_weight: 0.0,
-            k1: 1.2,
-            b: 0.75,
-        }
-    }
-}
+#[cfg(test)]
+pub mod tests;
+
+pub use bm25::Bm25Config;
 
 /// Configuration for the OKC indexer and service.
 ///
@@ -221,6 +181,9 @@ pub enum ConfigError {
     #[error("Failed to parse TOML config: {0}")]
     ParseError(#[from] toml::de::Error),
 
+    #[error("Failed to serialize TOML config: {0}")]
+    SerializeError(#[from] toml::ser::Error),
+
     #[error("Config validation failed: {0}")]
     ValidationError(String),
 
@@ -368,14 +331,14 @@ impl OkcConfig {
             })?;
         }
 
-        // Watcher debounce
+        // Watcher debounce ms
         if let Ok(val) = std::env::var("OKC_WATCHER_DEBOUNCE_MS") {
             self.watcher_debounce_ms = val.parse().map_err(|_| {
                 ConfigError::EnvParseError(format!("OKC_WATCHER_DEBOUNCE_MS: invalid u64: {val}"))
             })?;
         }
 
-        // Watcher reconcile
+        // Watcher reconcile secs
         if let Ok(val) = std::env::var("OKC_WATCHER_RECONCILE_SECS") {
             self.watcher_reconcile_secs = val.parse().map_err(|_| {
                 ConfigError::EnvParseError(format!(
@@ -393,12 +356,14 @@ impl OkcConfig {
                 .collect();
         }
 
-        // BM25 config
+        // BM25 title weight
         if let Ok(val) = std::env::var("OKC_BM25_TITLE_WEIGHT") {
             self.bm25.title_weight = val.parse().map_err(|_| {
                 ConfigError::EnvParseError(format!("OKC_BM25_TITLE_WEIGHT: invalid f64: {val}"))
             })?;
         }
+
+        // BM25 description weight
         if let Ok(val) = std::env::var("OKC_BM25_DESCRIPTION_WEIGHT") {
             self.bm25.description_weight = val.parse().map_err(|_| {
                 ConfigError::EnvParseError(format!(
@@ -406,16 +371,22 @@ impl OkcConfig {
                 ))
             })?;
         }
+
+        // BM25 headings weight
         if let Ok(val) = std::env::var("OKC_BM25_HEADINGS_WEIGHT") {
             self.bm25.headings_weight = val.parse().map_err(|_| {
                 ConfigError::EnvParseError(format!("OKC_BM25_HEADINGS_WEIGHT: invalid f64: {val}"))
             })?;
         }
+
+        // BM25 body weight
         if let Ok(val) = std::env::var("OKC_BM25_BODY_WEIGHT") {
             self.bm25.body_weight = val.parse().map_err(|_| {
                 ConfigError::EnvParseError(format!("OKC_BM25_BODY_WEIGHT: invalid f64: {val}"))
             })?;
         }
+
+        // BM25 concept type weight
         if let Ok(val) = std::env::var("OKC_BM25_CONCEPT_TYPE_WEIGHT") {
             self.bm25.concept_type_weight = val.parse().map_err(|_| {
                 ConfigError::EnvParseError(format!(
@@ -423,11 +394,15 @@ impl OkcConfig {
                 ))
             })?;
         }
+
+        // BM25 k1
         if let Ok(val) = std::env::var("OKC_BM25_K1") {
             self.bm25.k1 = val.parse().map_err(|_| {
                 ConfigError::EnvParseError(format!("OKC_BM25_K1: invalid f64: {val}"))
             })?;
         }
+
+        // BM25 b
         if let Ok(val) = std::env::var("OKC_BM25_B") {
             self.bm25.b = val.parse().map_err(|_| {
                 ConfigError::EnvParseError(format!("OKC_BM25_B: invalid f64: {val}"))
@@ -437,9 +412,14 @@ impl OkcConfig {
         Ok(())
     }
 
-    /// Validate the configuration and return an error if invalid.
+    /// Validate the configuration.
     pub fn validate(&self) -> Result<(), ConfigError> {
-        // Validate roots exist if specified
+        if self.roots.is_empty() {
+            return Err(ConfigError::ValidationError(
+                "At least one root directory must be specified".into(),
+            ));
+        }
+
         for root in &self.roots {
             if !root.exists() {
                 return Err(ConfigError::ValidationError(format!(
@@ -455,57 +435,43 @@ impl OkcConfig {
             }
         }
 
-        // Validate db_path parent directory exists or can be created
-        if let Some(parent) = self.db_path.parent() {
-            if !parent.as_os_str().is_empty() && !parent.exists() {
-                return Err(ConfigError::ValidationError(format!(
-                    "Database parent directory does not exist: {}",
-                    parent.display()
-                )));
-            }
-        }
-
-        // Validate numeric limits
         if self.max_file_size == 0 {
             return Err(ConfigError::ValidationError(
-                "max_file_size must be > 0".into(),
-            ));
-        }
-        if self.max_front_matter_size == 0 {
-            return Err(ConfigError::ValidationError(
-                "max_front_matter_size must be > 0".into(),
-            ));
-        }
-        if self.max_graph_depth == 0 {
-            return Err(ConfigError::ValidationError(
-                "max_graph_depth must be > 0".into(),
-            ));
-        }
-        if self.max_graph_nodes == 0 {
-            return Err(ConfigError::ValidationError(
-                "max_graph_nodes must be > 0".into(),
-            ));
-        }
-        if self.watcher_debounce_ms == 0 {
-            return Err(ConfigError::ValidationError(
-                "watcher_debounce_ms must be > 0".into(),
-            ));
-        }
-        if self.watcher_reconcile_secs == 0 {
-            return Err(ConfigError::ValidationError(
-                "watcher_reconcile_secs must be > 0".into(),
+                "max_file_size must be greater than 0".into(),
             ));
         }
 
-        // Validate BM25 parameters
-        if self.bm25.k1 <= 0.0 {
-            return Err(ConfigError::ValidationError("bm25.k1 must be > 0".into()));
-        }
-        if !(0.0..=1.0).contains(&self.bm25.b) {
+        if self.max_front_matter_size == 0 {
             return Err(ConfigError::ValidationError(
-                "bm25.b must be in range [0.0, 1.0]".into(),
+                "max_front_matter_size must be greater than 0".into(),
             ));
         }
+
+        if self.max_graph_depth == 0 {
+            return Err(ConfigError::ValidationError(
+                "max_graph_depth must be greater than 0".into(),
+            ));
+        }
+
+        if self.max_graph_nodes == 0 {
+            return Err(ConfigError::ValidationError(
+                "max_graph_nodes must be greater than 0".into(),
+            ));
+        }
+
+        if self.watcher_debounce_ms == 0 {
+            return Err(ConfigError::ValidationError(
+                "watcher_debounce_ms must be greater than 0".into(),
+            ));
+        }
+
+        if self.watcher_reconcile_secs == 0 {
+            return Err(ConfigError::ValidationError(
+                "watcher_reconcile_secs must be greater than 0".into(),
+            ));
+        }
+
+        // Validate BM25 config
         if self.bm25.title_weight < 0.0
             || self.bm25.description_weight < 0.0
             || self.bm25.headings_weight < 0.0
@@ -513,7 +479,19 @@ impl OkcConfig {
             || self.bm25.concept_type_weight < 0.0
         {
             return Err(ConfigError::ValidationError(
-                "BM25 weights must be >= 0".into(),
+                "BM25 weights must be non-negative".into(),
+            ));
+        }
+
+        if self.bm25.k1 <= 0.0 {
+            return Err(ConfigError::ValidationError(
+                "BM25 k1 must be positive".into(),
+            ));
+        }
+
+        if !(0.0..=1.0).contains(&self.bm25.b) {
+            return Err(ConfigError::ValidationError(
+                "BM25 b must be in range [0.0, 1.0]".into(),
             ));
         }
 
@@ -521,7 +499,6 @@ impl OkcConfig {
     }
 
     /// Create a default config file at the XDG config directory.
-    /// Returns the path where the file was created.
     pub fn create_default_config_file() -> Result<PathBuf, ConfigError> {
         let config_dir = dirs::config_dir()
             .ok_or_else(|| {
@@ -533,206 +510,9 @@ impl OkcConfig {
 
         let config_path = config_dir.join("config.toml");
         let default_config = Self::default();
-        let toml_string = toml::to_string_pretty(&default_config).map_err(|e| {
-            ConfigError::ValidationError(format!("Failed to serialize default config: {e}"))
-        })?;
-
-        std::fs::write(&config_path, toml_string)?;
+        let toml_content = toml::to_string_pretty(&default_config)?;
+        std::fs::write(&config_path, toml_content)?;
 
         Ok(config_path)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #![allow(clippy::expect_used, clippy::panic)]
-    use super::*;
-    use std::env;
-    use std::sync::Mutex;
-    use tempfile::tempdir;
-
-    // Mutex to serialize tests that modify environment variables
-    static ENV_MUTEX: Mutex<()> = Mutex::new(());
-
-    #[test]
-    fn test_default_config() {
-        let config = OkcConfig::default();
-        assert_eq!(config.max_file_size, 2 * 1024 * 1024);
-        assert_eq!(config.max_front_matter_size, 64 * 1024);
-        assert_eq!(config.max_graph_depth, 5);
-        assert_eq!(config.max_graph_nodes, 100);
-        assert!(!config.follow_symlinks);
-        assert!(!config.require_index_files);
-        assert_eq!(config.watcher_debounce_ms, 500);
-        assert_eq!(config.watcher_reconcile_secs, 600);
-    }
-
-    #[test]
-    fn test_config_validation_success() {
-        let dir = tempdir().expect("temp dir creation");
-        let db_path = dir.path().join("test.db");
-        std::fs::write(&db_path, "").expect("write test db file");
-
-        let config = OkcConfig {
-            roots: vec![dir.path().to_path_buf()],
-            db_path: db_path.clone(),
-            ..Default::default()
-        };
-        assert!(config.validate().is_ok());
-    }
-
-    #[test]
-    fn test_config_validation_missing_root() {
-        let config = OkcConfig {
-            roots: vec![PathBuf::from("/nonexistent/path")],
-            ..Default::default()
-        };
-        assert!(config.validate().is_err());
-    }
-
-    #[test]
-    fn test_config_validation_invalid_bm25_b() {
-        let config = OkcConfig {
-            bm25: Bm25Config {
-                b: 1.5,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        assert!(config.validate().is_err());
-    }
-
-    #[test]
-    fn test_env_override_roots() {
-        let _lock = ENV_MUTEX.lock().expect("env mutex lock");
-        let dir = tempdir().expect("temp dir creation");
-        let root_path = dir.path().to_string_lossy().to_string();
-        env::set_var("OKC_ROOTS", &root_path);
-        let mut config = OkcConfig::default();
-        config.apply_env_overrides().expect("env override roots");
-        assert_eq!(config.roots.len(), 1);
-        assert_eq!(config.roots[0], PathBuf::from(&root_path));
-        env::remove_var("OKC_ROOTS");
-    }
-
-    #[test]
-    fn test_env_override_multiple_roots() {
-        let _lock = ENV_MUTEX.lock().expect("env mutex lock");
-        let dir1 = tempdir().expect("temp dir 1");
-        let dir2 = tempdir().expect("temp dir 2");
-        let roots = format!("{},{}", dir1.path().display(), dir2.path().display());
-        env::set_var("OKC_ROOTS", &roots);
-        let mut config = OkcConfig::default();
-        config.apply_env_overrides().expect("apply env override");
-        assert_eq!(config.roots.len(), 2);
-        env::remove_var("OKC_ROOTS");
-    }
-
-    #[test]
-    fn test_env_override_db_path() {
-        let _lock = ENV_MUTEX.lock().expect("env mutex lock");
-        env::set_var("OKC_DB_PATH", "/custom/path/db.sqlite");
-        let mut config = OkcConfig::default();
-        config.apply_env_overrides().expect("env override db_path");
-        assert_eq!(config.db_path, PathBuf::from("/custom/path/db.sqlite"));
-        env::remove_var("OKC_DB_PATH");
-    }
-
-    #[test]
-    fn test_env_override_numeric() {
-        let _lock = ENV_MUTEX.lock().expect("env mutex lock");
-        env::set_var("OKC_MAX_FILE_SIZE", "5242880"); // 5MB
-        env::set_var("OKC_MAX_GRAPH_DEPTH", "10");
-        let mut config = OkcConfig::default();
-        config.apply_env_overrides().expect("env override numeric");
-        assert_eq!(config.max_file_size, 5242880);
-        assert_eq!(config.max_graph_depth, 10);
-        env::remove_var("OKC_MAX_FILE_SIZE");
-        env::remove_var("OKC_MAX_GRAPH_DEPTH");
-    }
-
-    #[test]
-    fn test_env_override_bool() {
-        let _lock = ENV_MUTEX.lock().expect("env mutex lock");
-        env::set_var("OKC_FOLLOW_SYMLINKS", "true");
-        env::set_var("OKC_REQUIRE_INDEX_FILES", "true");
-        let mut config = OkcConfig::default();
-        config.apply_env_overrides().expect("env override bool");
-        assert!(config.follow_symlinks);
-        assert!(config.require_index_files);
-        env::remove_var("OKC_FOLLOW_SYMLINKS");
-        env::remove_var("OKC_REQUIRE_INDEX_FILES");
-    }
-
-    #[test]
-    fn test_env_override_bm25() {
-        let _lock = ENV_MUTEX.lock().expect("env mutex lock");
-        env::set_var("OKC_BM25_TITLE_WEIGHT", "15.0");
-        env::set_var("OKC_BM25_K1", "1.5");
-        env::set_var("OKC_BM25_B", "0.5");
-        let mut config = OkcConfig::default();
-        config.apply_env_overrides().expect("env override bm25");
-        assert_eq!(config.bm25.title_weight, 15.0);
-        assert_eq!(config.bm25.k1, 1.5);
-        assert_eq!(config.bm25.b, 0.5);
-        env::remove_var("OKC_BM25_TITLE_WEIGHT");
-        env::remove_var("OKC_BM25_K1");
-        env::remove_var("OKC_BM25_B");
-    }
-
-    #[test]
-    fn test_load_config_from_file() {
-        let _lock = ENV_MUTEX.lock().expect("env mutex lock");
-        let dir = tempdir().expect("temp dir");
-        let config_path = dir.path().join("okc.toml");
-        let config_content = format!(
-            r#"
-roots = ["{}"]
-max_file_size = 1048576
-max_graph_depth = 3
-"#,
-            dir.path().display()
-        );
-        std::fs::write(&config_path, config_content).expect("write config file");
-
-        let config = OkcConfig::load(Some(&config_path)).expect("load config");
-        assert_eq!(config.roots.len(), 1);
-        assert_eq!(config.roots[0], dir.path().to_path_buf());
-        assert_eq!(config.max_file_size, 1048576);
-        assert_eq!(config.max_graph_depth, 3);
-    }
-
-    #[test]
-    fn test_load_config_file_not_found() {
-        let result = OkcConfig::load(Some(&PathBuf::from("/nonexistent/config.toml")));
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_create_default_config_file() {
-        let _lock = ENV_MUTEX.lock().expect("env mutex lock");
-        let dir = tempdir().expect("temp dir");
-        let config_dir = dir.path().join("okc");
-        std::fs::create_dir_all(&config_dir).expect("create config dir");
-
-        // Temporarily override config dir
-        let original_config_dir = dirs::config_dir();
-        unsafe { std::env::set_var("XDG_CONFIG_HOME", dir.path()) };
-
-        let result = OkcConfig::create_default_config_file();
-        assert!(result.is_ok());
-        let config_path = result.expect("config path from create_default");
-
-        // Verify content can be loaded - need to provide a valid db_path
-        let mut config = OkcConfig::load(Some(&config_path)).expect("load created config");
-        config.db_path = dir.path().join("test.db");
-        assert_eq!(config.max_file_size, 2 * 1024 * 1024);
-
-        // Restore
-        if let Some(original) = original_config_dir {
-            unsafe { std::env::set_var("XDG_CONFIG_HOME", original) };
-        } else {
-            unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
-        }
     }
 }

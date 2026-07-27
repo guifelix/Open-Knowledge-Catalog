@@ -150,7 +150,9 @@ async fn test_mcp_stdio_transport_all_tools() -> anyhow::Result<()> {
         result.get("directories").is_some(),
         "browse should return directories"
     );
-    let dirs = result["directories"].as_array().expect("directories should be array");
+    let dirs = result["directories"]
+        .as_array()
+        .expect("directories should be array");
     assert!(
         dirs.iter().any(|d| d.as_str() == Some("metrics")),
         "should have metrics dir"
