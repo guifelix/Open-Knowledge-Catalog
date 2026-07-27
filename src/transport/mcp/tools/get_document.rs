@@ -1,3 +1,9 @@
+//! MCP tool handler for retrieving a single document by path.
+//!
+//! Wraps [`OkcService::get_document`] into an MCP-compatible handler that
+//! accepts [`GetDocumentParams`] and returns a JSON-serialized document with
+//! full content, headings, links, backlinks, and metadata.
+
 use std::sync::{Arc, Mutex};
 use crate::service::OkcService;
 use crate::transport::mcp::types::{GetDocumentParams, DocumentDetailOutput};

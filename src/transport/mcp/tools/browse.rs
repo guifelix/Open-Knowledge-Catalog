@@ -1,3 +1,9 @@
+//! MCP tool handler for browsing the knowledge base directory tree.
+//!
+//! Wraps [`OkcService::browse`] into an MCP-compatible handler that accepts
+//! [`BrowseParams`] and returns a JSON-serialized directory listing with
+//! documents, subdirectories, and optional depth/limit controls.
+
 use std::sync::{Arc, Mutex};
 use crate::service::OkcService;
 use crate::transport::mcp::types::{BrowseParams, BrowseResultOutput, DirectoryDocumentOutput};

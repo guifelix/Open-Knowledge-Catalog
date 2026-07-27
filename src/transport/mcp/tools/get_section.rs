@@ -1,3 +1,9 @@
+//! MCP tool handler for extracting a single section from a document.
+//!
+//! Wraps [`OkcService::get_section`] into an MCP-compatible handler that
+//! accepts [`GetSectionParams`] and returns the heading, level, content,
+//! and sub-sections for the requested heading within a document.
+
 use std::sync::{Arc, Mutex};
 use crate::service::OkcService;
 use crate::transport::mcp::types::{GetSectionParams, SectionOutput};

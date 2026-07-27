@@ -1,3 +1,9 @@
+//! MCP tool handler for scanning and indexing a knowledge base directory.
+//!
+//! Constructs an [`OkcConfig`] from [`ScanParams`], opens the service, and
+//! runs a full scan (add, update, remove files). Returns a JSON-serialized
+//! scan result with file counts and timing information.
+
 use std::sync::{Arc, Mutex};
 use crate::config::OkcConfig;
 use crate::service::OkcService;
