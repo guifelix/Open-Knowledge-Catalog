@@ -76,7 +76,7 @@ jobs:
         run: |
           cd fuzz
           cargo fuzz run frontmatter_extraction -- -max_total_time=30
-          cargo fuzz run yaml_parsing -- -max_total_time=30
+          cargo fuzz run yaml_parsing -- -max_total_time=30 -rss_limit_mb=1024
           cargo fuzz run path_normalization -- -max_total_time=30
 
   property-tests:
