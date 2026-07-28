@@ -11,7 +11,7 @@
 
 use crate::config::Bm25Config;
 use crate::index::traits::{Result, SearchFilters, SearchIndex, SearchableDocument};
-use crate::model::document::{IndexStats, SearchResponse, SearchResult};
+use crate::model::document::{derive_display_title, IndexStats, SearchResponse, SearchResult};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Transaction};
@@ -214,8 +214,9 @@ impl SearchIndex for SqliteSearchIndex {
             .map(|(path, title, ctype, rank, body)| {
                 let excerpt = extract_excerpt(&body, query, 200);
                 SearchResult {
-                    path,
-                    title,
+                    path: path.clone(),
+                    title: title.clone(),
+                    display_title: derive_display_title(&path, title.as_deref()),
                     concept_type: ctype,
                     score: -rank,
                     matching_section: None,

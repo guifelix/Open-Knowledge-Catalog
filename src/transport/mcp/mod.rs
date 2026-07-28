@@ -265,6 +265,7 @@ impl McpServer {
                     .map(|r| SearchResultOutput {
                         path: r.path,
                         title: r.title,
+                        display_title: r.display_title,
                         concept_type: r.concept_type,
                         score: r.score,
                         excerpt: r.excerpt,

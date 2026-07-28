@@ -1,7 +1,7 @@
 //! Search query operations.
 
 use crate::index::database::RepositoryIndex;
-use crate::model::document::{SearchResponse, SearchResult};
+use crate::model::document::{derive_display_title, SearchResponse, SearchResult};
 use rusqlite::params;
 
 /// Full-text search across indexed documents.
@@ -117,8 +117,9 @@ pub fn search(
         total_matches = total;
         let excerpt = extract_excerpt(&body, query, 200);
         results.push(SearchResult {
-            path,
-            title,
+            path: path.clone(),
+            title: title.clone(),
+            display_title: derive_display_title(&path, title.as_deref()),
             concept_type: ctype,
             score: -rank,
             matching_section: None,

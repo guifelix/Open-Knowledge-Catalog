@@ -16,7 +16,7 @@ pub use content::{
 };
 pub use frontmatter::{FrontMatter, LimitError, ParseError, ParseStatus};
 pub use records::{DocumentDetail, DocumentMetadata, DocumentSummary, FileRecord};
-pub use search::{MetadataQueryResponse, SearchResponse, SearchResult};
+pub use search::{derive_display_title, MetadataQueryResponse, SearchResponse, SearchResult};
 pub use stats::{IndexStats, LimitError as StatsLimitError, ProcessChangesResult, ScanResult};
 pub use validation::{
     CheckResult, CheckStatus, ValidationIssue, ValidationReport, ValidationSummary,

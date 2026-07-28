@@ -112,7 +112,11 @@ pub(crate) struct SearchParams {
 #[derive(Serialize, schemars::JsonSchema)]
 pub(crate) struct SearchResultOutput {
     pub path: String,
+    /// Optional title from frontmatter. Falls back to `display_title` when absent.
     pub title: Option<String>,
+    /// Human-readable display name. Derived from `title` when available,
+    /// otherwise derived from the filename per OKF v0.2 §4.1.
+    pub display_title: String,
     pub concept_type: Option<String>,
     pub score: f64,
     pub excerpt: String,
