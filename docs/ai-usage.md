@@ -131,21 +131,9 @@ The MCP server is fully implemented. AI agents connect via Model Context Protoco
 }
 ```
 
-### MCP Tools (11 total)
+## MCP Tools
 
-| Tool | Description |
-|------|-------------|
-| `scan` | Scan/re-scan a root directory and index documents |
-| `browse_directory` | Inspect one area of the OKF hierarchy |
-| `get_document` | Retrieve one known concept with metadata, headings, and/or body |
-| `get_section` | Extract a specific Markdown section without the full document |
-| `search_documents` | Full-text search with optional path/type/tag filters |
-| `query_metadata` | Exact structured filtering on front-matter fields |
-| `get_links` | Outgoing links from a document |
-| `get_backlinks` | Documents referencing a concept |
-| `traverse_graph` | Explore related concepts via graph edges |
-| `get_stats` | Repository statistics (file counts, link counts, etc.) |
-| `validate_repository` | Report structural problems (broken links, malformed YAML) |
+OKC exposes 11 AI-facing tools via MCP. See [docs/features.md](features.md) for the complete MCP tools reference.
 
 ### Transport Options
 
@@ -158,6 +146,123 @@ okc serve
 # HTTP (for remote agent access)
 okc serve --transport http --host 0.0.0.0 --port 3001
 ```
+
+### Agent Configuration
+
+Configure OKC as an MCP tool server in your AI coding environment. Each agent uses a slightly different config format.
+
+#### Claude Desktop
+
+Add an entry to `claude_desktop_config.json` (Claude Desktop → Settings → Developer → Edit Config):
+
+```json
+{
+  "mcpServers": {
+    "okc": {
+      "command": "okc",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+Replace `"okc"` with the full path if the binary is not in your PATH.
+
+#### Claude Code
+
+Add to `~/.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "okc": {
+      "command": "okc",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+Or place a project-local config at `./.claude/settings.json` to bind OKC to a specific repository.
+
+#### OpenCode
+
+Add to `~/.config/opencode/opencode.json` (global) or `./opencode.json` (project-local):
+
+```json
+{
+  "mcpTools": {
+    "okc": {
+      "command": "okc",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+#### Codex (OpenAI CLI)
+
+Add to `~/.codex/config.json`:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "okc": {
+        "command": "okc",
+        "args": ["serve"]
+      }
+    }
+  }
+}
+```
+
+#### Cursor
+
+Place a `.cursor/mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "okc": {
+      "command": "okc",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+#### Windsurf
+
+Place a `.windsurf/mcp_config.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "okc": {
+      "command": "okc",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+#### Cline (VS Code)
+
+Configure in `~/.config/cline/cline_mcp_settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "okc": {
+      "command": "okc",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+> **Tip:** If `okc` is not in your PATH, replace `"okc"` with the full binary path (e.g., `"/usr/local/bin/okc"` or `"$HOME/.local/bin/okc"`).
 
 ## AI Usage Principles
 
