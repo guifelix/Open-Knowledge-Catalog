@@ -1,5 +1,6 @@
 /target
 okc_index.db
+okc_index.db-*
 *.db
 mutants.*
 .claude/
