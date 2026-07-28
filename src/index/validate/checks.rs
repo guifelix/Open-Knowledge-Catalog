@@ -166,7 +166,7 @@ impl RepositoryIndex {
                 None => continue,
             };
 
-            let fm = match YamlParser::parse(&raw_yaml) {
+            let fm = match YamlParser::parse(&raw_yaml, self.config.max_yaml_input_size) {
                 Ok(fm) => fm,
                 Err(e) => {
                     issues.push(ValidationIssue {

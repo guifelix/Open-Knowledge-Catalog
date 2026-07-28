@@ -27,7 +27,7 @@ fn prop_frontmatter_extractor_small_limit(input: Vec<u8>) -> TestCaseResult {
 }
 
 fn prop_yaml_parser_never_panics(input: String) -> TestCaseResult {
-    let _ = YamlParser::parse(&input);
+    let _ = YamlParser::parse(&input, 8 * 1024 * 1024);
     Ok(())
 }
 
@@ -163,7 +163,7 @@ fn prop_yaml_tags_sequence(tags: Vec<String>) -> TestCaseResult {
             .collect::<Vec<_>>()
             .join("\n")
     );
-    let result = YamlParser::parse(&yaml);
+    let result = YamlParser::parse(&yaml, 8 * 1024 * 1024);
 
     if let Ok(fm) = result {
         prop_assert_eq!(fm.tags, tags);
@@ -173,7 +173,7 @@ fn prop_yaml_tags_sequence(tags: Vec<String>) -> TestCaseResult {
 
 fn prop_custom_fields_preserved(key: String, value: String) -> TestCaseResult {
     let yaml = format!("{}:\n  {}\n", key, value);
-    let result = YamlParser::parse(&yaml);
+    let result = YamlParser::parse(&yaml, 8 * 1024 * 1024);
 
     if let Ok(fm) = result {
         if !["type", "title", "description", "tags"].contains(&key.as_str()) {

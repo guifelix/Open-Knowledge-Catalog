@@ -19,14 +19,34 @@ use saphyr::{LoadableYamlNode, Yaml};
 ///
 /// Uses saphyr for safe YAML loading. Extracts known keys and preserves
 /// unknown keys in the `custom` map.
+///
+/// Returns an error if `raw` exceeds `max_size` to prevent pathological
+/// inputs from causing out-of-memory conditions in the underlying library.
 pub struct YamlParser;
 
 impl YamlParser {
     /// Parse raw YAML string into FrontMatter.
     ///
+    /// `max_size` is the maximum allowed input size in bytes. Inputs larger
+    /// than this are rejected before reaching the YAML parser as a
+    /// defense-in-depth measure against pathological inputs.
+    ///
     /// Returns `Err` if YAML is not a mapping at the top level,
-    /// contains aliases, or produces a BadValue.
-    pub fn parse(raw: &str) -> Result<FrontMatter, ParseError> {
+    /// contains aliases, or produces a BadValue. Also returns `Err`
+    /// if the input exceeds `max_size`.
+    pub fn parse(raw: &str, max_size: usize) -> Result<FrontMatter, ParseError> {
+        if raw.len() > max_size {
+            return Err(ParseError {
+                stage: "yaml".into(),
+                message: format!(
+                    "YAML input too large: {} bytes (max {})",
+                    raw.len(),
+                    max_size
+                ),
+                line: None,
+            });
+        }
+
         let docs = Yaml::load_from_str(raw).map_err(|e| ParseError {
             stage: "yaml".into(),
             message: format!("YAML scan error: {:?}", e),

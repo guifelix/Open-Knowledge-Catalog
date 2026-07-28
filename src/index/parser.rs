@@ -119,8 +119,12 @@ impl DocumentParser {
             }
         };
 
-        let (front_matter, parse_status, parse_errors, front_matter_end) =
-            Self::parse_front_matter(&self.extractor, &file.path, &body);
+        let (front_matter, parse_status, parse_errors, front_matter_end) = Self::parse_front_matter(
+            &self.extractor,
+            &file.path,
+            &body,
+            self.config.max_yaml_input_size,
+        );
 
         let markdown_body = if front_matter_end < body.len() {
             body[front_matter_end..].trim_start()
@@ -212,6 +216,7 @@ impl DocumentParser {
         extractor: &FrontMatterExtractor,
         _path: &str,
         body: &str,
+        max_yaml_input_size: usize,
     ) -> (Option<FrontMatter>, ParseStatus, Vec<ParseError>, usize) {
         let mut errors = Vec::new();
 
@@ -228,7 +233,7 @@ impl DocumentParser {
             None => return (None, ParseStatus::Ok, errors, 0),
         };
 
-        match YamlParser::parse(&raw_yaml) {
+        match YamlParser::parse(&raw_yaml, max_yaml_input_size) {
             Ok(fm) => (Some(fm), ParseStatus::Ok, errors, front_matter_end),
             Err(e) => {
                 errors.push(e);
