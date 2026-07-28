@@ -341,6 +341,38 @@ fn test_get_section() {
     let (heading, content) = section.expect("section should be Some");
     assert_eq!(heading, "Definition");
     assert!(content.contains("Monthly Revenue represents the total recognized recurring revenue"));
+
+    // Prefix match: "Def" should match heading "Definition"
+    let prefix_section = service
+        .get_section("metrics/monthly-revenue.md", "Def", 5000)
+        .expect("get section by prefix");
+    assert!(prefix_section.is_some(), "prefix match should return Some");
+    let (prefix_heading, prefix_content) = prefix_section.unwrap();
+    assert_eq!(
+        prefix_heading, "Definition",
+        "prefix match should return full heading"
+    );
+    assert!(prefix_content
+        .contains("Monthly Revenue represents the total recognized recurring revenue"));
+
+    // Prefix match: "Rec" should match heading "Recognition Rules" (first heading starting with "Rec")
+    let rec_section = service
+        .get_section("metrics/monthly-revenue.md", "Rec", 5000)
+        .expect("get section by prefix");
+    assert!(
+        rec_section.is_some(),
+        "prefix match 'Rec' should return Some"
+    );
+    let (rec_heading, _) = rec_section.unwrap();
+    assert_eq!(rec_heading, "Recognition Rules");
+
+    // Case-insensitive prefix match
+    let ci_prefix = service
+        .get_section("metrics/monthly-revenue.md", "def", 5000)
+        .expect("get section by case-insensitive prefix");
+    assert!(ci_prefix.is_some(), "case-insensitive prefix should match");
+    let (ci_heading, _) = ci_prefix.unwrap();
+    assert_eq!(ci_heading, "Definition");
 }
 
 #[test]

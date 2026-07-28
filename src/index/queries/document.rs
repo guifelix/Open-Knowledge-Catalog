@@ -185,6 +185,18 @@ pub fn get_section(
         }
     }
 
+    // Third pass: prefix match (case-insensitive) — for when AI agents approximate
+    for section in &sections {
+        if section.heading.to_lowercase().starts_with(&heading_lower) {
+            let content = if section.content.len() > max_chars {
+                section.content.chars().take(max_chars).collect()
+            } else {
+                section.content.clone()
+            };
+            return Ok(Some((section.heading.clone(), content)));
+        }
+    }
+
     Ok(None)
 }
 
