@@ -190,7 +190,7 @@ impl McpServer {
             max_chars,
         }): Parameters<GetDocumentParams>,
     ) -> String {
-        let include = include.unwrap_or_default();
+        let include = include.unwrap_or_else(|| vec!["body".to_string(), "headings".to_string()]);
         let max_chars = max_chars.unwrap_or(12000);
 
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
