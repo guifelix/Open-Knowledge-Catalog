@@ -4,6 +4,12 @@
 [![Crates.io Downloads](https://img.shields.io/crates/d/okc.svg)](https://crates.io/crates/okc)
 [![CI](https://github.com/guifelix/Open-Knowledge-Catalog/actions/workflows/ci.yml/badge.svg)](https://github.com/guifelix/Open-Knowledge-Catalog/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![MCP Server](https://badge.mcpx.dev?type=server)](https://mcpx.dev)
+[![Release](https://img.shields.io/github/v/release/guifelix/Open-Knowledge-Catalog?label=release)](https://github.com/guifelix/Open-Knowledge-Catalog/releases)
+[![Rust 1.80+](https://img.shields.io/badge/rust-1.80+-dea584?logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![docs.rs](https://img.shields.io/docsrs/okc)](https://docs.rs/okc)
+[![OKF Conformance](https://img.shields.io/badge/OKF%20conformance-passing-brightgreen)](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
+[![Deps.rs](https://img.shields.io/deps-rs/okc/latest)](https://crates.io/crates/okc/dependencies)
 
 A local-first tool that allows AI agents to safely browse, parse, search, and reason over an [Open Knowledge Format (OKF)](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) repository — via CLI, MCP server, or filesystem watcher.
 
