@@ -67,6 +67,12 @@ pub struct OkcConfig {
     #[serde(default = "default_max_front_matter_size")]
     pub max_front_matter_size: usize,
 
+    /// Maximum YAML input size in bytes. Larger input is rejected before parsing
+    /// to prevent pathological inputs from causing OOM in the YAML library.
+    /// Default: 8 MiB.
+    #[serde(default = "default_max_yaml_input_size")]
+    pub max_yaml_input_size: usize,
+
     /// Maximum depth for graph traversal operations.
     /// Default: 5.
     #[serde(default = "default_max_graph_depth")]
@@ -130,6 +136,10 @@ fn default_max_front_matter_size() -> usize {
     64 * 1024
 }
 
+fn default_max_yaml_input_size() -> usize {
+    8 * 1024 * 1024
+}
+
 fn default_max_graph_depth() -> usize {
     5
 }
@@ -157,6 +167,7 @@ impl Default for OkcConfig {
             exclude_patterns: default_exclude_patterns(),
             max_file_size: default_max_file_size(),
             max_front_matter_size: default_max_front_matter_size(),
+            max_yaml_input_size: default_max_yaml_input_size(),
             max_graph_depth: default_max_graph_depth(),
             max_graph_nodes: default_max_graph_nodes(),
             follow_symlinks: false,
@@ -258,6 +269,7 @@ impl OkcConfig {
     /// - OKC_DB_PATH
     /// - OKC_MAX_FILE_SIZE
     /// - OKC_MAX_FRONT_MATTER_SIZE
+    /// - OKC_MAX_YAML_INPUT_SIZE
     /// - OKC_MAX_GRAPH_DEPTH
     /// - OKC_MAX_GRAPH_NODES
     /// - OKC_FOLLOW_SYMLINKS (true/false)
@@ -300,6 +312,13 @@ impl OkcConfig {
                 ConfigError::EnvParseError(format!(
                     "OKC_MAX_FRONT_MATTER_SIZE: invalid usize: {val}"
                 ))
+            })?;
+        }
+
+        // Max YAML input size
+        if let Ok(val) = std::env::var("OKC_MAX_YAML_INPUT_SIZE") {
+            self.max_yaml_input_size = val.parse().map_err(|_| {
+                ConfigError::EnvParseError(format!("OKC_MAX_YAML_INPUT_SIZE: invalid usize: {val}"))
             })?;
         }
 
@@ -444,6 +463,12 @@ impl OkcConfig {
         if self.max_front_matter_size == 0 {
             return Err(ConfigError::ValidationError(
                 "max_front_matter_size must be greater than 0".into(),
+            ));
+        }
+
+        if self.max_yaml_input_size == 0 {
+            return Err(ConfigError::ValidationError(
+                "max_yaml_input_size must be greater than 0".into(),
             ));
         }
 

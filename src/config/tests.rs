@@ -31,6 +31,7 @@ fn test_okc_config_default() {
     assert!(!config.exclude_patterns.is_empty());
     assert_eq!(config.max_file_size, 2 * 1024 * 1024);
     assert_eq!(config.max_front_matter_size, 64 * 1024);
+    assert_eq!(config.max_yaml_input_size, 8 * 1024 * 1024);
     assert_eq!(config.max_graph_depth, 5);
     assert_eq!(config.max_graph_nodes, 100);
     assert!(!config.follow_symlinks);
@@ -88,6 +89,7 @@ fn test_create_default_config_file() {
     let content = std::fs::read_to_string(&config_path).expect("read config file");
     assert!(content.contains("max_file_size = 2097152"));
     assert!(content.contains("max_front_matter_size = 65536"));
+    assert!(content.contains("max_yaml_input_size = 8388608"));
 
     // Restore
     if let Some(original) = original_config_dir {
@@ -139,6 +141,16 @@ fn test_env_overrides_max_front_matter_size() {
     config.apply_env_overrides().expect("apply env");
     assert_eq!(config.max_front_matter_size, 32768);
     unsafe { env::remove_var("OKC_MAX_FRONT_MATTER_SIZE") };
+}
+
+#[test]
+fn test_env_overrides_max_yaml_input_size() {
+    let _lock = env_lock();
+    unsafe { env::set_var("OKC_MAX_YAML_INPUT_SIZE", "4194304") };
+    let mut config = OkcConfig::default();
+    config.apply_env_overrides().expect("apply env");
+    assert_eq!(config.max_yaml_input_size, 4194304);
+    unsafe { env::remove_var("OKC_MAX_YAML_INPUT_SIZE") };
 }
 
 #[test]
@@ -299,6 +311,16 @@ fn test_invalid_env_max_front_matter_size() {
     let result = config.apply_env_overrides();
     assert!(result.is_err());
     unsafe { env::remove_var("OKC_MAX_FRONT_MATTER_SIZE") };
+}
+
+#[test]
+fn test_invalid_env_max_yaml_input_size() {
+    let _lock = env_lock();
+    unsafe { env::set_var("OKC_MAX_YAML_INPUT_SIZE", "not_a_number") };
+    let mut config = OkcConfig::default();
+    let result = config.apply_env_overrides();
+    assert!(result.is_err());
+    unsafe { env::remove_var("OKC_MAX_YAML_INPUT_SIZE") };
 }
 
 #[test]
