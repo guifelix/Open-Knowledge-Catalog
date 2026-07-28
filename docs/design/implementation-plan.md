@@ -1,3 +1,11 @@
+---
+type: design
+title: Implementation Plan
+description: Design document outlining the practical implementation plan for the Open Knowledge Catalog
+tags: [design, implementation, planning]
+owner: felix
+status: draft
+---
 
 # Open Knowledge Catalog
 

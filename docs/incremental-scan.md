@@ -1,3 +1,12 @@
+---
+type: reference
+title: Incremental Scan and Safety Limits
+description: Technical documentation for the incremental file scanning system, covering design decisions, safety limits, and behavioral guarantees
+tags: [scanning, filesystem, performance, safety]
+owner: felix
+status: draft
+---
+
 # Incremental Scan & Safety Limits
 
 ## Overview

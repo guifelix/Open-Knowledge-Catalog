@@ -1,3 +1,12 @@
+---
+type: decision
+title: "ADR-001: SQLite as Primary Storage Backend"
+description: Decision to use SQLite as the primary storage backend for its portability, zero configuration, and single-file simplicity
+tags: [adr, storage, sqlite, architecture, decision]
+owner: felix
+status: stable
+---
+
 # ADR-001: SQLite as Primary Storage Backend
 
 **Status**: Accepted

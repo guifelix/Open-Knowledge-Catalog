@@ -1,3 +1,12 @@
+---
+type: reference
+title: Data Flow
+description: Architecture reference documenting primary data flows in the Open Knowledge Catalog system
+tags: [architecture, data-flow, reference]
+owner: felix
+status: draft
+---
+
 # Data Flow Documentation
 
 ## Overview

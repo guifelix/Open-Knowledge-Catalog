@@ -1,3 +1,12 @@
+---
+type: decision
+title: "ADR-004: MCP Transport for AI Integration"
+description: Decision to use Model Context Protocol (MCP) for AI assistant integration
+tags: [adr, mcp, transport, architecture, decision]
+owner: felix
+status: stable
+---
+
 # ADR 004: MCP Transport for AI Integration
 
 **Status**: Accepted

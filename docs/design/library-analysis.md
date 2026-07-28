@@ -1,3 +1,12 @@
+---
+type: analysis
+title: Library Analysis
+description: Evaluation of Rust libraries for OKF scanning, indexing, AI retrieval, and CLI tooling
+tags: [analysis, libraries, dependencies, rust]
+owner: felix
+status: stable
+---
+
 Yes. Assuming Rust, these are the libraries I would seriously evaluate for an OKF scanner and AI retrieval tool.
 
 Recommended baseline stack

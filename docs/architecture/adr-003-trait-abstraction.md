@@ -1,3 +1,12 @@
+---
+type: decision
+title: "ADR-003: Trait-Based Storage Abstraction"
+description: Decision to use Rust traits for storage abstraction, enabling interchangeable backends
+tags: [adr, traits, abstraction, architecture, decision]
+owner: felix
+status: stable
+---
+
 # ADR 003: Trait-Based Storage Abstraction
 
 **Status**: Accepted

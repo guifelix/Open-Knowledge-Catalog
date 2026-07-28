@@ -1,11 +1,13 @@
 ---
-type: Documentation
+type: guide
 title: Release Process
 description: How to create a new OKC release
 tags:
   - release
   - operations
   - ci
+owner: felix
+status: stable
 ---
 
 # Release Process

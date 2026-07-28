@@ -1,3 +1,12 @@
+---
+type: analysis
+title: Language Comparison
+description: Comparative analysis of programming languages for the Open Knowledge Catalog, evaluating Rust, Go, Python, and TypeScript
+tags: [analysis, languages, architecture, decision]
+owner: felix
+status: stable
+---
+
 Rust is a strong choice, but not automatically the best choice.
 
 For the tool you described, I would choose Rust when you want to ship a durable, local-first executable that scans large repositories efficiently and runs safely as an MCP server.

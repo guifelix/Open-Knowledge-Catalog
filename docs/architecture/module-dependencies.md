@@ -1,3 +1,12 @@
+---
+type: reference
+title: Module Dependencies
+description: Architecture reference documenting module dependency relationships in the Open Knowledge Catalog crate
+tags: [architecture, dependencies, modules, reference]
+owner: felix
+status: draft
+---
+
 # Module Dependency Diagram
 
 ## Overview

@@ -1,3 +1,12 @@
+---
+type: decision
+title: "ADR-002: FTS5 for Full-Text Search"
+description: Decision to use SQLite FTS5 extension for full-text search capabilities
+tags: [adr, search, fts5, architecture, decision]
+owner: felix
+status: stable
+---
+
 # ADR 002: FTS5 for Full-Text Search
 
 **Status**: Accepted

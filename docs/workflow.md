@@ -1,3 +1,12 @@
+---
+type: guide
+title: Development Workflow
+description: Strict development workflow process for task selection, execution, and quality gates
+tags: [workflow, development, process]
+owner: felix
+status: draft
+---
+
 # strictly follow the process
 
 1. read thorotughtly and acknowledge this process

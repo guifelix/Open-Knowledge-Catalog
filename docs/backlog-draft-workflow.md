@@ -1,3 +1,12 @@
+---
+type: guide
+title: Backlog Draft Workflow
+description: Workflow instructions for creating backlog drafts with complete metadata including acceptance criteria, definition of done, dependencies, and references
+tags: [workflow, backlog, drafts, process]
+owner: felix
+status: draft
+---
+
 # How to Create Full Drafts in Backlog.md
 
 > **For AI Agents**: This guide shows the **only way** to create drafts with complete metadata (ACs, DoD, dependencies, references, priority, type, etc.).

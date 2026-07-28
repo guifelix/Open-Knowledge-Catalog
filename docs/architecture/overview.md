@@ -1,3 +1,12 @@
+---
+type: reference
+title: Architecture Overview
+description: High-level architecture overview of the Open Knowledge Catalog knowledge base indexer and query engine
+tags: [architecture, overview, reference]
+owner: felix
+status: draft
+---
+
 # Open Knowledge Catalog - Architecture Overview
 
 ## System Context
