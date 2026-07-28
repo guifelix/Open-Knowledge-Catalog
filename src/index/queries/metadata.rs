@@ -39,6 +39,24 @@ pub fn query_metadata(
     select: &[String],
     limit: usize,
 ) -> Result<MetadataQueryResponse, anyhow::Error> {
+    // Validate filter keys — reject syntax that looks like raw user input
+    for key in filters.keys() {
+        if key.contains('=') {
+            return Err(anyhow::anyhow!(
+                "Invalid filter key: '{}'. Filter keys use JSON object syntax, not '='. \
+                 Pass filters as a JSON object, e.g. {{\"type\": \"Documentation\"}}",
+                key
+            ));
+        }
+        if key.contains(' ') {
+            return Err(anyhow::anyhow!(
+                "Invalid filter key: '{}'. Filter keys must not contain spaces. \
+                 Pass filters as a JSON object, e.g. {{\"type\": \"Documentation\"}}",
+                key
+            ));
+        }
+    }
+
     let conn = index.pool().get()?;
 
     // Determine which fields to select

@@ -14,7 +14,7 @@ pub fn browse_directory(
     depth: usize,
     limit: usize,
 ) -> Result<BrowseResponse, anyhow::Error> {
-    let prefix = if path.is_empty() || path == "/" {
+    let prefix = if path.is_empty() || path == "/" || path == "." {
         String::new()
     } else {
         format!("{}/", path.trim_start_matches('/'))
