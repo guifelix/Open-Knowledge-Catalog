@@ -40,7 +40,9 @@ OKF files → scanner & parser → structured index → bounded AI tool calls �
 
 ## Features
 
-### CLI Commands (13 subcommands)
+OKC provides a comprehensive set of tools for browsing, parsing, searching, and reasoning over OKF repositories. See [docs/features.md](docs/features.md) for the full feature reference.
+
+### Quick Reference
 
 | Command | Purpose |
 |---------|---------|
@@ -57,112 +59,6 @@ OKF files → scanner & parser → structured index → bounded AI tool calls �
 | `okc stats` | Repository statistics |
 | `okc serve` | Start MCP server (stdio or HTTP/SSE) |
 | `okc watch` | File system watching with incremental updates |
-
-### MCP Tools (11 AI-facing operations)
-
-When running as an MCP server (`okc serve`), these tools are exposed to AI agents:
-
-| Tool | Description |
-|------|-------------|
-| `scan` | Scan/re-scan root directories and index documents |
-| `browse_directory` | Inspect one area of the OKF hierarchy |
-| `get_document` | Retrieve one known concept with metadata, headings, and/or body |
-| `get_section` | Extract a specific Markdown section without the full document |
-| `search_documents` | Full-text search with optional path/type/tag filters |
-| `query_metadata` | Exact structured filtering on front-matter fields |
-| `get_links` | Outgoing links from a document |
-| `get_backlinks` | Documents referencing a concept |
-| `traverse_graph` | Explore related concepts via graph edges |
-| `get_stats` | Repository statistics (file counts, link counts, etc.) |
-| `validate_repository` | Report structural problems (broken links, malformed YAML, missing index files) |
-
-### MCP Server Transport
-
-Run the MCP server in two modes:
-
-```bash
-# stdio (default) — for AI agents that launch the binary directly
-okc serve
-
-# HTTP/SSE — for web clients, remote access
-okc serve --transport http --host 0.0.0.0 --port 3001
-```
-
-### Filesystem Watcher
-
-Keep your index up to date automatically:
-
-```bash
-okc watch                    # Watch configured roots
-okc watch --root ./knowledge --debounce 300 --reconcile 600
-```
-
-Features: debounced event batching, editor temp-file filtering (`.swp`, `~`, `.tmp`), gitignore-aware exclusion, periodic full reconciliation, incremental index updates.
-
-### Incremental Scanning
-
-Content-hash based change detection (Blake3 sampling) enables fast re-scans — unchanged files are skipped entirely.
-
-### Supported OKF Format
-
-Each document is a Markdown file with YAML front matter:
-
-```markdown
----
-type: Metric
-title: Monthly Revenue
-description: Recognized recurring revenue for the month
-tags:
-  - finance
-  - executive
-owner: Finance Analytics
-status: published
----
-
-# Definition
-
-Monthly Revenue represents...
-
-# Calculation
-
-Revenue is recognized when...
-```
-
-### Repository Structure
-
-```
-/
-├── metrics/
-│   ├── index.md
-│   ├── monthly-revenue.md
-│   └── customer-count.md
-└── datasets/
-    ├── index.md
-    └── customer-orders.md
-```
-
-- `index.md` files provide directory summaries (optional, configurable)
-- Relative links between documents are resolved and validated
-- Custom front-matter fields are preserved as generic metadata
-
-### Repository Validation
-
-`okc validate` checks 8 categories of structural problems — broken links, malformed YAML, circular references, duplicate content, missing index files, and more. Supports `--json` for machine-parseable output:
-
-```bash
-okc validate --json
-```
-
-### Response Size Limits
-
-Configurable limits prevent excessive output:
-
-- `max_response_chars`: 500,000 characters
-- `max_scan_results`: 1,000 entries
-- `max_graph_depth`: 5
-- `max_graph_nodes`: 100
-
-Responses include `truncated: true` when limits are hit.
 
 ## Installation
 
