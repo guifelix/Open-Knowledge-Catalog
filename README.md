@@ -144,6 +144,7 @@ roots = ["./knowledge"]
 exclude_patterns = [".git/", "node_modules/"]
 max_file_size = 2097152           # 2 MB
 max_front_matter_size = 65536     # 64 KB
+max_yaml_input_size = 8388608    # 8 MB
 follow_symlinks = false
 
 [indexer]

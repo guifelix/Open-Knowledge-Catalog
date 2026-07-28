@@ -41,6 +41,9 @@ max_file_size = 2097152          # 2 MB
 # Maximum front-matter size (bytes)
 max_front_matter_size = 65536    # 64 KB
 
+# Maximum YAML input size before parsing (rejects pathological inputs)
+max_yaml_input_size = 8388608   # 8 MB
+
 # Follow symlinks during scan
 follow_symlinks = false
 
@@ -81,6 +84,7 @@ OKC_DB_PATH="/data/okc_index.db"
 | `exclude_patterns` | `Vec<String>` | `[".git/", "node_modules/", "target/", ".env*"]` | Additional glob patterns to exclude |
 | `max_file_size` | `u64` | `2_097_152` (2 MB) | Skip files larger than this |
 | `max_front_matter_size` | `u64` | `65_536` (64 KB) | Reject front matter larger than this |
+| `max_yaml_input_size` | `usize` | `8_388_608` (8 MB) | Reject YAML input larger than this (OOM defense) |
 | `follow_symlinks` | `bool` | `false` | Follow symlinks during walk |
 
 ## Indexer Configuration
