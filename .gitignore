@@ -2,3 +2,4 @@
 okc_index.db
 *.db
 mutants.*
+.claude/

@@ -1,0 +1,9 @@
+# OKC Configuration
+# Roots are the directories to index and serve
+roots = ["docs"]
+
+# Database path
+db_path = "okc_index.db"
+
+# Scanner settings
+scan_interval_secs = 60
