@@ -1,7 +1,7 @@
 # Open Knowledge Catalog (OKC) — Competitor Landscape Compilation
 
 **Generated:** 2026-07-27  
-**Source:** 35 individual assessment files in `docs/competitors/`  
+**Source:** 36 individual assessment files in `docs/competitors/`  
 **Scope:** Complete competitive analysis for OKC positioning, threat assessment, and strategic roadmap
 
 ---
@@ -19,7 +19,7 @@ OKC (Open Knowledge Catalog) is a **Rust-based, local-first knowledge catalog** 
 
 ---
 
-## Competitor Taxonomy (36 Assessments)
+## Competitor Taxonomy (37 Assessments)
 
 ### Tier 1: Direct OKF Competitors (Highest Relevance)
 
@@ -52,6 +52,7 @@ OKC (Open Knowledge Catalog) is a **Rust-based, local-first knowledge catalog** 
 | **hermes-okf** | Python agent memory | **Low** | Hot/cold memory tiers, Git snapshots, session checkpoints, OKF v0.2.9 |
 | **semantic-memory-mcp** | Rust MCP (48+ tools) | **Medium** | Evidence-scored retrieval, contradiction detection, bitemporal, claim ledger, trust layer |
 | **tf-idf-mcp** (category) | Various MCP servers | **Medium-High** | Zero-dep TF-IDF/BM25, write-capable MCP, self-improving loops, Obsidian compat (Knowledge Keeper) |
+| **fff** (dmtrKovalenko) | Rust MCP file-search engine | **Low-Medium** | Frecency-ranked fuzzy file search, 4-mode SIMD grep, bigram-inverted path index (500k+ files), LMDB persistence, 16 MCP tools, Neovim plugin — file finder, not knowledge catalog |
 | **vagus** | Rust CLI hybrid search | **Medium** | Tantivy BM25 + EmbeddingGemma + RRF + cross-encoder rerank + HyDE query expansion — PARA-focused |
 
 ### Tier 3: General Agent Knowledge Infrastructure (Broader Scope)
@@ -84,29 +85,33 @@ OKC (Open Knowledge Catalog) is a **Rust-based, local-first knowledge catalog** 
 
 ## Comparative Capability Matrix
 
-### Core Capabilities (OKC vs Top Competitors)
+### Core Capabilities (OKC vs Top Competitors + fff)
 
-| Capability | OKC | vaultdb | okq | okf-http | copperbox | travisjakel | basic-mem | knowledge-mcp | relay-knowledge | tribal | vagus |
-|------------|-----|---------|-----|----------|-----------|-------------|-----------|---------------|-----------------|--------|-------|
-| **OKF Spec** | v0.2 | v0.1 | v0.1 | v0.2 | v0.1 | v0.1 | Proprietary | Proprietary | Proprietary | Proprietary | Any markdown |
-| **Storage** | SQLite+FTS5 | SQLite+FTS5 (opt) | Tantivy | SQLite | In-memory | DuckDB | SQLite+FastEmbed | In-memory | SQLite (partitioned) | Postgres+pgvector | Tantivy + usearch |
-| **Full-text Search** | BM25/FTS5 | ❌ (separate crate) | Tantivy BM25 | Basic LIKE | ❌ | DuckDB FTS | Hybrid (FastEmbed) | TF-IDF | BM25+local sigs+ANN | pgvector | Tantivy BM25 |
-| **Vector Search** | ❌ Planned | ❌ | ❌ | ❌ | ❌ | Embedding col (unused) | ✅ FastEmbed | ❌ | ✅ Local hashed ANN | ✅ pgvector | ✅ EmbeddingGemma ONNX |
-| **Reranking** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ Cross-encoder |
-| **Query Expansion** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ HyDE via Qwen3 GGUF |
-| **Graph Traversal** | ✅ BFS (depth/node limits) | ✅ LinkPredicate::Where | ❌ | ✅ Relations API | ⚠️ Implicit | ✅ Context/impact | ❌ | ✅ 10 graphs | ✅ Hybrid + code graph | ✅ Typed relations | ❌ |
-| **MCP Server** | ✅ 11 tools, stdio+HTTP/SSE | ✅ 12 tools, stdio only | ❌ | ❌ | ✅ 11 tools | ✅ 8 tools, stdio only | ✅ 15+ tools | ❌ (hooks only) | ✅ Streamable HTTP | ✅ stdio/HTTP/SSE | ❌ CLI only |
-| **File Watching** | ✅ notify + debounce | ❌ Philosophy | ❌ | ❌ | ❌ | ❌ | Manual sync | ❌ | ✅ Incremental | ❌ | ❌ |
-| **Mutation Safety** | ❌ Read-only MCP | ✅ Plan/execute, lock, journal | ❌ | ❌ | ❌ | ❌ | ✅ Full CRUD via MCP | ✅ Draft/publish | ✅ Worker proposals | ❌ | ❌ |
-| **Export Formats** | ❌ JSON only | ✅ CSV/TSV/JSON/YAML/XLSX | ❌ | ❌ | ❌ | ❌ | Markdown files | ❌ | ❌ | ❌ | ❌ |
-| **Virtual Fields** | ⚠️ Implicit | ✅ 12 computed fields | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| **Schema Validation** | ✅ 8-category | ✅ Inference+validation | ❌ | ❌ | ❌ | ✅ Pydantic strict | ⚠️ Schema infer | ❌ | ❌ | ❌ | ❌ |
-| **Lineage/History** | ✅ `lineage` tool | ❌ | ❌ | ❌ | ❌ | ❌ | Git history | ❌ | ❌ | Graph versioning | ❌ |
-| **Section Extraction** | ✅ `get_section` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| **Metadata Query** | ✅ `query_metadata` | ❌ | ✅ Facets | ❌ | ❌ | ❌ | Tags only | ❌ | ❌ | ❌ | ❌ |
-| **Agent Onboarding** | ❌ | ❌ | ❌ | ❌ | ✅ Excellent docs | ❌ | ✅ Claude Code plugin | ❌ | ❌ | ✅ Skills repo | ❌ |
-| **Distribution** | `cargo install` | `cargo install` | `cargo install` | Prebuilt .deb, nightly CI | `npx` / npm | Python + R deps | `uvx` / Homebrew | curl/sh / brew | Single binary | Docker Compose | `cargo install` |
-| **Auth/Scopes** | ❌ | ❌ | ❌ | ✅ Argon2 + sessions | ❌ | ❌ | ❌ | ❌ | Scope policy | ✅ OAuth 2.1 + scopes | ❌ |
+> **fff note:** fff is a file-system search engine, not a knowledge catalog. Its capabilities are
+> specific to file-path search and content grep. Indicators below measure overlap with OKC's
+> file-search features only — fff has no knowledge-model capabilities by design.
+
+| Capability | OKC | vaultdb | okq | okf-http | copperbox | travisjakel | basic-mem | knowledge-mcp | relay-knowledge | tribal | vagus | fff |
+|------------|-----|---------|-----|----------|-----------|-------------|-----------|---------------|-----------------|--------|-------|-----|
+| **OKF Spec** | v0.2 | v0.1 | v0.1 | v0.2 | v0.1 | v0.1 | Proprietary | Proprietary | Proprietary | Proprietary | Any markdown | ❌ (no knowledge model) |
+| **Storage** | SQLite+FTS5 | SQLite+FTS5 (opt) | Tantivy | SQLite | In-memory | DuckDB | SQLite+FastEmbed | In-memory | SQLite (partitioned) | Postgres+pgvector | Tantivy + usearch | LMDB (heed) — opaque KV |
+| **Full-text Search** | BM25/FTS5 | ❌ (separate crate) | Tantivy BM25 | Basic LIKE | ❌ | DuckDB FTS | Hybrid (FastEmbed) | TF-IDF | BM25+local sigs+ANN | pgvector | Tantivy BM25 | ✅ 4-mode grep (ripgrep, AC, fuzzy, SIMD) |
+| **Vector Search** | ❌ Planned | ❌ | ❌ | ❌ | ❌ | Embedding col (unused) | ✅ FastEmbed | ❌ | ✅ Local hashed ANN | ✅ pgvector | ✅ EmbeddingGemma ONNX | ❌ |
+| **Reranking** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ Cross-encoder | ❌ |
+| **Query Expansion** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ HyDE via Qwen3 GGUF | ❌ |
+| **Graph Traversal** | ✅ BFS (depth/node limits) | ✅ LinkPredicate::Where | ❌ | ✅ Relations API | ⚠️ Implicit | ✅ Context/impact | ❌ | ✅ 10 graphs | ✅ Hybrid + code graph | ✅ Typed relations | ❌ | ❌ |
+| **MCP Server** | ✅ 11 tools, stdio+HTTP/SSE | ✅ 12 tools, stdio only | ❌ | ❌ | ✅ 11 tools | ✅ 8 tools, stdio only | ✅ 15+ tools | ❌ (hooks only) | ✅ Streamable HTTP | ✅ stdio/HTTP/SSE | ❌ CLI only | ✅ 16 tools, stdio only |
+| **File Watching** | ✅ notify + debounce | ❌ Philosophy | ❌ | ❌ | ❌ | ❌ | Manual sync | ❌ | ✅ Incremental | ❌ | ❌ | ❌ (rescan-based) |
+| **Mutation Safety** | ❌ Read-only MCP | ✅ Plan/execute, lock, journal | ❌ | ❌ | ❌ | ❌ | ✅ Full CRUD via MCP | ✅ Draft/publish | ✅ Worker proposals | ❌ | ❌ | ❌ (read-only MCP) |
+| **Export Formats** | ❌ JSON only | ✅ CSV/TSV/JSON/YAML/XLSX | ❌ | ❌ | ❌ | ❌ | Markdown files | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Virtual Fields** | ⚠️ Implicit | ✅ 12 computed fields | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Schema Validation** | ✅ 8-category | ✅ Inference+validation | ❌ | ❌ | ❌ | ✅ Pydantic strict | ⚠️ Schema infer | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Lineage/History** | ✅ `lineage` tool | ❌ | ❌ | ❌ | ❌ | ❌ | Git history | ❌ | ❌ | Graph versioning | ❌ | ❌ (frecency offline) |
+| **Section Extraction** | ✅ `get_section` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Metadata Query** | ✅ `query_metadata` | ❌ | ✅ Facets | ❌ | ❌ | ❌ | Tags only | ❌ | ❌ | ❌ | ❌ | ✅ frecency stats |
+| **Agent Onboarding** | ❌ | ❌ | ❌ | ❌ | ✅ Excellent docs | ❌ | ✅ Claude Code plugin | ❌ | ❌ | ✅ Skills repo | ❌ | ❌ |
+| **Distribution** | `cargo install` | `cargo install` | `cargo install` | Prebuilt .deb, nightly CI | `npx` / npm | Python + R deps | `uvx` / Homebrew | curl/sh / brew | Single binary | Docker Compose | `cargo install` | `cargo install` / npm |
+| **Auth/Scopes** | ❌ | ❌ | ❌ | ✅ Argon2 + sessions | ❌ | ❌ | ❌ | ❌ | Scope policy | ✅ OAuth 2.1 + scopes | ❌ | ❌ |
 
 ---
 
@@ -156,6 +161,7 @@ OKC (Open Knowledge Catalog) is a **Rust-based, local-first knowledge catalog** 
 | **a3s/coding-tools** | Non-competitor | Wrong problem space. |
 | **gnosis** | Non-competitor | Container runtime. |
 | **obscure-tools** | Non-competitor | Ghost/abandoned/wrong domain. |
+| **fff** | Different layer | File-finder with MCP, not a knowledge catalog. Overlap only on file-search MCP tools (grep, find). No OKF model, no graph, no concept storage. Best-in-class frecency file search worth adopting as pattern. |
 
 ---
 
@@ -315,7 +321,7 @@ OKC (Open Knowledge Catalog) is a **Rust-based, local-first knowledge catalog** 
 
 ## Appendix: Assessment File Index
 
-All 35 source assessments in `docs/competitors/`:
+All 36 source assessments in `docs/competitors/`:
 
 1. `a3s-coding-tools-assessment.md` — Non-competitor (backend framework + coding plugin)
 2. `arkouda-memstead-assessment.md` — Arkouda (HPC, unrelated) + Memstead (schema KG, Medium threat)
@@ -323,36 +329,37 @@ All 35 source assessments in `docs/competitors/`:
 4. `basic-memory-assessment.md` — Basic Memory (Medium-High threat, 3.5k★)
 5. `copperbox-okf-mcp-assessment.md` — copperbox/okf-mcp (Medium threat, federation)
 6. `equationalapplications-core-okf-assessment.md` — core-okf (Low, symbiotic, spec authority)
-7. `galdor-memory-okf-assessment.md` — galdor/memory-okf (Low, galdor-locked)
-8. `gnosis-dkp-assessment.md` — gnosis (unrelated) + dkp (Medium-High, knowledge packs)
-9. `gobline-gooseberry-nexis-okul-assessment.md` — nexus-memory, knowledge-mcp, nexi-lab/nexus
-10. `hermes-okf-assessment.md` — hermes-okf (Low direct, Medium architectural)
-11. `hyalo-assessment.md` — hyalo (Medium, best CLI for vault maintenance)
-12. `markbase-assessment.md` — markbase (Medium, template-driven schema enforcement)
-13. `mcp-knowledge-base-assessment.md` — mcp-knowledge-base (Medium, TF-IDF + governance, in-memory)
-14. `mdvault-assessment.md` — mdvault (Low, productivity vault)
-15. `memcrate-ai-memory-assessment.md` — memcrate + ai-memory (Low direct, Medium architectural)
-16. `obscure-tools-assessment.md` — 6 minor tools (None/Low)
-17. `okapi-okf-assessment.md` — okapi-okf (Low, human-facing IDE)
-18. `okf-cran-travisjakel-assessment.md` — CRAN okf (Low direct, Medium feature ref)
-19. `okf-ecosystem-assessment.md` — Ecosystem index (6 independent crates, no coordination)
-20. `okf-generator-tommypacker-assessment.md` — okf-generator (Low, bundle producer)
-21. `okf-generator-umairbaig8-assessment.md` — okf-generator (Medium, code intelligence + MCP)
-22. `okf-http-assessment.md` — okf-http (Medium, web UI + packages + auth)
-23. `okf-tool-assessment.md` — okf-tool (Low, library-first)
-24. `okf-toolset-assessment.md` — okf-toolset (Low, validation layer collection)
-25. `okf-tools-assessment.md` — okf-tools npm (Low, v0.0.1 corporate)
-26. `okf-w4g1-assessment.md` — okf (W4G1) (Low, symbiotic, spec reference)
-27. `okq-assessment.md` — okq (Medium, best pure search)
-28. `openwiki-assessment.md` — openwiki (Medium-High, generative wiki, 7.8k dl/week)
-29. `semantic-memory-mcp-assessment.md` — semantic-memory-mcp (Medium, 48 tools, evidence model)
-30. `spec-okf-assessment.md` — spec-okf (Low, scaffolding + methodology)
-31. `tf-idf-mcp-assessment.md` — TF-IDF MCP category (Medium-High, 9+ projects)
-32. `travisjakel-okf-ingest-assessment.md` — travisjakel stack (Medium, closest architectural competitor)
-33. `tribal-relay-knowledge-assessment.md` — tribal + relay-knowledge (Medium/High)
-34. `vaultdb-assessment.md` — vaultdb (High, most direct competitor)
-35. `vagus-assessment.md` — vagus (Medium, hybrid search with embeddings + rerank + HyDE)
-36. `wicked-knowledge-assessment.md` — wicked-knowledge (Low-Medium, code intelligence graph)
+7. `fff-assessment.md` — fff (Low, file-finder MCP, frecency search engine)
+8. `galdor-memory-okf-assessment.md` — galdor/memory-okf (Low, galdor-locked)
+9. `gnosis-dkp-assessment.md` — gnosis (unrelated) + dkp (Medium-High, knowledge packs)
+10. `gobline-gooseberry-nexis-okul-assessment.md` — nexus-memory, knowledge-mcp, nexi-lab/nexus
+11. `hermes-okf-assessment.md` — hermes-okf (Low direct, Medium architectural)
+12. `hyalo-assessment.md` — hyalo (Medium, best CLI for vault maintenance)
+13. `markbase-assessment.md` — markbase (Medium, template-driven schema enforcement)
+14. `mcp-knowledge-base-assessment.md` — mcp-knowledge-base (Medium, TF-IDF + governance, in-memory)
+15. `mdvault-assessment.md` — mdvault (Low, productivity vault)
+16. `memcrate-ai-memory-assessment.md` — memcrate + ai-memory (Low direct, Medium architectural)
+17. `obscure-tools-assessment.md` — 6 minor tools (None/Low)
+18. `okapi-okf-assessment.md` — okapi-okf (Low, human-facing IDE)
+19. `okf-cran-travisjakel-assessment.md` — CRAN okf (Low direct, Medium feature ref)
+20. `okf-ecosystem-assessment.md` — Ecosystem index (6 independent crates, no coordination)
+21. `okf-generator-tommypacker-assessment.md` — okf-generator (Low, bundle producer)
+22. `okf-generator-umairbaig8-assessment.md` — okf-generator (Medium, code intelligence + MCP)
+23. `okf-http-assessment.md` — okf-http (Medium, web UI + packages + auth)
+24. `okf-tool-assessment.md` — okf-tool (Low, library-first)
+25. `okf-toolset-assessment.md` — okf-toolset (Low, validation layer collection)
+26. `okf-tools-assessment.md` — okf-tools npm (Low, v0.0.1 corporate)
+27. `okf-w4g1-assessment.md` — okf (W4G1) (Low, symbiotic, spec reference)
+28. `okq-assessment.md` — okq (Medium, best pure search)
+29. `openwiki-assessment.md` — openwiki (Medium-High, generative wiki, 7.8k dl/week)
+30. `semantic-memory-mcp-assessment.md` — semantic-memory-mcp (Medium, 48 tools, evidence model)
+31. `spec-okf-assessment.md` — spec-okf (Low, scaffolding + methodology)
+32. `tf-idf-mcp-assessment.md` — TF-IDF MCP category (Medium-High, 9+ projects)
+33. `travisjakel-okf-ingest-assessment.md` — travisjakel stack (Medium, closest architectural competitor)
+34. `tribal-relay-knowledge-assessment.md` — tribal + relay-knowledge (Medium/High)
+35. `vaultdb-assessment.md` — vaultdb (High, most direct competitor)
+36. `vagus-assessment.md` — vagus (Medium, hybrid search with embeddings + rerank + HyDE)
+37. `wicked-knowledge-assessment.md` — wicked-knowledge (Low-Medium, code intelligence graph)
 
 ---
 
