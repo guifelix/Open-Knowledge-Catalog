@@ -246,17 +246,14 @@ fn test_validation_oversized_frontmatter() {
 }
 
 #[test]
-fn test_validation_missing_metadata() {
+fn test_validation_missing_type() {
     let repo = setup_simple_repo();
     let config = mkconfig(&repo);
 
-    // Create a doc with missing required metadata
-    let missing_path = repo.path().join("metrics/missing-meta.md");
-    std::fs::write(
-        &missing_path,
-        "---\ntags: [test]\n---\n\nNo title or type.\n",
-    )
-    .expect("write missing metadata file");
+    // Create a doc with missing required 'type' field
+    let missing_path = repo.path().join("metrics/missing-type.md");
+    std::fs::write(&missing_path, "---\ntags: [test]\n---\n\nNo type field.\n")
+        .expect("write missing type file");
 
     let mut service = OkcService::open(&config).expect("open service");
     service.scan().expect("scan");
@@ -265,9 +262,9 @@ fn test_validation_missing_metadata() {
 
     let missing: Vec<_> = issues
         .iter()
-        .filter(|i| i.category == "missing_metadata")
+        .filter(|i| i.category == "missing_type")
         .collect();
-    assert!(!missing.is_empty(), "Should find missing metadata");
+    assert!(!missing.is_empty(), "Should find missing type");
 }
 
 #[test]

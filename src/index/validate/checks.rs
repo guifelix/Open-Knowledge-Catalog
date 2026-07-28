@@ -13,6 +13,15 @@ use crate::model::document::ValidationIssue;
 use crate::parser::frontmatter::FrontMatterExtractor;
 use crate::parser::yaml::YamlParser;
 
+/// Returns true if the path refers to a reserved OKF filename (index.md or log.md).
+///
+/// Reserved files are not concept documents (OKF v0.2 §3.1) and have
+/// special frontmatter rules (OKF v0.2 §8, §9).
+fn is_reserved_filename(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    name == "index.md" || name == "log.md"
+}
+
 impl RepositoryIndex {
     pub(super) fn check_missing_index_files(&self) -> Vec<ValidationIssue> {
         if !self.config.require_index_files {
@@ -171,21 +180,78 @@ impl RepositoryIndex {
                 }
             };
 
-            if fm.title.as_deref().unwrap_or("").trim().is_empty() {
-                issues.push(ValidationIssue {
-                    path: path.clone(),
-                    severity: "warning".to_string(),
-                    category: "missing_metadata".to_string(),
-                    message: "Missing required metadata: 'title'".to_string(),
-                    line: None,
-                });
+            // OKF v0.2 §8, §9: Reserved files (index.md, log.md) have
+            // restricted frontmatter rules and are not concept documents.
+            if is_reserved_filename(path) {
+                let basename = path.rsplit('/').next().unwrap_or(path);
+                let is_root = !path.contains('/');
+
+                if is_root {
+                    // Root index.md: only okf_version allowed (§8 exception)
+                    let mut violations: Vec<String> = Vec::new();
+                    if fm.title.is_some() {
+                        violations.push("title".into());
+                    }
+                    if fm.concept_type.is_some() {
+                        violations.push("type".into());
+                    }
+                    if fm.description.is_some() {
+                        violations.push("description".into());
+                    }
+                    if !fm.tags.is_empty() {
+                        violations.push("tags".into());
+                    }
+                    let extra_custom: Vec<&str> = fm
+                        .custom
+                        .keys()
+                        .filter(|k| *k != "okf_version")
+                        .map(|k| k.as_str())
+                        .collect();
+                    if !violations.is_empty() || !extra_custom.is_empty() {
+                        let mut msg = String::from(
+                            "Root index.md may only carry 'okf_version' in frontmatter",
+                        );
+                        if !violations.is_empty() {
+                            msg.push_str(&format!(
+                                "; prohibited fields: {}",
+                                violations.join(", ")
+                            ));
+                        }
+                        if !extra_custom.is_empty() {
+                            msg.push_str(&format!("; unknown keys: {}", extra_custom.join(", ")));
+                        }
+                        issues.push(ValidationIssue {
+                            path: path.clone(),
+                            severity: "error".to_string(),
+                            category: "reserved_file_frontmatter".to_string(),
+                            message: msg,
+                            line: None,
+                        });
+                    }
+                } else {
+                    // Non-root reserved file: no frontmatter allowed (§8, §9)
+                    issues.push(ValidationIssue {
+                        path: path.clone(),
+                        severity: "error".to_string(),
+                        category: "reserved_file_frontmatter".to_string(),
+                        message: format!(
+                            "Reserved file '{}' must not contain frontmatter",
+                            basename
+                        ),
+                        line: None,
+                    });
+                }
+                continue;
             }
+
+            // Concept-document checks (non-reserved files only)
+            // OKF v0.2 §4.1: 'type' is required
             if fm.concept_type.as_deref().unwrap_or("").trim().is_empty() {
                 issues.push(ValidationIssue {
                     path: path.clone(),
-                    severity: "warning".to_string(),
-                    category: "missing_metadata".to_string(),
-                    message: "Missing required metadata: 'type'".to_string(),
+                    severity: "error".to_string(),
+                    category: "missing_type".to_string(),
+                    message: "Missing required field 'type' in frontmatter".to_string(),
                     line: None,
                 });
             }

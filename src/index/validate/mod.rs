@@ -29,10 +29,11 @@ const CHECKS: &[&str] = &[
     "unsupported_encoding",
     "oversized_frontmatter",
     "invalid_yaml",
-    "missing_metadata",
+    "missing_type",
     "duplicate_concept",
     "duplicate_content",
     "circular_references",
+    "reserved_file_frontmatter",
 ];
 
 impl RepositoryIndex {
@@ -103,7 +104,7 @@ impl RepositoryIndex {
                         CheckStatus::Pass
                     } else if *name == "broken_links"
                         || *name == "missing_index_files"
-                        || *name == "missing_metadata"
+                        || *name == "reserved_file_frontmatter"
                         || *name == "circular_references"
                     {
                         CheckStatus::Warn
