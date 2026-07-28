@@ -73,7 +73,11 @@ impl McpServer {
     /// Run the MCP server with stdio transport (for Claude Code, etc.)
     pub async fn serve_stdio(self) -> Result<(), anyhow::Error> {
         let (stdin, stdout) = rmcp::transport::io::stdio();
-        rmcp::service::serve_server(self, (stdin, stdout)).await?;
+        let service = rmcp::service::serve_server(self, (stdin, stdout)).await?;
+        // Keep RunningService alive until stdin closes — the service loop runs
+        // as a background task; dropping RunningService prematurely cancels it
+        // via the CancellationToken DropGuard, causing immediate exit.
+        service.waiting().await?;
         Ok(())
     }
 
