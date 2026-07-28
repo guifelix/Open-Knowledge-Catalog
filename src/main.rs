@@ -300,10 +300,7 @@ fn main() -> anyhow::Result<()> {
             match transport {
                 TransportType::Stdio => {
                     let rt = tokio::runtime::Runtime::new()?;
-                    rt.block_on(async {
-                        let (stdin, stdout) = rmcp::transport::io::stdio();
-                        rmcp::service::serve_server(server, (stdin, stdout)).await
-                    })?;
+                    rt.block_on(server.serve_stdio())?;
                 }
                 TransportType::Http => {
                     let addr: SocketAddr = format!("{}:{}", host, port).parse()?;
