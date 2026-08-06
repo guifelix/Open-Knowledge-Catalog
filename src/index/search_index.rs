@@ -14,7 +14,7 @@ use crate::index::traits::{Result, SearchFilters, SearchIndex, SearchableDocumen
 use crate::model::document::{derive_display_title, IndexStats, SearchResponse, SearchResult};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, Transaction};
+use rusqlite::{params, params_from_iter, types::Value as SqlValue, Transaction};
 use std::sync::Arc;
 
 /// FTS5-based search index with thread-safe connection pool.
@@ -40,7 +40,7 @@ impl SqliteSearchIndex {
     /// Build the BM25 function call with configured weights.
     fn bm25_expr(&self) -> String {
         format!(
-            "bm25(document_search, {}, {}, {}, {}, {})",
+            "bm25(document_search, 0.0, {}, {}, {}, {}, {})",
             self.bm25_config.title_weight,
             self.bm25_config.description_weight,
             self.bm25_config.headings_weight,
@@ -118,120 +118,86 @@ impl SearchIndex for SqliteSearchIndex {
     }
 
     fn search(&self, query: &str, filters: &SearchFilters, limit: usize) -> Result<SearchResponse> {
-        let escaped = query.replace('\'', "''");
-
         let bm25_expr = self.bm25_expr();
-
-        let mut sql = format!(
-            "SELECT ds.path, ds.title, d.type, {}, ds.body
-             FROM document_search ds
-             JOIN documents d ON d.path = ds.path
-             WHERE document_search MATCH ?1",
-            bm25_expr
-        );
-
-        let mut conditions = Vec::new();
-        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> =
-            vec![Box::new(escaped.clone())];
+        let from = " FROM document_search ds JOIN documents d ON d.path = ds.path";
+        let mut conditions = vec!["document_search MATCH ?".to_string()];
+        let mut params = vec![SqlValue::Text(query.to_string())];
 
         if let Some(prefix) = &filters.path_prefix {
+            let prefix = prefix.trim_matches('/');
             if !prefix.is_empty() {
-                let p = prefix.trim_start_matches('/').to_string();
-                if !p.is_empty() {
-                    let param_idx = param_values.len();
-                    param_values.push(Box::new(p.clone()));
-                    param_values.push(Box::new(format!("{}%", p)));
-                    conditions.push(format!(
-                        "(d.parent_path = ?{} OR d.parent_path LIKE ?{})",
-                        param_idx + 1,
-                        param_idx + 2
-                    ));
-                }
+                conditions
+                    .push("(d.parent_path = ? OR d.parent_path LIKE (? || '/%'))".to_string());
+                params.push(SqlValue::Text(prefix.to_string()));
+                params.push(SqlValue::Text(prefix.to_string()));
             }
         }
 
         if let Some(types) = &filters.concept_types {
             if !types.is_empty() {
-                let placeholders: Vec<String> = (0..types.len())
-                    .map(|i| format!("?{}", param_values.len() + 1 + i))
-                    .collect();
+                let placeholders = vec!["?"; types.len()];
                 conditions.push(format!("d.type IN ({})", placeholders.join(",")));
-                for t in types {
-                    param_values.push(Box::new(t.clone()));
-                }
+                params.extend(types.iter().cloned().map(SqlValue::Text));
             }
         }
 
         if let Some(tags) = &filters.tags {
+            let tags = tags
+                .iter()
+                .filter(|tag| !tag.is_empty())
+                .collect::<Vec<_>>();
             if !tags.is_empty() {
-                sql.push_str(" JOIN document_tags dt ON dt.document_id = d.id");
-                let placeholders: Vec<String> = (0..tags.len())
-                    .map(|i| format!("?{}", param_values.len() + 1 + i))
-                    .collect();
-                conditions.push(format!("dt.tag IN ({})", placeholders.join(",")));
-                for t in tags {
-                    param_values.push(Box::new(t.clone()));
-                }
+                let placeholders = vec!["?"; tags.len()];
+                conditions.push(format!(
+                    "EXISTS (SELECT 1 FROM document_tags dt \
+                     WHERE dt.document_id = d.id AND dt.tag IN ({}))",
+                    placeholders.join(",")
+                ));
+                params.extend(tags.into_iter().cloned().map(SqlValue::Text));
             }
         }
 
-        let params_refs: Vec<&dyn rusqlite::types::ToSql> =
-            param_values.iter().map(|p| p.as_ref()).collect();
-
-        let full_sql = if conditions.is_empty() {
-            format!(
-                "{} ORDER BY {} LIMIT ?{}",
-                sql,
-                bm25_expr,
-                param_values.len() + 1
-            )
-        } else {
-            format!(
-                "{} AND {} ORDER BY {} LIMIT ?{}",
-                sql,
-                conditions.join(" AND "),
-                bm25_expr,
-                param_values.len() + 1
-            )
-        };
-
-        let limit_val = limit as i64;
-        let mut param_vec = params_refs.clone();
-        param_vec.push(&limit_val);
-
         let conn = self.get_conn()?;
-        let mut stmt = conn.prepare(&full_sql)?;
-        let results: Vec<SearchResult> = stmt
-            .query_map(param_vec.as_slice(), |row| {
-                let path: String = row.get(0)?;
-                let title: Option<String> = row.get(1)?;
-                let ctype: Option<String> = row.get(2)?;
-                let rank: f64 = row.get(3)?;
-                let body: String = row.get::<_, Option<String>>(4)?.unwrap_or_default();
-                Ok((path, title, ctype, rank, body))
+        let where_clause = format!(" WHERE {}", conditions.join(" AND "));
+        let count_sql = format!("SELECT COUNT(*){from}{where_clause}");
+        let total_matches: usize = conn
+            .query_row(&count_sql, params_from_iter(params.iter()), |row| {
+                row.get::<_, i64>(0)
             })?
-            .filter_map(|r| r.ok())
-            .map(|(path, title, ctype, rank, body)| {
-                let excerpt = extract_excerpt(&body, query, 200);
-                SearchResult {
-                    path: path.clone(),
-                    title: title.clone(),
-                    display_title: derive_display_title(&path, title.as_deref()),
-                    concept_type: ctype,
-                    score: -rank,
-                    matching_section: None,
-                    excerpt,
-                }
-            })
-            .collect();
+            .try_into()?;
 
-        let total = results.len();
-        let truncated = total > limit;
+        let sql = format!(
+            "SELECT ds.path, ds.title, d.type, {bm25_expr}, ds.body \
+             {from}{where_clause} ORDER BY {bm25_expr} ASC, d.path ASC LIMIT ?"
+        );
+        params.push(SqlValue::Integer(limit.try_into()?));
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(params_from_iter(params.iter()), |row| {
+            let path: String = row.get(0)?;
+            let title: Option<String> = row.get(1)?;
+            let ctype: Option<String> = row.get(2)?;
+            let rank: f64 = row.get(3)?;
+            let body: String = row.get::<_, Option<String>>(4)?.unwrap_or_default();
+            Ok((path, title, ctype, rank, body))
+        })?;
+        let mut results = Vec::new();
+        for row in rows {
+            let (path, title, concept_type, rank, body) = row?;
+            results.push(SearchResult {
+                path: path.clone(),
+                title: title.clone(),
+                display_title: derive_display_title(&path, title.as_deref()),
+                concept_type,
+                score: -rank,
+                matching_section: None,
+                excerpt: extract_excerpt(&body, query, 200),
+            });
+        }
 
         Ok(SearchResponse {
-            results: results.into_iter().take(limit).collect(),
-            total_matches: total,
-            truncated,
+            truncated: total_matches > results.len(),
+            total_matches,
+            results,
         })
     }
 
@@ -254,20 +220,22 @@ impl SearchIndex for SqliteSearchIndex {
     }
 }
 
-fn extract_excerpt(body: &str, query: &str, max_len: usize) -> String {
-    let query_lower = query.to_lowercase();
+fn extract_excerpt(body: &str, query: &str, context_chars: usize) -> String {
     let body_lower = body.to_lowercase();
+    let query_lower = query.to_lowercase();
 
     if let Some(pos) = body_lower.find(&query_lower) {
-        let start = pos.saturating_sub(50);
-        let end = (pos + query.len() + 150).min(body.len());
-        let excerpt = &body[start..end];
-        if excerpt.len() > max_len {
-            format!("...{}", &excerpt[excerpt.len() - max_len..])
+        let start = pos.saturating_sub(context_chars / 2);
+        let end = (pos + query_lower.len() + context_chars / 2).min(body.len());
+
+        let excerpt: String = body[start..end].chars().collect();
+        if start > 0 {
+            format!("...{}...", excerpt)
         } else {
-            excerpt.to_string()
+            format!("{}...", excerpt)
         }
     } else {
-        body.chars().take(max_len).collect()
+        let preview: String = body.chars().take(context_chars).collect();
+        format!("{}...", preview)
     }
 }

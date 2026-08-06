@@ -593,6 +593,104 @@ fn test_search_with_filters() {
 }
 
 #[test]
+fn test_search_combined_filters_counts_and_stable_pages() {
+    let repo = setup_simple_repo();
+    let config = mkconfig(&repo);
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
+
+    let types = ["Metric".to_string()];
+    let tags = ["customer".to_string()];
+    let first = service
+        .search("customer", Some("metrics/"), Some(&types), Some(&tags), 1)
+        .expect("search with combined filters");
+    assert_eq!(first.total_matches, 2);
+    assert_eq!(first.results.len(), 1);
+    assert!(first.truncated);
+    assert_eq!(first.results[0].path, "metrics/customer-count.md");
+
+    let repeated = service
+        .search("customer", Some("metrics/"), Some(&types), Some(&tags), 1)
+        .expect("repeat combined search");
+    assert_eq!(repeated.results[0].path, first.results[0].path);
+
+    let empty = service
+        .search("quantum entanglement", None, None, None, 10)
+        .expect("empty search");
+    assert_eq!(empty.total_matches, 0);
+    assert!(!empty.truncated);
+    assert!(empty.results.is_empty());
+}
+
+#[test]
+fn test_search_uses_configured_bm25_field_weights() {
+    let repo = TempDir::new().expect("search weights temp repo");
+    std::fs::write(
+        repo.path().join("title-match.md"),
+        "---\ntype: Note\ntitle: Needle\n---\n\n# Overview\n\nBrief text.\n",
+    )
+    .expect("write title match");
+    std::fs::write(
+        repo.path().join("body-match.md"),
+        "---\ntype: Note\ntitle: Body Match\n---\n\n# Overview\n\nneedle needle needle needle needle needle needle needle needle needle\n",
+    )
+    .expect("write body match");
+    for path in ["tie-a.md", "tie-b.md"] {
+        std::fs::write(
+            repo.path().join(path),
+            "---\ntype: Note\ntitle: Tie\n---\n\n# Same\n\ntieonly\n",
+        )
+        .expect("write equal-score document");
+    }
+
+    let default_config = OkcConfig {
+        roots: vec![repo.path().to_path_buf()],
+        db_path: repo.path().join("default.db"),
+        ..Default::default()
+    };
+    let mut default_service = OkcService::open(&default_config).expect("open default service");
+    default_service.scan().expect("scan default weights");
+    let default_results = default_service
+        .search("needle", None, None, None, 10)
+        .expect("search default weights");
+    assert_eq!(default_results.results[0].path, "title-match.md");
+    let tied_results = default_service
+        .search("tieonly", None, None, None, 10)
+        .expect("search equal-score documents");
+    assert_eq!(
+        tied_results
+            .results
+            .iter()
+            .map(|result| result.path.as_str())
+            .collect::<Vec<_>>(),
+        ["tie-a.md", "tie-b.md"]
+    );
+
+    let body_weighted_config = OkcConfig {
+        roots: vec![repo.path().to_path_buf()],
+        db_path: repo.path().join("body-weighted.db"),
+        bm25: okc::config::Bm25Config {
+            title_weight: 0.0,
+            description_weight: 0.0,
+            headings_weight: 0.0,
+            body_weight: 10.0,
+            concept_type_weight: 0.0,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let mut body_weighted_service =
+        OkcService::open(&body_weighted_config).expect("open body-weighted service");
+    body_weighted_service
+        .scan()
+        .expect("scan body-weighted search");
+    let body_weighted_results = body_weighted_service
+        .search("needle", None, None, None, 10)
+        .expect("search body weights");
+    assert_eq!(body_weighted_results.results[0].path, "body-match.md");
+}
+
+#[test]
 fn test_backlinks() {
     let repo = setup_simple_repo();
     let config = mkconfig(&repo);

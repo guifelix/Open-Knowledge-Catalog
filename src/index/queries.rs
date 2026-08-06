@@ -6,9 +6,9 @@
 pub mod browse;
 pub mod document;
 pub mod metadata;
-pub mod search;
 pub mod stats;
 
+use crate::index::traits::{SearchFilters, SearchIndex};
 use crate::model::directory::{BrowseResponse, DirectoryDocument};
 use crate::model::document::{
     DocumentDetail, DocumentMetadata, DocumentSummary, HeadingInfo, IndexStats,
@@ -55,7 +55,15 @@ impl super::database::RepositoryIndex {
         tags: Option<&[String]>,
         limit: usize,
     ) -> Result<SearchResponse, anyhow::Error> {
-        search::search(self, query, path_prefix, types, tags, limit)
+        self.search_index.search(
+            query,
+            &SearchFilters {
+                path_prefix: path_prefix.map(str::to_string),
+                concept_types: types.map(<[String]>::to_vec),
+                tags: tags.map(<[String]>::to_vec),
+            },
+            limit,
+        )
     }
 
     /// Structured metadata query with filtering and projection.

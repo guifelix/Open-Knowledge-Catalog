@@ -107,14 +107,15 @@ SELECT
     title,
     description,
     concept_type,
-    bm25(document_search, 10.0, 5.0, 2.0, 1.0, 0.0) AS rank
+    bm25(document_search, 0.0, 10.0, 5.0, 2.0, 1.0, 0.0) AS rank
 FROM document_search
 WHERE document_search MATCH ?
 ORDER BY rank
 LIMIT ?;
 ```
 
-Weights: `title=10.0`, `description=5.0`, `headings=2.0`, `body=1.0`, `concept_type=0.0`
+Weights: `path=0.0` (unindexed), `title=10.0`, `description=5.0`,
+`headings=2.0`, `body=1.0`, `concept_type=0.0`.
 
 ### Search Query Features
 
@@ -169,6 +170,13 @@ If scaling beyond SQLite FTS5 limits:
 - ADR-001: SQLite as Primary Storage Backend
 - ADR-003: Trait-Based Storage Abstraction
 - ADR-004: MCP Transport for AI Integration
+
+## Measured baseline
+
+The versioned production-path relevance and latency measurement is documented in
+[Lexical Search Baseline v1](../search-baseline-v1.md). The duplicate query path
+identified there has been consolidated; its current conclusion is to improve
+lexical typo handling and graph expansion before adopting embeddings.
 
 ## References
 
