@@ -1,32 +1,61 @@
-//! E2E tests for MCP server transport layer
+//! E2E tests for the packaged MCP server binary.
 //!
-//! Tests all MCP tools via stdio transport, verifying responses match service-layer output.
+//! These tests launch the compiled `okc` binary with the same stdio transport
+//! shape used by OpenCode, then exercise the MCP protocol over a real child
+//! process instead of the in-process server implementation.
 
 #![allow(clippy::expect_used, clippy::panic)]
 
-use okc::{config::OkcConfig, service::OkcService};
+use anyhow::Context;
 use rmcp::{
-    model::{CallToolRequestParams, ClientInfo, ServerCapabilities, ServerInfo},
-    transport::stdio,
-    ClientHandler, ServiceExt,
+    model::{CallToolRequestParams, CallToolResult, ClientInfo},
+    service::{QuitReason, RunningService},
+    transport::child_process::TokioChildProcess,
+    ClientHandler, RoleClient, ServiceExt,
 };
 use serde_json::{json, Value};
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{
+    path::{Path, PathBuf},
+    process::Stdio,
+    time::Duration,
+};
 use tempfile::TempDir;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::Command;
+use tokio::{
+    io::{AsyncBufReadExt, BufReader},
+    process::Command,
+    time::timeout,
+};
 
-/// Test fixture for the simple repository
+type Client = RunningService<RoleClient, TestClientHandler>;
+
+/// Dummy client handler for testing.
+#[derive(Debug, Clone, Default)]
+struct TestClientHandler;
+
+impl ClientHandler for TestClientHandler {
+    fn get_info(&self) -> ClientInfo {
+        ClientInfo::default()
+    }
+}
+
+struct StdioSession {
+    client: Client,
+    stderr_task: tokio::task::JoinHandle<anyhow::Result<String>>,
+}
+
+fn packaged_okc_binary() -> PathBuf {
+    PathBuf::from(env!("CARGO_BIN_EXE_okc"))
+}
+
+/// Test fixture for the simple repository.
 fn setup_simple_repo() -> TempDir {
     let temp_dir = TempDir::new().expect("create temp dir for simple repo");
-    let source = std::path::Path::new("tests/fixtures/simple");
+    let source = Path::new("tests/fixtures/simple");
     copy_dir_all(source, temp_dir.path()).expect("copy simple fixture");
     temp_dir
 }
 
-fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dst)?;
     for entry in std::fs::read_dir(src)? {
         let entry = entry?;
@@ -40,64 +69,92 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result
     Ok(())
 }
 
-fn mkconfig(repo: &TempDir) -> OkcConfig {
-    OkcConfig {
-        roots: vec![repo.path().to_path_buf()],
-        db_path: repo.path().join("test.db"),
-        ..Default::default()
+async fn collect_child_stderr(stderr: tokio::process::ChildStderr) -> anyhow::Result<String> {
+    let mut reader = BufReader::new(stderr).lines();
+    let mut output = String::new();
+
+    while let Some(line) = reader.next_line().await? {
+        output.push_str(&line);
+        output.push('\n');
     }
+
+    Ok(output)
 }
 
-/// Dummy client handler for testing
-#[derive(Debug, Clone, Default)]
-struct TestClientHandler;
+async fn launch_packaged_stdio_session(workspace: &TempDir) -> anyhow::Result<StdioSession> {
+    let mut command = Command::new(packaged_okc_binary());
+    command.current_dir(workspace.path());
+    command.args(["serve", "--transport", "stdio"]);
 
-impl ClientHandler for TestClientHandler {
-    fn get_info(&self) -> ClientInfo {
-        ClientInfo::default()
-    }
+    let (transport, stderr) = TokioChildProcess::builder(command)
+        .stderr(Stdio::piped())
+        .spawn()
+        .context("spawn packaged okc serve --transport stdio")?;
+
+    let stderr = stderr.context("packaged okc stderr was not piped")?;
+    let stderr_task = tokio::spawn(async move { collect_child_stderr(stderr).await });
+    let client = TestClientHandler
+        .serve(transport)
+        .await
+        .context("initialize packaged MCP session")?;
+
+    Ok(StdioSession {
+        client,
+        stderr_task,
+    })
 }
 
-/// Helper to create an MCP server connected via stdio
-async fn create_mcp_server_stdio(
-    repo: &TempDir,
-) -> anyhow::Result<rmcp::service::RunningService<rmcp::RoleClient, TestClientHandler>> {
-    let config = mkconfig(repo);
-    let mut service = OkcService::open(&config)?;
-    service.scan()?;
+async fn scan_workspace_via_mcp(client: &Client, workspace: &TempDir) -> anyhow::Result<Value> {
+    let result = call_tool(
+        client,
+        "scan",
+        Some(json!({
+            "roots": [workspace.path().to_string_lossy()],
+        })),
+    )
+    .await
+    .context("scan workspace through packaged MCP binary")?;
 
-    let mcp_server = okc::transport::mcp::McpServer::new(&config)?;
+    let total_files = result["total_files"]
+        .as_u64()
+        .context("scan response missing total_files")?;
+    assert!(
+        total_files > 0,
+        "scan should discover fixture files in the workspace, got {total_files}"
+    );
+    assert!(
+        workspace.path().join("okc_index.db").exists(),
+        "scan should create the default database file in the workspace current directory"
+    );
 
-    let (server_transport, client_transport) = tokio::io::duplex(4096);
-
-    let server_handle = tokio::spawn(async move {
-        mcp_server.serve(server_transport).await?.waiting().await?;
-        anyhow::Ok(())
-    });
-
-    let client = TestClientHandler.serve(client_transport).await?;
-
-    // Give server time to initialize
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-
-    // Keep server alive
-    std::mem::forget(server_handle);
-
-    Ok(client)
+    Ok(result)
 }
 
-/// Helper to call a tool and parse JSON response
-async fn call_tool(
-    client: &rmcp::service::RunningService<rmcp::RoleClient, TestClientHandler>,
+async fn invoke_tool(
+    client: &Client,
     tool_name: &str,
     arguments: Option<Value>,
-) -> anyhow::Result<Value> {
+) -> anyhow::Result<CallToolResult> {
     let mut params = CallToolRequestParams::new(tool_name.to_string());
     if let Some(args) = arguments {
         params = params.with_arguments(args.as_object().expect("args should be object").clone());
     }
 
-    let result = client.call_tool(params).await?;
+    Ok(client.call_tool(params).await?)
+}
+
+/// Call a tool and return its structured MCP response.
+async fn call_tool(
+    client: &Client,
+    tool_name: &str,
+    arguments: Option<Value>,
+) -> anyhow::Result<Value> {
+    let result = invoke_tool(client, tool_name, arguments).await?;
+
+    let structured = result
+        .structured_content
+        .clone()
+        .with_context(|| format!("{tool_name} response missing structuredContent"))?;
 
     let text = result
         .content
@@ -106,37 +163,91 @@ async fn call_tool(
         .map(|t| t.text.as_str())
         .expect("Expected text content");
 
-    // Parse JSON response
-    let parsed: Value = serde_json::from_str(text)?;
-    Ok(parsed)
+    serde_json::from_str::<Value>(text)
+        .with_context(|| format!("{tool_name} text fallback is not valid JSON"))?;
+
+    Ok(structured)
 }
 
-/// Test stdio transport - all MCP tools
+/// Call a tool and parse its compatibility text response.
+async fn call_tool_text(
+    client: &Client,
+    tool_name: &str,
+    arguments: Option<Value>,
+) -> anyhow::Result<Value> {
+    let result = invoke_tool(client, tool_name, arguments).await?;
+    let text = result
+        .content
+        .first()
+        .and_then(|content| content.as_text())
+        .map(|content| content.text.as_str())
+        .with_context(|| format!("{tool_name} response missing text fallback"))?;
+
+    Ok(serde_json::from_str(text)?)
+}
+
+async fn close_stdio_session(mut session: StdioSession) -> anyhow::Result<(QuitReason, String)> {
+    let quit_reason = timeout(Duration::from_secs(5), session.client.close())
+        .await
+        .context("timed out closing packaged MCP session")??;
+
+    let stderr = timeout(Duration::from_secs(5), session.stderr_task)
+        .await
+        .context("timed out waiting for packaged okc stderr")??;
+
+    Ok((quit_reason, stderr?))
+}
+
 #[tokio::test]
-async fn test_mcp_stdio_transport_all_tools() -> anyhow::Result<()> {
+async fn test_mcp_stdio_transport_all_tools_packaged_binary() -> anyhow::Result<()> {
     let repo = setup_simple_repo();
-    let client = create_mcp_server_stdio(&repo).await?;
+    let session = launch_packaged_stdio_session(&repo).await?;
 
-    // Test scan tool
+    scan_workspace_via_mcp(&session.client, &repo).await?;
+
+    let tools = session
+        .client
+        .peer()
+        .list_all_tools()
+        .await
+        .context("list tools through packaged MCP binary")?;
+    for (expected, required_output_property) in [
+        ("scan", "total_files"),
+        ("browse", "path"),
+        ("get_document", "path"),
+        ("get_section", "section"),
+        ("search", "results"),
+        ("query_metadata", "results"),
+        ("get_links", "links"),
+        ("get_backlinks", "links"),
+        ("traverse", "nodes"),
+        ("get_stats", "document_count"),
+        ("validate", "summary"),
+    ] {
+        let tool = tools
+            .iter()
+            .find(|tool| tool.name == expected)
+            .unwrap_or_else(|| panic!("expected tool {expected} to be advertised"));
+        let output_schema = tool
+            .output_schema
+            .as_ref()
+            .unwrap_or_else(|| panic!("expected tool {expected} to advertise an outputSchema"));
+        assert_eq!(
+            output_schema.get("type"),
+            Some(&json!("object")),
+            "expected tool {expected} outputSchema to have an object root"
+        );
+        assert!(
+            output_schema
+                .get("properties")
+                .and_then(Value::as_object)
+                .is_some_and(|properties| properties.contains_key(required_output_property)),
+            "expected tool {expected} outputSchema to describe {required_output_property}"
+        );
+    }
+
     let result = call_tool(
-        &client,
-        "scan",
-        Some(json!({
-            "roots": [repo.path().to_string_lossy()],
-            "db_path": repo.path().join("test2.db").to_string_lossy()
-        })),
-    )
-    .await?;
-
-    assert!(
-        result.get("total_files").is_some(),
-        "scan should return total_files"
-    );
-    assert!(result.get("added").is_some(), "scan should return added");
-
-    // Test browse tool
-    let result = call_tool(
-        &client,
+        &session.client,
         "browse",
         Some(json!({
             "path": "",
@@ -144,10 +255,11 @@ async fn test_mcp_stdio_transport_all_tools() -> anyhow::Result<()> {
             "limit": 100
         })),
     )
-    .await?;
+    .await
+    .context("browse workspace root through packaged MCP binary")?;
 
     assert!(
-        result.get("directories").is_some(),
+        result["directories"].is_array(),
         "browse should return directories"
     );
     let dirs = result["directories"]
@@ -162,9 +274,8 @@ async fn test_mcp_stdio_transport_all_tools() -> anyhow::Result<()> {
         "should have datasets dir"
     );
 
-    // Test get_document tool
     let result = call_tool(
-        &client,
+        &session.client,
         "get_document",
         Some(json!({
             "path": "metrics/monthly-revenue.md",
@@ -172,15 +283,109 @@ async fn test_mcp_stdio_transport_all_tools() -> anyhow::Result<()> {
             "max_chars": 12000
         })),
     )
-    .await?;
+    .await
+    .context("fetch document through packaged MCP binary")?;
 
     assert_eq!(result["path"], "metrics/monthly-revenue.md");
     assert_eq!(result["concept_type"], "Metric");
     assert!(result["headings"].is_array());
+    assert!(result.get("custom").is_none());
+    assert!(result.get("content_hash").is_none());
+    assert!(result.get("parent_path").is_none());
+    assert!(result.get("links").is_none());
+    assert!(result.get("backlinks").is_none());
 
-    // Test get_section tool
+    for include in [
+        "custom",
+        "content_hash",
+        "parent_path",
+        "links",
+        "backlinks",
+    ] {
+        let optional = call_tool(
+            &session.client,
+            "get_document",
+            Some(json!({
+                "path": "metrics/monthly-revenue.md",
+                "include": [include],
+                "max_chars": 12000
+            })),
+        )
+        .await
+        .with_context(|| format!("fetch document include '{include}' through packaged MCP"))?;
+        assert!(
+            optional.get(include).is_some(),
+            "requested include '{include}' should be present"
+        );
+    }
+
+    let enriched = call_tool(
+        &session.client,
+        "get_document",
+        Some(json!({
+            "path": "metrics/monthly-revenue.md",
+            "include": [
+                "metadata",
+                "custom",
+                "content_hash",
+                "parent_path",
+                "links",
+                "backlinks"
+            ],
+            "max_chars": 12000
+        })),
+    )
+    .await
+    .context("fetch enriched document through packaged MCP binary")?;
+    assert_eq!(enriched["custom"]["owner"], "Finance Analytics");
+    assert!(enriched["content_hash"]
+        .as_str()
+        .is_some_and(|hash| !hash.is_empty()));
+    assert_eq!(enriched["parent_path"], "metrics");
+    assert!(enriched["links"]
+        .as_array()
+        .is_some_and(|links| !links.is_empty()));
+    assert!(enriched["backlinks"].as_array().is_some_and(|links| {
+        links
+            .iter()
+            .any(|link| link["source_path"] == "metrics/churn-rate.md")
+    }));
+
+    let invalid_include = invoke_tool(
+        &session.client,
+        "get_document",
+        Some(json!({
+            "path": "metrics/monthly-revenue.md",
+            "include": ["unknown"]
+        })),
+    )
+    .await
+    .context("validate get_document include through packaged MCP binary")?;
+    assert_eq!(invalid_include.is_error, Some(true));
+    assert!(invalid_include.content.iter().any(|content| content
+        .as_text()
+        .is_some_and(|text| text.text.contains("Unknown include value"))));
+
     let result = call_tool(
-        &client,
+        &session.client,
+        "get_section",
+        Some(json!({
+            "path": "metrics/monthly-revenue.md",
+            "heading": "Definition",
+            "max_chars": 5000
+        })),
+    )
+    .await
+    .context("fetch section through packaged MCP binary")?;
+
+    assert_eq!(result["section"]["heading"], "Definition");
+    assert!(result["section"]["content"]
+        .as_str()
+        .expect("content should be a string")
+        .contains("Monthly Revenue represents"));
+
+    let legacy_section = call_tool_text(
+        &session.client,
         "get_section",
         Some(json!({
             "path": "metrics/monthly-revenue.md",
@@ -189,57 +394,146 @@ async fn test_mcp_stdio_transport_all_tools() -> anyhow::Result<()> {
         })),
     )
     .await?;
+    assert_eq!(legacy_section["heading"], "Definition");
 
-    assert_eq!(result["heading"], "Definition");
-    assert!(result["content"]
-        .as_str()
-        .expect("content should be a string")
-        .contains("Monthly Revenue represents"));
-
-    // Test search tool
     let result = call_tool(
-        &client,
+        &session.client,
         "search",
         Some(json!({
             "query": "revenue",
             "limit": 10
         })),
     )
-    .await?;
+    .await
+    .context("search through packaged MCP binary")?;
 
     assert!(result["results"].is_array());
     assert!(result["total_matches"].is_number());
 
-    // Test query_metadata tool
-    let result = call_tool(
-        &client,
-        "query_metadata",
+    let filtered_search = call_tool(
+        &session.client,
+        "search",
         Some(json!({
-            "filter": ["type=Metric", "tags_contains=finance"],
-            "select": ["path", "title", "owner"],
-            "limit": 100
+            "query": "customer",
+            "path_prefix": "metrics/",
+            "types": ["Metric"],
+            "tags": ["customer"],
+            "limit": 1
         })),
     )
-    .await?;
+    .await
+    .context("combined filtered search through packaged MCP binary")?;
+    assert_eq!(filtered_search["total_matches"], 2);
+    assert_eq!(filtered_search["truncated"], true);
+    assert_eq!(filtered_search["results"].as_array().map(Vec::len), Some(1));
+    assert_eq!(
+        filtered_search["results"][0]["path"],
+        "metrics/customer-count.md"
+    );
 
-    assert!(result["results"].is_array());
-    assert!(result["total_matches"].is_number());
+    let empty_search = call_tool(
+        &session.client,
+        "search",
+        Some(json!({"query": "quantum entanglement", "limit": 10})),
+    )
+    .await
+    .context("empty search through packaged MCP binary")?;
+    assert_eq!(empty_search["total_matches"], 0);
+    assert_eq!(empty_search["truncated"], false);
+    assert_eq!(empty_search["results"], json!([]));
 
-    // Test get_links tool
     let result = call_tool(
-        &client,
+        &session.client,
+        "query_metadata",
+        Some(json!({
+            "filter": [
+                "type=Metric",
+                "tags_contains=finance",
+                "path_prefix=metrics/",
+                "parse_status=ok",
+                "owner=Finance Analytics"
+            ],
+            "select": ["path", "tags", "owner"],
+            "limit": 2
+        })),
+    )
+    .await
+    .context("query metadata through packaged MCP binary")?;
+
+    assert_eq!(result["total_matches"], 3);
+    assert_eq!(result["truncated"], true);
+    assert_eq!(result["results"].as_array().map(Vec::len), Some(2));
+    assert_eq!(result["results"][0]["path"], "metrics/churn-rate.md");
+    assert_eq!(result["results"][0]["owner"], "Finance Analytics");
+    assert_eq!(
+        result["results"][0]["tags"],
+        json!(["customer", "finance", "retention"])
+    );
+
+    let empty = call_tool(
+        &session.client,
+        "query_metadata",
+        Some(json!({
+            "filter": ["path_prefix=does-not-exist/"],
+            "select": ["path"],
+            "limit": 10
+        })),
+    )
+    .await
+    .context("query empty metadata result through packaged MCP binary")?;
+    assert_eq!(empty["total_matches"], 0);
+    assert_eq!(empty["truncated"], false);
+    assert_eq!(empty["results"], json!([]));
+
+    let invalid = invoke_tool(
+        &session.client,
+        "query_metadata",
+        Some(json!({"filter": ["type"], "select": ["path"]})),
+    )
+    .await
+    .context("query invalid metadata filter through packaged MCP binary")?;
+    assert_eq!(invalid.is_error, Some(true));
+    assert!(invalid.content.iter().any(|content| content
+        .as_text()
+        .is_some_and(|text| text.text.contains("expected key=value"))));
+
+    let result = call_tool(
+        &session.client,
+        "get_links",
+        Some(json!({
+            "path": "metrics/monthly-revenue.md"
+        })),
+    )
+    .await
+    .context("get links through packaged MCP binary")?;
+
+    assert!(result["links"].is_array());
+
+    let legacy_links = call_tool_text(
+        &session.client,
         "get_links",
         Some(json!({
             "path": "metrics/monthly-revenue.md"
         })),
     )
     .await?;
+    assert!(legacy_links.is_array());
 
-    assert!(result.is_array());
-
-    // Test get_backlinks tool
     let result = call_tool(
-        &client,
+        &session.client,
+        "get_backlinks",
+        Some(json!({
+            "path": "metrics/monthly-revenue.md",
+            "limit": 50
+        })),
+    )
+    .await
+    .context("get backlinks through packaged MCP binary")?;
+
+    assert!(result["links"].is_array());
+
+    let legacy_backlinks = call_tool_text(
+        &session.client,
         "get_backlinks",
         Some(json!({
             "path": "metrics/monthly-revenue.md",
@@ -247,12 +541,10 @@ async fn test_mcp_stdio_transport_all_tools() -> anyhow::Result<()> {
         })),
     )
     .await?;
+    assert!(legacy_backlinks.is_array());
 
-    assert!(result.is_array());
-
-    // Test traverse tool
     let result = call_tool(
-        &client,
+        &session.client,
         "traverse",
         Some(json!({
             "start": "metrics/monthly-revenue.md",
@@ -261,35 +553,88 @@ async fn test_mcp_stdio_transport_all_tools() -> anyhow::Result<()> {
             "max_nodes": 50
         })),
     )
-    .await?;
+    .await
+    .context("traverse through packaged MCP binary")?;
 
     assert!(result["nodes"].is_array());
     assert!(result["edges"].is_array());
 
-    // Test get_stats tool
-    let result = call_tool(&client, "get_stats", None).await?;
+    let result = call_tool(&session.client, "get_stats", None)
+        .await
+        .context("get stats through packaged MCP binary")?;
 
     assert!(result["document_count"].is_number());
     assert!(result["link_count"].is_number());
     assert!(result["heading_count"].is_number());
 
-    // Test validate tool
-    let result = call_tool(&client, "validate", None).await?;
+    let result = call_tool(&session.client, "validate", None)
+        .await
+        .context("validate through packaged MCP binary")?;
 
     assert!(result["summary"].is_object());
     assert!(result["issues"].is_array());
 
-    client.cancel().await?;
+    let (quit_reason, stderr) = close_stdio_session(session).await?;
+    assert!(
+        matches!(quit_reason, QuitReason::Closed | QuitReason::Cancelled),
+        "expected packaged MCP session to close cleanly, got {quit_reason:?}"
+    );
+    assert!(
+        !stderr.contains("Connection closed"),
+        "stderr should not contain a premature connection close: {stderr}"
+    );
     Ok(())
 }
 
-/// Test error responses for missing document
+#[tokio::test]
+async fn test_mcp_enriched_document_respects_configured_response_limit() -> anyhow::Result<()> {
+    let repo = setup_simple_repo();
+    std::fs::write(repo.path().join("okc.toml"), "max_response_chars = 900\n")?;
+    let session = launch_packaged_stdio_session(&repo).await?;
+    scan_workspace_via_mcp(&session.client, &repo).await?;
+
+    let result = invoke_tool(
+        &session.client,
+        "get_document",
+        Some(json!({
+            "path": "metrics/monthly-revenue.md",
+            "include": [
+                "body",
+                "headings",
+                "metadata",
+                "custom",
+                "content_hash",
+                "parent_path",
+                "links",
+                "backlinks"
+            ],
+            "max_chars": 12000
+        })),
+    )
+    .await?;
+    let structured = result
+        .structured_content
+        .context("bounded document missing structured content")?;
+    assert_eq!(structured["truncated"], true);
+    assert!(serde_json::to_string(&structured)?.chars().count() <= 900);
+
+    let (quit_reason, _stderr) = close_stdio_session(session).await?;
+    assert!(matches!(
+        quit_reason,
+        QuitReason::Closed | QuitReason::Cancelled
+    ));
+    Ok(())
+}
+
+/// Test error responses for missing document.
 #[tokio::test]
 async fn test_mcp_error_missing_document() -> anyhow::Result<()> {
     let repo = setup_simple_repo();
-    let client = create_mcp_server_stdio(&repo).await?;
+    let session = launch_packaged_stdio_session(&repo).await?;
+    scan_workspace_via_mcp(&session.client, &repo).await?;
 
-    let result = client
+    let result = session
+        .client
         .call_tool(
             CallToolRequestParams::new("get_document".to_string()).with_arguments(
                 json!({
@@ -304,7 +649,6 @@ async fn test_mcp_error_missing_document() -> anyhow::Result<()> {
         )
         .await?;
 
-    // Should return error response as text
     let text = result
         .content
         .first()
@@ -312,24 +656,29 @@ async fn test_mcp_error_missing_document() -> anyhow::Result<()> {
         .map(|t| t.text.as_str())
         .expect("Expected text content");
 
-    // Should contain error message
     assert!(
         text.contains("Error") || text.contains("error") || text == "null",
         "Should return error for missing document, got: {}",
         text
     );
 
-    client.cancel().await?;
+    let (quit_reason, _stderr) = close_stdio_session(session).await?;
+    assert!(
+        matches!(quit_reason, QuitReason::Closed | QuitReason::Cancelled),
+        "expected packaged MCP session to close cleanly, got {quit_reason:?}"
+    );
     Ok(())
 }
 
-/// Test error responses for invalid path (path traversal protection)
+/// Test error responses for invalid path traversal.
 #[tokio::test]
 async fn test_mcp_error_invalid_path() -> anyhow::Result<()> {
     let repo = setup_simple_repo();
-    let client = create_mcp_server_stdio(&repo).await?;
+    let session = launch_packaged_stdio_session(&repo).await?;
+    scan_workspace_via_mcp(&session.client, &repo).await?;
 
-    let result = client
+    let result = session
+        .client
         .call_tool(
             CallToolRequestParams::new("get_links".to_string()).with_arguments(
                 json!({
@@ -342,7 +691,6 @@ async fn test_mcp_error_invalid_path() -> anyhow::Result<()> {
         )
         .await?;
 
-    // Should return error response or empty array (path traversal protection)
     let text = result
         .content
         .first()
@@ -350,30 +698,31 @@ async fn test_mcp_error_invalid_path() -> anyhow::Result<()> {
         .map(|t| t.text.as_str())
         .expect("Expected text content");
 
-    // Either error or empty array is acceptable for invalid paths
     assert!(
         text.contains("Error") || text.contains("error") || text == "[]",
-        "Should handle invalid path safely, got: {}",
+        "Should handle invalid paths safely, got: {}",
         text
     );
 
-    client.cancel().await?;
+    let (quit_reason, _stderr) = close_stdio_session(session).await?;
+    assert!(
+        matches!(quit_reason, QuitReason::Closed | QuitReason::Cancelled),
+        "expected packaged MCP session to close cleanly, got {quit_reason:?}"
+    );
     Ok(())
 }
 
-/// Test all tools have at least one E2E test
+/// Test all tools have at least one e2e call through the packaged binary.
 #[tokio::test]
 async fn test_all_mcp_tools_covered() -> anyhow::Result<()> {
     let repo = setup_simple_repo();
-    let client = create_mcp_server_stdio(&repo).await?;
+    let session = launch_packaged_stdio_session(&repo).await?;
+    scan_workspace_via_mcp(&session.client, &repo).await?;
 
-    // List of all MCP tools that should be tested
     let tools = vec![
         (
             "scan",
-            Some(
-                json!({"roots": [repo.path().to_string_lossy()], "db_path": repo.path().join("test3.db").to_string_lossy()}),
-            ),
+            Some(json!({"roots": [repo.path().to_string_lossy()]})),
         ),
         (
             "browse",
@@ -415,15 +764,51 @@ async fn test_all_mcp_tools_covered() -> anyhow::Result<()> {
     ];
 
     for (tool_name, args) in tools {
-        let result = call_tool(&client, tool_name, args).await?;
-        // Just verify we get a valid response (not an error panic)
+        let result = call_tool(&session.client, tool_name, args).await?;
         assert!(
-            result.is_object() || result.is_array() || result.is_string(),
-            "Tool {} should return valid response",
+            result.is_object(),
+            "Tool {} should return an object matching its outputSchema",
             tool_name
         );
     }
 
-    client.cancel().await?;
+    let (quit_reason, _stderr) = close_stdio_session(session).await?;
+    assert!(
+        matches!(quit_reason, QuitReason::Closed | QuitReason::Cancelled),
+        "expected packaged MCP session to close cleanly, got {quit_reason:?}"
+    );
+    Ok(())
+}
+
+/// Test the packaged binary reports invalid root paths clearly.
+#[tokio::test]
+async fn test_mcp_stdio_packaged_binary_reports_invalid_root() -> anyhow::Result<()> {
+    let workspace = setup_simple_repo();
+    let mut command = Command::new(packaged_okc_binary());
+    command.current_dir(workspace.path()).args([
+        "serve",
+        "--transport",
+        "stdio",
+        "--root",
+        "/definitely/does/not/exist",
+    ]);
+
+    let output = timeout(Duration::from_secs(10), command.output())
+        .await
+        .context("timed out waiting for invalid-root CLI smoke test")??;
+
+    assert!(
+        !output.status.success(),
+        "packaged okc should fail fast for an invalid root"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Root directory does not exist")
+            || stderr.contains("ValidationError")
+            || stderr.contains("does not exist"),
+        "expected a configuration/root error in stderr, got: {stderr}"
+    );
+
     Ok(())
 }
