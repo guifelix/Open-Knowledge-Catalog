@@ -47,14 +47,15 @@ Implement an **MCP server** using the `rmcp` crate as the primary AI integration
 ### Positive
 - **Standard protocol features of MCP**:
   - **Tool discovery**: AI lists available tools at connection time
-  - **Typed schemas**: JSON Schema from Rust types via `schemars`
+  - **Typed schemas**: Input and output JSON Schema from Rust types via `schemars`
+  - **Structured results**: Typed `structuredContent` with a JSON text fallback for older clients
   - **Streaming**: Large results stream incrementally
   - **Cancellation**: AI can cancel long-running operations
   - **Progress notifications**: Long operations report progress
   - **Resources**: Expose files, docs as readable resources
   - **Prompts**: Pre-defined prompt templates for common tasks
   - **Ecosystem**: Works with Claude, Cursor, Windsurf, Zed, Continue, etc.
-  - **Transport agnostic**: stdio, HTTP/SSE, WebSocket
+  - **Transport agnostic**: stdio for local clients, HTTP for remote/shared access
 
 - **Implementation benefits**:
   - `rmcp` provides derive macros for tools (`#[tool]`)
@@ -64,7 +65,7 @@ Implement an **MCP server** using the `rmcp` crate as the primary AI integration
 
 ### Negative
 - **Protocol maturity**: MCP spec still evolving (2024-2025)
-- **Transport complexity**: stdio for local, HTTP/SSE for remote
+- **Transport complexity**: stdio for local clients, HTTP for remote/shared access
 - **Schema drift**: Rust types must match schema expectations
 - **Debugging**: Harder than CLI (stdio transport)
 - **Single-threaded by default**: `Arc<Mutex<OkcService>>` for thread safety
@@ -165,32 +166,68 @@ struct SearchResultOutput {
 ### Main Entry Point (`main.rs`)
 
 ```rust
-Command::Serve { root } => {
-    let roots = if root.is_empty() {
-        vec![std::env::current_dir()?]
-    } else {
-        root
-    };
-    config.roots = roots;
+Command::Serve {
+    root,
+    transport,
+    host,
+    port,
+} => {
+    if root.is_empty() && config.roots.is_empty() {
+        config.roots = vec![std::env::current_dir()?];
+    }
 
     let server = McpServer::new(&config)?;
-    let rt = tokio::runtime::Runtime::new()?;
-    rt.block_on(async {
-        let (stdin, stdout) = rmcp::transport::io::stdio();
-        rmcp::service::serve_server(server, (stdin, stdout)).await
-    })?;
+
+    match transport {
+        TransportType::Stdio => {
+            let rt = tokio::runtime::Runtime::new()?;
+            rt.block_on(server.serve_stdio())?;
+        }
+        TransportType::Http => {
+            let addr: SocketAddr = format!("{}:{}", host, port).parse()?;
+            let rt = tokio::runtime::Runtime::new()?;
+            rt.block_on(server.serve_http(addr))?;
+        }
+    }
 }
 ```
 
-### Client Configuration (Claude Desktop)
+### Client Configuration (OpenCode)
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "okc": {
+        "type": "local",
+        "command": ["okc", "serve", "--transport", "stdio"]
+      }
+    }
+  }
+}
+```
+
+OpenCode starts and stops the stdio child process automatically. Use `cwd` only when you need to pin the server to a
+specific repository from a global config; otherwise OpenCode uses the current workspace directory as the default
+working directory.
+
+### HTTP Transport
+
+Use HTTP only when you need a manually hosted remote or shared server:
+
+```bash
+okc serve --transport http --host 0.0.0.0 --port 3001
+```
+
+### Equivalent Claude Desktop Config
 
 ```json
 {
   "mcpServers": {
     "okc": {
       "command": "okc",
-      "args": ["serve", "/path/to/knowledge-base"],
-      "env": {}
+      "args": ["serve", "--transport", "stdio"]
     }
   }
 }
@@ -228,7 +265,7 @@ Command::Serve { root } => {
 | Prompts | Pre-built prompts for "explain this module", "find related" | Planned |
 | Progress | Stream scan progress for large repos | Planned |
 | Cancellation | Cancel long searches | Supported by rmcp |
-| HTTP/SSE | Remote MCP server for team sharing | ✅ **Implemented** |
+| HTTP | Remote MCP server for team sharing | ✅ **Implemented** |
 | Auth | Token-based for remote access | Future |
 
 ## Related ADRs

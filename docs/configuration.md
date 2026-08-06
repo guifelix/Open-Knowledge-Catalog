@@ -28,6 +28,9 @@ Global options:
 OKC reads a TOML config file from `~/.config/okc/config.toml`, `./okc.toml`, or a path specified via `--config`:
 
 ```toml
+# Maximum serialized characters in an enriched document response
+max_response_chars = 500000
+
 [scanner]
 # Repository roots to scan
 roots = ["./knowledge"]
@@ -57,9 +60,6 @@ max_graph_depth = 5
 # Maximum nodes returned by graph traversal
 max_graph_nodes = 100
 
-# Maximum characters in tool responses
-max_response_chars = 500000
-
 [validation]
 # Require index.md files in directories
 require_index_files = false
@@ -73,6 +73,7 @@ All config options can be overridden via environment variables with prefix `OKC_
 OKC_SCANNER_ROOTS="./knowledge,./docs"
 OKC_SCANNER_MAX_FILE_SIZE=5242880
 OKC_INDEXER_MAX_GRAPH_DEPTH=10
+OKC_MAX_RESPONSE_CHARS=250000
 OKC_DB_PATH="/data/okc_index.db"
 ```
 
@@ -94,7 +95,7 @@ OKC_DB_PATH="/data/okc_index.db"
 | `max_scan_results` | `usize` | `1000` | Cap on scan output |
 | `max_graph_depth` | `usize` | `5` | Max depth for `traverse_graph` |
 | `max_graph_nodes` | `usize` | `100` | Max nodes for `traverse_graph` |
-| `max_response_chars` | `usize` | `500_000` | Truncate tool responses |
+| `max_response_chars` | `usize` | `500_000` | Cap serialized enriched `get_document` responses |
 
 ## Validation Configuration
 
@@ -155,6 +156,9 @@ timeout_seconds = 30
 ```
 
 Use `okc serve --transport http` to start the HTTP server, or `okc serve` with the default stdio transport.
+Local MCP clients such as OpenCode start the stdio transport automatically, so you only run `okc serve` manually when
+you want to test the server yourself or host the HTTP transport. When `serve` runs without explicit roots, it uses the
+current working directory as the default root.
 
 ## Defaults
 

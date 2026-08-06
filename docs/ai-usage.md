@@ -14,14 +14,14 @@ status: published
 
 # Usage with AI Agents
 
-The tool is designed for AI agents to use via CLI or future MCP server. All operations return structured data with source paths for traceability.
+The tool is designed for AI agents to use via CLI or MCP server. All operations return structured data with source paths for traceability.
 
 ## Core Operations (11 AI-facing MCP tools)
 
 | Operation | CLI Command | Purpose |
 |-----------|-------------|---------|
 | `browse_directory` | `okc browse [path] [--depth N]` | Inspect one area of the OKF hierarchy |
-| `get_document` | `okc get <path> [--include metadata,headings,body]` | Retrieve one known concept |
+| `get_document` | `okc get <path> [--include metadata,headings,body,...]` | Retrieve one known concept, with opt-in graph context |
 | `get_section` | `okc section <path> "<heading>"` | Extract a specific Markdown section |
 | `search_documents` | `okc search "query" [--path-prefix] [--type] [--tags]` | Full-text search with filters |
 | `query_metadata` | `okc metadata --filter key=value --select fields` | Exact structured filtering |
@@ -43,6 +43,21 @@ The tool is designed for AI agents to use via CLI or future MCP server. All oper
 2. `get_document(best_match, include=["metadata", "headings"])`
 3. `get_section("Definition")`
 4. Answer with source path
+
+### Enriched Document Context
+
+Use one call when an answer needs a known document together with its provenance
+and graph neighborhood:
+
+`get_document({ path: "metrics/monthly-revenue.md", include: ["metadata", "custom", "content_hash", "parent_path", "links", "backlinks"] })`
+
+The default remains `body` plus `headings`; optional fields are omitted unless
+requested. `custom` returns decoded front-matter fields. `links` uses the normal
+outgoing-link shape. Each backlink contains `source_path`, `target_anchor`, and
+`exists_in_repository`, so the referring document and target context are
+unambiguous. Unknown include values are errors. The complete serialized response
+is capped by `max_response_chars`; arrays and body text are shortened only at
+valid item or character boundaries and `truncated` is then `true`.
 
 ### Hierarchical Browsing
 
@@ -74,10 +89,21 @@ The tool is designed for AI agents to use via CLI or future MCP server. All oper
 **User:** "List all published finance metrics owned by Analytics."
 
 **Agent:**
-1. `query_metadata({ type: "Metric", status: "published", tags_contains: "finance", owner: "Analytics" })`
+1. `query_metadata({ filter: ["type=Metric", "status=published", "tags_contains=finance", "owner=Analytics"], select: ["path", "title", "tags", "owner"] })`
 2. Return matching concepts
 
 *No semantic search or LLM interpretation required.*
+
+`query_metadata` uses exact string equality for `type`, `title`, `parse_status`,
+and custom front-matter fields. `tags_contains` matches one complete tag and
+`path_prefix` restricts results to a repository-relative path prefix. Selectable
+fields are the core document fields (`path`, `title`, `type`, `description`,
+`file_size`, `modified_at`, `content_hash`, `parse_status`, `parent_path`, and
+`id`), `tags`, and custom front-matter field names. Results are ordered by path;
+missing requested custom fields are returned as `null`. `total_matches` counts
+the complete filtered set, while `truncated` indicates that `limit` omitted one
+or more matches. Filter expressions must use `key=value`; malformed expressions,
+unsupported `*_contains` operators, and malformed projection names are errors.
 
 ### Repository Validation
 
@@ -122,7 +148,9 @@ Error format:
 
 ## MCP Server
 
-The MCP server is fully implemented. AI agents connect via Model Context Protocol and use tools directly:
+The MCP server is fully implemented. AI agents connect via Model Context Protocol and use tools directly.
+Local MCP clients such as OpenCode start the stdio child process automatically and own its lifetime, so you do not
+run a separate daemon for the common local setup.
 
 ```json
 {
@@ -135,15 +163,20 @@ The MCP server is fully implemented. AI agents connect via Model Context Protoco
 
 OKC exposes 11 AI-facing tools via MCP. See [docs/features.md](features.md) for the complete MCP tools reference.
 
+Every successful tool call includes a typed `structuredContent` object that conforms to the tool's advertised
+`outputSchema`. For clients that do not yet consume structured MCP results, OKC also includes a JSON text content block.
+The compatibility text preserves the existing response shape; new integrations should read `structuredContent`
+directly and avoid parsing JSON from text.
+
 ### Transport Options
 
-Start the server:
+Local clients launch stdio automatically:
 
 ```bash
-# stdio (for AI agents that launch the binary directly)
-okc serve
+# stdio (local clients launch the child process)
+okc serve --transport stdio
 
-# HTTP (for remote agent access)
+# HTTP (manually hosted for remote/shared access)
 okc serve --transport http --host 0.0.0.0 --port 3001
 ```
 
@@ -187,18 +220,27 @@ Or place a project-local config at `./.claude/settings.json` to bind OKC to a sp
 
 #### OpenCode
 
-Add to `~/.config/opencode/opencode.json` (global) or `./opencode.json` (project-local):
+Add to `~/.config/opencode/opencode.json` for all workspaces, or `./opencode.json` in a project to override just that
+workspace. OpenCode starts and stops local MCP servers automatically, and the workspace directory is the default
+working directory unless you set `cwd`.
 
 ```json
 {
-  "mcpTools": {
-    "okc": {
-      "command": "okc",
-      "args": ["serve"]
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "okc": {
+        "type": "local",
+        "command": ["okc", "serve", "--transport", "stdio"]
+      }
     }
   }
 }
 ```
+
+If `okc` is not in your `PATH`, replace it with the full executable path. If you want to pin the server to a specific
+repository from a global config, add `"cwd": "/absolute/path/to/repo"` or use a project-local config with `"cwd": "."`.
+If a project-local server shares the same name as a global one, the project-local definition replaces it.
 
 #### Codex (OpenAI CLI)
 
@@ -263,6 +305,17 @@ Configure in `~/.config/cline/cline_mcp_settings.json`:
 ```
 
 > **Tip:** If `okc` is not in your PATH, replace `"okc"` with the full binary path (e.g., `"/usr/local/bin/okc"` or `"$HOME/.local/bin/okc"`).
+
+### Troubleshooting
+
+If `opencode mcp list` shows `MCP error -32000: Connection closed`, the local server exited before the handshake
+completed. Check the following in order:
+
+1. The resolved executable exists and is executable.
+2. The binary is rebuilt or reinstalled if you are using a stale artifact.
+3. `opencode mcp list` shows the server connecting from the expected workspace.
+4. The workspace or explicit `cwd` points at the repository you intended to index.
+5. The server is not being launched with a conflicting root or config from a higher-precedence project file.
 
 ## AI Usage Principles
 

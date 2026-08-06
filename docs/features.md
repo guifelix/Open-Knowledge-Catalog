@@ -26,18 +26,18 @@ OKC provides a comprehensive set of tools for browsing, parsing, searching, and 
 | `okc traverse` | Explore related concepts via graph edges |
 | `okc validate` | 8-category repository validation |
 | `okc stats` | Repository statistics |
-| `okc serve` | Start MCP server (stdio or HTTP/SSE) |
+| `okc serve` | Start MCP server (stdio for local clients, HTTP for remote/shared use) |
 | `okc watch` | File system watching with incremental updates |
 
 ## MCP Tools
 
-When running as an MCP server (`okc serve`), these tools are exposed to AI agents:
+When running as an MCP server, these tools are exposed to AI agents:
 
 | Tool | Description |
 |------|-------------|
 | `scan` | Scan/re-scan root directories and index documents |
 | `browse_directory` | Inspect one area of the OKF hierarchy |
-| `get_document` | Retrieve one known concept with metadata, headings, and/or body |
+| `get_document` | Retrieve one concept with opt-in metadata, identity fields, links, and backlinks |
 | `get_section` | Extract a specific Markdown section without the full document |
 | `search_documents` | Full-text search with optional path/type/tag filters |
 | `query_metadata` | Exact structured filtering on front-matter fields |
@@ -47,17 +47,23 @@ When running as an MCP server (`okc serve`), these tools are exposed to AI agent
 | `get_stats` | Repository statistics (file counts, link counts, etc.) |
 | `validate_repository` | Report structural problems (broken links, malformed YAML, missing index files) |
 
+All successful MCP tool responses advertise an `outputSchema` and return matching `structuredContent`. A JSON text
+content block remains available for compatibility with clients that have not adopted structured MCP output.
+
 ## MCP Server Transport
 
 Run the MCP server in two modes:
 
 ```bash
-# stdio (default) — for AI agents that launch the binary directly
-okc serve
+# stdio (default) — local MCP clients launch the child process automatically
+okc serve --transport stdio
 
-# HTTP/SSE — for web clients, remote access
+# HTTP — for web clients, remote access, or shared hosting
 okc serve --transport http --host 0.0.0.0 --port 3001
 ```
+
+OpenCode and similar local clients own the stdio process lifetime automatically. Use HTTP only when you need a manually
+hosted remote server.
 
 ## Filesystem Watcher
 
@@ -133,4 +139,5 @@ Configurable limits prevent excessive output:
 - `max_graph_depth`: 5
 - `max_graph_nodes`: 100
 
-Responses include `truncated: true` when limits are hit.
+Enriched `get_document` responses include `truncated: true` when the requested
+body limit or aggregate `max_response_chars` limit is hit.

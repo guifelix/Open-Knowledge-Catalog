@@ -63,7 +63,7 @@ OKC provides a comprehensive set of tools for browsing, parsing, searching, and 
 | `okc traverse` | Explore related concepts via graph edges |
 | `okc validate` | 8-category repository validation |
 | `okc stats` | Repository statistics |
-| `okc serve` | Start MCP server (stdio or HTTP/SSE) |
+| `okc serve` | Start MCP server (stdio for local clients, HTTP for remote/shared use) |
 | `okc watch` | File system watching with incremental updates |
 
 ## Installation
@@ -114,6 +114,9 @@ okc search "revenue recognition"
 # Retrieve a document
 okc get metrics/monthly-revenue.md --include metadata,headings,body
 
+# Retrieve the document and its graph context in one call
+okc get metrics/monthly-revenue.md --include metadata,custom,content_hash,parent_path,links,backlinks
+
 # Extract a section
 okc section metrics/monthly-revenue.md "Definition"
 
@@ -134,7 +137,9 @@ okc validate
 okc stats
 
 # Start MCP server
-okc serve
+# Local MCP clients such as OpenCode start the stdio child process automatically.
+# Use HTTP only when you need a manually hosted remote/shared server.
+okc serve --transport stdio
 
 # Watch for changes
 okc watch
