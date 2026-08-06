@@ -37,6 +37,14 @@ fn main() -> anyhow::Result<()> {
     // Apply CLI overrides (highest priority)
     apply_cli_overrides(&mut config, &cli.command);
 
+    if let Command::Serve { root, .. } = &cli.command {
+        if root.is_empty() && config.roots.is_empty() {
+            config.roots = vec![std::env::current_dir()?];
+        }
+    }
+
+    config.validate()?;
+
     match cli.command {
         Command::Scan { root: _ } => {
             let mut service = OkcService::open(&config)?;
@@ -288,12 +296,9 @@ fn main() -> anyhow::Result<()> {
             host,
             port,
         } => {
-            let roots = if root.is_empty() {
-                vec![std::env::current_dir()?]
-            } else {
-                root
-            };
-            config.roots = roots;
+            if !root.is_empty() {
+                config.roots = root;
+            }
 
             let server = crate::transport::mcp::McpServer::new(&config)?;
 
