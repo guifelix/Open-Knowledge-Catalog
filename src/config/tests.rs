@@ -34,6 +34,7 @@ fn test_okc_config_default() {
     assert_eq!(config.max_yaml_input_size, 8 * 1024 * 1024);
     assert_eq!(config.max_graph_depth, 5);
     assert_eq!(config.max_graph_nodes, 100);
+    assert_eq!(config.max_response_chars, 500_000);
     assert!(!config.follow_symlinks);
     assert!(!config.require_index_files);
     assert_eq!(config.db_path, PathBuf::from("okc_index.db"));
@@ -171,6 +172,16 @@ fn test_env_overrides_max_graph_nodes() {
     config.apply_env_overrides().expect("apply env");
     assert_eq!(config.max_graph_nodes, 500);
     unsafe { env::remove_var("OKC_MAX_GRAPH_NODES") };
+}
+
+#[test]
+fn test_env_overrides_max_response_chars() {
+    let _lock = env_lock();
+    unsafe { env::set_var("OKC_MAX_RESPONSE_CHARS", "250000") };
+    let mut config = OkcConfig::default();
+    config.apply_env_overrides().expect("apply env");
+    assert_eq!(config.max_response_chars, 250_000);
+    unsafe { env::remove_var("OKC_MAX_RESPONSE_CHARS") };
 }
 
 #[test]
@@ -341,6 +352,16 @@ fn test_invalid_env_max_graph_nodes() {
     let result = config.apply_env_overrides();
     assert!(result.is_err());
     unsafe { env::remove_var("OKC_MAX_GRAPH_NODES") };
+}
+
+#[test]
+fn test_invalid_env_max_response_chars() {
+    let _lock = env_lock();
+    unsafe { env::set_var("OKC_MAX_RESPONSE_CHARS", "not_a_number") };
+    let mut config = OkcConfig::default();
+    let result = config.apply_env_overrides();
+    assert!(result.is_err());
+    unsafe { env::remove_var("OKC_MAX_RESPONSE_CHARS") };
 }
 
 #[test]

@@ -15,7 +15,7 @@ pub use content::{
     CodeBlock, Heading, HeadingInfo, Link, LinkInfo, ParsedDocument, Section, Table, TableAlignment,
 };
 pub use frontmatter::{FrontMatter, LimitError, ParseError, ParseStatus};
-pub use records::{DocumentDetail, DocumentMetadata, DocumentSummary, FileRecord};
+pub use records::{BacklinkInfo, DocumentDetail, DocumentMetadata, DocumentSummary, FileRecord};
 pub use search::{derive_display_title, MetadataQueryResponse, SearchResponse, SearchResult};
 pub use stats::{IndexStats, LimitError as StatsLimitError, ProcessChangesResult, ScanResult};
 pub use validation::{

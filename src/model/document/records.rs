@@ -51,6 +51,29 @@ pub struct DocumentDetail {
     pub truncated: bool,
     /// Any parse errors.
     pub errors: Vec<crate::model::document::frontmatter::ParseError>,
+    /// Content hash, when explicitly requested.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_hash: Option<String>,
+    /// Repository-relative parent path, when explicitly requested.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_path: Option<String>,
+    /// Outgoing links, when explicitly requested.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub links: Option<Vec<crate::model::document::content::LinkInfo>>,
+    /// Incoming links with their source documents, when explicitly requested.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backlinks: Option<Vec<BacklinkInfo>>,
+}
+
+/// Incoming link context for an enriched document response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BacklinkInfo {
+    /// Repository-relative path of the document containing the link.
+    pub source_path: String,
+    /// Anchor on the target document, when present.
+    pub target_anchor: Option<String>,
+    /// Whether the target resolved when the source was indexed.
+    pub exists_in_repository: bool,
 }
 
 /// Document metadata for API responses.

@@ -83,6 +83,11 @@ pub struct OkcConfig {
     #[serde(default = "default_max_graph_nodes")]
     pub max_graph_nodes: usize,
 
+    /// Maximum serialized character count for a document response.
+    /// Default: 500,000 characters.
+    #[serde(default = "default_max_response_chars")]
+    pub max_response_chars: usize,
+
     /// Whether to follow symbolic links during scanning.
     /// Default: false (for safety).
     #[serde(default)]
@@ -148,6 +153,10 @@ fn default_max_graph_nodes() -> usize {
     100
 }
 
+fn default_max_response_chars() -> usize {
+    500_000
+}
+
 fn default_db_path() -> PathBuf {
     PathBuf::from("okc_index.db")
 }
@@ -170,6 +179,7 @@ impl Default for OkcConfig {
             max_yaml_input_size: default_max_yaml_input_size(),
             max_graph_depth: default_max_graph_depth(),
             max_graph_nodes: default_max_graph_nodes(),
+            max_response_chars: default_max_response_chars(),
             follow_symlinks: false,
             require_index_files: false,
             db_path: default_db_path(),
@@ -241,9 +251,6 @@ impl OkcConfig {
         // Apply environment variable overrides
         config.apply_env_overrides()?;
 
-        // Validate the final configuration
-        config.validate()?;
-
         Ok(config)
     }
 
@@ -272,6 +279,7 @@ impl OkcConfig {
     /// - OKC_MAX_YAML_INPUT_SIZE
     /// - OKC_MAX_GRAPH_DEPTH
     /// - OKC_MAX_GRAPH_NODES
+    /// - OKC_MAX_RESPONSE_CHARS
     /// - OKC_FOLLOW_SYMLINKS (true/false)
     /// - OKC_REQUIRE_INDEX_FILES (true/false)
     /// - OKC_WATCHER_DEBOUNCE_MS
@@ -333,6 +341,12 @@ impl OkcConfig {
         if let Ok(val) = std::env::var("OKC_MAX_GRAPH_NODES") {
             self.max_graph_nodes = val.parse().map_err(|_| {
                 ConfigError::EnvParseError(format!("OKC_MAX_GRAPH_NODES: invalid usize: {val}"))
+            })?;
+        }
+
+        if let Ok(val) = std::env::var("OKC_MAX_RESPONSE_CHARS") {
+            self.max_response_chars = val.parse().map_err(|_| {
+                ConfigError::EnvParseError(format!("OKC_MAX_RESPONSE_CHARS: invalid usize: {val}"))
             })?;
         }
 
@@ -481,6 +495,11 @@ impl OkcConfig {
         if self.max_graph_nodes == 0 {
             return Err(ConfigError::ValidationError(
                 "max_graph_nodes must be greater than 0".into(),
+            ));
+        }
+        if self.max_response_chars == 0 {
+            return Err(ConfigError::ValidationError(
+                "max_response_chars must be greater than 0".into(),
             ));
         }
 

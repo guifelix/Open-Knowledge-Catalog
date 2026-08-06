@@ -98,6 +98,12 @@ fn main() -> anyhow::Result<()> {
             if !result.metadata.custom.is_empty() {
                 println!("  Custom: {:?}", result.metadata.custom);
             }
+            if let Some(content_hash) = &result.content_hash {
+                println!("  Content hash: {}", content_hash);
+            }
+            if let Some(parent_path) = &result.parent_path {
+                println!("  Parent path: {}", parent_path);
+            }
             println!("  File size: {}", result.metadata.file_size);
             println!("  Modified: {}", result.metadata.modified_at);
             println!("  Parse status: {}", result.metadata.parse_status);
@@ -114,6 +120,12 @@ fn main() -> anyhow::Result<()> {
             }
             if let Some(body) = result.body {
                 println!("  Body: {}", body);
+            }
+            if let Some(links) = &result.links {
+                println!("  Links: {:?}", links);
+            }
+            if let Some(backlinks) = &result.backlinks {
+                println!("  Backlinks: {:?}", backlinks);
             }
             if result.truncated {
                 println!("  ... (truncated)");

@@ -392,6 +392,95 @@ fn test_get_document_with_metadata() {
 }
 
 #[test]
+fn test_get_document_opt_in_enriched_context_and_validation() {
+    let repo = setup_simple_repo();
+    let config = mkconfig(&repo);
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
+
+    let default_doc = service
+        .get_document(
+            "metrics/monthly-revenue.md",
+            &["body".to_string(), "headings".to_string()],
+            12_000,
+        )
+        .expect("get default document");
+    let default_json = serde_json::to_value(default_doc).expect("serialize default document");
+    assert!(default_json.get("custom").is_none());
+    assert!(default_json.get("content_hash").is_none());
+    assert!(default_json.get("parent_path").is_none());
+    assert!(default_json.get("links").is_none());
+    assert!(default_json.get("backlinks").is_none());
+
+    let enriched = service
+        .get_document(
+            "metrics/monthly-revenue.md",
+            &[
+                "metadata".to_string(),
+                "custom".to_string(),
+                "content_hash".to_string(),
+                "parent_path".to_string(),
+                "links".to_string(),
+                "backlinks".to_string(),
+            ],
+            12_000,
+        )
+        .expect("get enriched document");
+    let enriched = serde_json::to_value(enriched).expect("serialize enriched document");
+    assert_eq!(enriched["metadata"]["custom"]["owner"], "Finance Analytics");
+    assert!(enriched["content_hash"]
+        .as_str()
+        .is_some_and(|hash| !hash.is_empty()));
+    assert_eq!(enriched["parent_path"], "metrics");
+    assert!(enriched["links"]
+        .as_array()
+        .is_some_and(|links| !links.is_empty()));
+    assert!(enriched["backlinks"].as_array().is_some_and(|links| {
+        links.iter().any(|link| {
+            link["source_path"] == "metrics/churn-rate.md" && link.get("target_anchor").is_some()
+        })
+    }));
+
+    let error = service
+        .get_document(
+            "metrics/monthly-revenue.md",
+            &["not-a-section".to_string()],
+            12_000,
+        )
+        .expect_err("unknown include should fail");
+    assert!(error.to_string().contains("Unknown include value"));
+}
+
+#[test]
+fn test_get_document_enriched_response_respects_configured_limit() {
+    let repo = setup_simple_repo();
+    let mut config = mkconfig(&repo);
+    config.max_response_chars = 900;
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
+
+    let document = service
+        .get_document(
+            "metrics/monthly-revenue.md",
+            &[
+                "body".to_string(),
+                "headings".to_string(),
+                "metadata".to_string(),
+                "custom".to_string(),
+                "content_hash".to_string(),
+                "parent_path".to_string(),
+                "links".to_string(),
+                "backlinks".to_string(),
+            ],
+            12_000,
+        )
+        .expect("get bounded enriched document");
+    let serialized = serde_json::to_string(&document).expect("serialize bounded response");
+    assert!(serialized.chars().count() <= config.max_response_chars);
+    assert!(document.truncated);
+}
+
+#[test]
 fn test_get_section() {
     let repo = setup_simple_repo();
     let config = mkconfig(&repo);

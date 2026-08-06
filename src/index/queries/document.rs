@@ -1,8 +1,25 @@
 //! Document retrieval operations.
 
 use crate::index::database::RepositoryIndex;
-use crate::model::document::{DocumentDetail, DocumentMetadata, HeadingInfo, ParseError};
+use std::collections::BTreeMap;
+
+use anyhow::{anyhow, Context};
+
+use crate::model::document::{
+    BacklinkInfo, DocumentDetail, DocumentMetadata, HeadingInfo, LinkInfo, ParseError,
+};
 use rusqlite::params;
+
+const VALID_INCLUDES: &[&str] = &[
+    "metadata",
+    "headings",
+    "body",
+    "custom",
+    "content_hash",
+    "parent_path",
+    "links",
+    "backlinks",
+];
 
 /// Get a document by path with optional section inclusion and truncation.
 pub fn get_document(
@@ -11,9 +28,19 @@ pub fn get_document(
     include: &[String],
     max_body_chars: usize,
 ) -> Result<DocumentDetail, anyhow::Error> {
+    for value in include {
+        if !VALID_INCLUDES.contains(&value.as_str()) {
+            return Err(anyhow!(
+                "Unknown include value '{value}'. Valid values: {}",
+                VALID_INCLUDES.join(", ")
+            ));
+        }
+    }
+
     let conn = index.pool().get()?;
     let mut stmt = conn.prepare(
-        "SELECT id, path, title, type, description, body_text, file_size, modified_at, parse_status
+        "SELECT id, path, title, type, description, body_text, file_size, modified_at, parse_status,
+                content_hash, parent_path
          FROM documents WHERE path = ?1",
     )?;
 
@@ -27,6 +54,8 @@ pub fn get_document(
         let file_size: i64 = row.get(6)?;
         let modified_at: i64 = row.get(7)?;
         let parse_status: String = row.get(8)?;
+        let content_hash: Option<String> = row.get(9)?;
+        let parent_path: String = row.get(10)?;
         Ok((
             id,
             path,
@@ -37,40 +66,53 @@ pub fn get_document(
             file_size,
             modified_at,
             parse_status,
+            content_hash,
+            parent_path,
         ))
     })?;
 
-    let (id, path, title, ctype, description, body_text, file_size, modified_at, parse_status) =
-        doc;
+    let (
+        id,
+        path,
+        title,
+        ctype,
+        description,
+        body_text,
+        file_size,
+        modified_at,
+        parse_status,
+        content_hash,
+        parent_path,
+    ) = doc;
 
     let mut tags = vec![];
-    if include.contains(&"metadata".to_string()) {
-        let conn = index.pool().get()?;
-        let mut tag_stmt = conn.prepare("SELECT tag FROM document_tags WHERE document_id = ?1")?;
+    if includes(include, "metadata") {
+        let mut tag_stmt =
+            conn.prepare("SELECT tag FROM document_tags WHERE document_id = ?1 ORDER BY tag")?;
         tags = tag_stmt
             .query_map(params![id], |row| row.get::<_, String>(0))?
-            .filter_map(|r| r.ok())
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
     }
 
-    let mut custom = std::collections::BTreeMap::new();
-    if include.contains(&"metadata".to_string()) {
-        let conn = index.pool().get()?;
-        let mut field_stmt =
-            conn.prepare("SELECT key, value FROM metadata_fields WHERE document_id = ?1")?;
+    let include_metadata = includes(include, "metadata");
+    let include_custom = includes(include, "custom");
+    let mut custom_fields = BTreeMap::new();
+    if include_metadata || include_custom {
+        let mut field_stmt = conn.prepare(
+            "SELECT key, value FROM metadata_fields WHERE document_id = ?1 ORDER BY key",
+        )?;
         for row in field_stmt.query_map(params![id], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })? {
             let (k, v) = row?;
             if let Ok(val) = serde_json::from_str(&v) {
-                custom.insert(k, val);
+                custom_fields.insert(k, val);
             }
         }
     }
 
     let mut headings = vec![];
-    if include.contains(&"headings".to_string()) {
-        let conn = index.pool().get()?;
+    if includes(include, "headings") {
         let mut h_stmt = conn.prepare(
             "SELECT level, title, anchor FROM headings WHERE document_id = ?1 ORDER BY position",
         )?;
@@ -82,13 +124,11 @@ pub fn get_document(
                     anchor: row.get(2)?,
                 })
             })?
-            .filter_map(|r| r.ok())
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
     }
 
     let mut errors = vec![];
     {
-        let conn = index.pool().get()?;
         let mut e_stmt =
             conn.prepare("SELECT stage, message, line FROM scan_errors WHERE path = ?1")?;
         errors = e_stmt
@@ -99,13 +139,55 @@ pub fn get_document(
                     line: row.get::<_, Option<i64>>(2)?.map(|l| l as usize),
                 })
             })?
-            .filter_map(|r| r.ok())
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
     }
 
+    let links = if includes(include, "links") {
+        let mut link_stmt = conn.prepare(
+            "SELECT target_path, target_anchor, external_url, exists_in_repository
+             FROM links WHERE source_document_id = ?1
+             ORDER BY COALESCE(target_path, external_url), COALESCE(target_anchor, '')",
+        )?;
+        let items = link_stmt
+            .query_map(params![id], |row| {
+                Ok(LinkInfo {
+                    target_path: row.get(0)?,
+                    target_anchor: row.get(1)?,
+                    external_url: row.get(2)?,
+                    exists_in_repository: row.get::<_, i32>(3)? != 0,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Some(items)
+    } else {
+        None
+    };
+
+    let backlinks = if includes(include, "backlinks") {
+        let mut backlink_stmt = conn.prepare(
+            "SELECT source.path, l.target_anchor, l.exists_in_repository
+             FROM links l
+             JOIN documents source ON source.id = l.source_document_id
+             WHERE l.target_path = ?1
+             ORDER BY source.path, COALESCE(l.target_anchor, '')",
+        )?;
+        let items = backlink_stmt
+            .query_map(params![doc_path], |row| {
+                Ok(BacklinkInfo {
+                    source_path: row.get(0)?,
+                    target_anchor: row.get(1)?,
+                    exists_in_repository: row.get::<_, i32>(2)? != 0,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Some(items)
+    } else {
+        None
+    };
+
     let truncated;
-    let body = if include.contains(&"body".to_string()) {
-        if body_text.len() > max_body_chars {
+    let body = if includes(include, "body") {
+        if body_text.chars().count() > max_body_chars {
             truncated = true;
             Some(body_text.chars().take(max_body_chars).collect())
         } else {
@@ -117,14 +199,18 @@ pub fn get_document(
         None
     };
 
-    Ok(DocumentDetail {
+    let mut detail = DocumentDetail {
         path,
         metadata: DocumentMetadata {
             title,
             concept_type: ctype,
             description,
             tags,
-            custom,
+            custom: if include_metadata || include_custom {
+                custom_fields
+            } else {
+                BTreeMap::new()
+            },
             file_size: file_size as u64,
             modified_at,
             parse_status,
@@ -133,7 +219,77 @@ pub fn get_document(
         body,
         truncated,
         errors,
-    })
+        content_hash: if includes(include, "content_hash") {
+            content_hash
+        } else {
+            None
+        },
+        parent_path: includes(include, "parent_path").then_some(parent_path),
+        links,
+        backlinks,
+    };
+    enforce_response_limit(&mut detail, index.config.max_response_chars)?;
+    Ok(detail)
+}
+
+fn includes(include: &[String], value: &str) -> bool {
+    include.iter().any(|candidate| candidate == value)
+}
+
+fn enforce_response_limit(
+    detail: &mut DocumentDetail,
+    max_chars: usize,
+) -> Result<(), anyhow::Error> {
+    if serialized_chars(detail)? <= max_chars {
+        return Ok(());
+    }
+
+    detail.truncated = true;
+    let body = detail.body.take();
+
+    while serialized_chars(detail)? > max_chars {
+        if detail
+            .backlinks
+            .as_mut()
+            .is_some_and(|items| items.pop().is_some())
+            || detail
+                .links
+                .as_mut()
+                .is_some_and(|items| items.pop().is_some())
+            || detail.headings.pop().is_some()
+            || detail.errors.pop().is_some()
+            || detail.metadata.custom.pop_last().is_some()
+        {
+            continue;
+        }
+        return Err(anyhow!(
+            "max_response_chars ({max_chars}) is too small for the document response envelope"
+        ));
+    }
+
+    if let Some(body) = body {
+        let characters = body.chars().collect::<Vec<_>>();
+        let mut low = 0;
+        let mut high = characters.len();
+        while low < high {
+            let midpoint = low + (high - low).div_ceil(2);
+            detail.body = Some(characters[..midpoint].iter().collect());
+            if serialized_chars(detail)? <= max_chars {
+                low = midpoint;
+            } else {
+                high = midpoint - 1;
+            }
+        }
+        detail.body = Some(characters[..low].iter().collect());
+    }
+    Ok(())
+}
+
+fn serialized_chars(detail: &DocumentDetail) -> Result<usize, anyhow::Error> {
+    Ok(serde_json::to_string(detail)
+        .context("serialize document response for size enforcement")?
+        .chars()
+        .count())
 }
 
 /// Get a specific section from a document by heading title or anchor slug.
