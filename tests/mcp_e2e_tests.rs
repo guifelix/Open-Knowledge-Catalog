@@ -812,3 +812,34 @@ async fn test_mcp_stdio_packaged_binary_reports_invalid_root() -> anyhow::Result
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_mcp_scan_rejects_invalid_configuration_before_storage() -> anyhow::Result<()> {
+    let workspace = setup_simple_repo();
+    let session = launch_packaged_stdio_session(&workspace).await?;
+    let db_path = workspace.path().join("invalid-scan.db");
+    let missing_root = workspace.path().join("does-not-exist");
+
+    let result = invoke_tool(
+        &session.client,
+        "scan",
+        Some(json!({
+            "roots": [missing_root],
+            "db_path": db_path,
+        })),
+    )
+    .await
+    .context("invoke scan with invalid configuration")?;
+
+    assert_eq!(result.is_error, Some(true));
+    assert!(result.content.iter().any(|content| content
+        .as_text()
+        .is_some_and(|text| text.text.contains("Root directory does not exist"))));
+    assert!(
+        !db_path.exists(),
+        "invalid MCP scan must not create its database"
+    );
+
+    close_stdio_session(session).await?;
+    Ok(())
+}

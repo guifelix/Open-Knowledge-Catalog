@@ -543,7 +543,17 @@ impl ServerHandler for McpServer {}
 
 #[cfg(test)]
 mod tests {
-    use super::parse_metadata_filters;
+    use crate::config::OkcConfig;
+
+    use super::{parse_metadata_filters, McpServer};
+
+    #[test]
+    fn mcp_server_rejects_invalid_configuration() {
+        let error = McpServer::new(&OkcConfig::default())
+            .err()
+            .expect("MCP construction should reject missing roots");
+        assert!(error.to_string().contains("At least one root directory"));
+    }
 
     #[test]
     fn metadata_filter_parser_accepts_values_containing_equals() {

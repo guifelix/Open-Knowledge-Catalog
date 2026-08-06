@@ -33,6 +33,7 @@ pub struct OkcService {
 impl OkcService {
     /// Open a service connected to the configured database.
     pub fn open(config: &OkcConfig) -> Result<Self, anyhow::Error> {
+        config.validate()?;
         let index = RepositoryIndex::open(config)?;
         Ok(Self { index })
     }
@@ -42,6 +43,7 @@ impl OkcService {
     /// Uses an in-memory SQLite database. Graph store is not available.
     #[allow(dead_code)]
     pub fn open_in_memory(config: &OkcConfig) -> Result<Self, anyhow::Error> {
+        config.validate()?;
         let index = RepositoryIndex::open_in_memory(config)?;
         Ok(Self { index })
     }

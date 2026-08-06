@@ -45,6 +45,79 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result
 }
 
 #[test]
+fn test_service_rejects_invalid_configuration_before_opening_storage() {
+    let repo = TempDir::new().expect("invalid config temp repo");
+
+    let cases = [
+        (
+            "missing roots",
+            OkcConfig {
+                roots: Vec::new(),
+                db_path: repo.path().join("missing-roots.db"),
+                ..Default::default()
+            },
+            "At least one root directory",
+        ),
+        (
+            "nonexistent root",
+            OkcConfig {
+                roots: vec![repo.path().join("does-not-exist")],
+                db_path: repo.path().join("nonexistent-root.db"),
+                ..Default::default()
+            },
+            "Root directory does not exist",
+        ),
+        (
+            "invalid response limit",
+            OkcConfig {
+                roots: vec![repo.path().to_path_buf()],
+                db_path: repo.path().join("invalid-limit.db"),
+                max_response_chars: 0,
+                ..Default::default()
+            },
+            "max_response_chars must be greater than 0",
+        ),
+        (
+            "invalid BM25 weight",
+            OkcConfig {
+                roots: vec![repo.path().to_path_buf()],
+                db_path: repo.path().join("invalid-bm25.db"),
+                bm25: okc::config::Bm25Config {
+                    title_weight: -1.0,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            "BM25 weights must be non-negative",
+        ),
+    ];
+
+    for (name, config, expected) in cases {
+        let db_path = config.db_path.clone();
+        let error = OkcService::open(&config)
+            .err()
+            .unwrap_or_else(|| panic!("{name} should be rejected"));
+        assert!(
+            error.to_string().contains(expected),
+            "{name} returned the wrong error: {error}"
+        );
+        assert!(
+            !db_path.exists(),
+            "{name} must be rejected before creating storage"
+        );
+    }
+}
+
+#[test]
+fn test_in_memory_service_rejects_invalid_configuration() {
+    let config = OkcConfig::default();
+    let error = OkcService::open_in_memory(&config)
+        .err()
+        .expect("missing roots should be rejected");
+    assert!(error.to_string().contains("At least one root directory"));
+}
+
+#[test]
 fn test_direct_concept_lookup() {
     let repo = setup_simple_repo();
     let config = mkconfig(&repo);
