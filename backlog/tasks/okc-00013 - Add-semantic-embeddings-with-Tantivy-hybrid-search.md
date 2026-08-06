@@ -4,10 +4,11 @@ title: Add semantic embeddings with Tantivy/hybrid search
 status: To Do
 assignee: []
 created_date: '2026-07-23 00:50'
-updated_date: '2026-07-25 23:57'
+updated_date: '2026-08-06 19:55'
 labels:
   - future
-dependencies: []
+dependencies:
+  - OKC-00110
 priority: medium
 type: feature
 ordinal: 17400
@@ -31,3 +32,13 @@ After measuring lexical retrieval failures, add Tantivy for embeddings. Pipeline
 - [ ] #8 Embedding dimension configurable (384/768/1536)
 - [ ] #9 Semantic search returns top-k results by cosine similarity with scores
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: @codex
+created: 2026-08-06 19:55
+---
+Advanced retrieval remains gated on the measured relevance baseline in OKC-00110. Backend, embedding, fusion, reranking, and HyDE decisions must follow its failure taxonomy and promotion threshold.
+---
+<!-- COMMENTS:END -->
