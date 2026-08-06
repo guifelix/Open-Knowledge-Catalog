@@ -57,6 +57,8 @@ pub(crate) struct DirectoryDocumentOutput {
 #[derive(Deserialize, schemars::JsonSchema)]
 pub(crate) struct GetDocumentParams {
     pub path: String,
+    /// Optional sections: metadata, headings, body, custom, content_hash,
+    /// parent_path, links, and backlinks.
     pub include: Option<Vec<String>>,
     pub max_chars: Option<usize>,
 }
@@ -74,6 +76,23 @@ pub(crate) struct DocumentDetailOutput {
     pub headings: Vec<HeadingInfoOutput>,
     pub body: Option<String>,
     pub truncated: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub custom: Option<std::collections::BTreeMap<String, serde_json::Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub links: Option<Vec<LinkInfoOutput>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backlinks: Option<Vec<DocumentBacklinkOutput>>,
+}
+
+#[derive(Serialize, schemars::JsonSchema)]
+pub(crate) struct DocumentBacklinkOutput {
+    pub source_path: String,
+    pub target_anchor: Option<String>,
+    pub exists_in_repository: bool,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]
@@ -96,6 +115,11 @@ pub(crate) struct GetSectionParams {
 pub(crate) struct SectionOutput {
     pub heading: String,
     pub content: String,
+}
+
+#[derive(Serialize, schemars::JsonSchema)]
+pub(crate) struct SectionResponseOutput {
+    pub section: Option<SectionOutput>,
 }
 
 // ── Search ───────────────────────────────────────────────────────────────────
@@ -133,8 +157,12 @@ pub(crate) struct SearchResponseOutput {
 
 #[derive(Deserialize, schemars::JsonSchema)]
 pub(crate) struct MetadataParams {
+    /// Exact `key=value` filters. Supports type, title, parse_status,
+    /// path_prefix, tags_contains, and custom front-matter field names.
     pub filter: Option<Vec<String>>,
+    /// Core document fields, tags, or custom front-matter field names to return.
     pub select: Option<Vec<String>>,
+    /// Maximum number of matching documents to return (default: 100).
     pub limit: Option<usize>,
 }
 
@@ -158,6 +186,11 @@ pub(crate) struct LinkInfoOutput {
     pub target_anchor: Option<String>,
     pub external_url: Option<String>,
     pub exists_in_repository: bool,
+}
+
+#[derive(Serialize, schemars::JsonSchema)]
+pub(crate) struct LinksResponseOutput {
+    pub links: Vec<LinkInfoOutput>,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
@@ -229,4 +262,70 @@ pub(crate) struct ValidateIssueOutput {
     pub category: String,
     pub message: String,
     pub line: Option<usize>,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use serde_json::json;
+
+    use super::{DocumentBacklinkOutput, DocumentDetailOutput, HeadingInfoOutput, LinkInfoOutput};
+
+    #[test]
+    fn enriched_document_output_serializes_every_optional_field() {
+        let output = DocumentDetailOutput {
+            path: "metrics/revenue.md".to_string(),
+            title: Some("Revenue".to_string()),
+            concept_type: Some("Metric".to_string()),
+            description: Some("Revenue metric".to_string()),
+            tags: vec!["finance".to_string()],
+            file_size: 42,
+            modified_at: 1,
+            parse_status: "ok".to_string(),
+            headings: vec![HeadingInfoOutput {
+                level: 1,
+                title: "Definition".to_string(),
+                anchor: Some("definition".to_string()),
+            }],
+            body: Some("Body".to_string()),
+            truncated: false,
+            custom: Some(BTreeMap::from([("owner".to_string(), json!("Finance"))])),
+            content_hash: Some("hash".to_string()),
+            parent_path: Some("metrics".to_string()),
+            links: Some(vec![LinkInfoOutput {
+                target_path: Some("datasets/orders.md".to_string()),
+                target_anchor: None,
+                external_url: None,
+                exists_in_repository: true,
+            }]),
+            backlinks: Some(vec![DocumentBacklinkOutput {
+                source_path: "policies/revenue.md".to_string(),
+                target_anchor: Some("definition".to_string()),
+                exists_in_repository: true,
+            }]),
+        };
+
+        let value = serde_json::to_value(output).expect("serialize enriched document output");
+        for field in [
+            "path",
+            "title",
+            "concept_type",
+            "description",
+            "tags",
+            "file_size",
+            "modified_at",
+            "parse_status",
+            "headings",
+            "body",
+            "truncated",
+            "custom",
+            "content_hash",
+            "parent_path",
+            "links",
+            "backlinks",
+        ] {
+            assert!(value.get(field).is_some(), "missing output field {field}");
+        }
+    }
 }

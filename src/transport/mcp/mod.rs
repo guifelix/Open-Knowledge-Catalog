@@ -29,11 +29,13 @@ use std::time::Duration;
 use axum::Router;
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters, ServerHandler},
+    model::{CallToolResult, ContentBlock, JsonObject},
     schemars, tool, tool_handler, tool_router,
     transport::streamable_http_server::session::local::LocalSessionManager,
     transport::streamable_http_server::tower::{StreamableHttpServerConfig, StreamableHttpService},
+    Json,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
@@ -42,12 +44,66 @@ use crate::service::OkcService;
 
 use self::types::{
     BacklinkParams, BrowseParams, BrowseResultOutput, DirectoryDocumentOutput,
-    DocumentDetailOutput, GetDocumentParams, GetSectionParams, GraphEdgeOutput, HeadingInfoOutput,
-    LinkInfoOutput, LinkParams, MetadataParams, MetadataResponseOutput, ScanParams,
-    ScanResultOutput, SearchParams, SearchResponseOutput, SearchResultOutput, SectionOutput,
-    StatsOutput, TraverseNodeOutput, TraverseParams, TraverseResponseOutput, ValidateIssueOutput,
+    DocumentBacklinkOutput, DocumentDetailOutput, GetDocumentParams, GetSectionParams,
+    GraphEdgeOutput, HeadingInfoOutput, LinkInfoOutput, LinkParams, LinksResponseOutput,
+    MetadataParams, MetadataResponseOutput, ScanParams, ScanResultOutput, SearchParams,
+    SearchResponseOutput, SearchResultOutput, SectionOutput, SectionResponseOutput, StatsOutput,
+    TraverseNodeOutput, TraverseParams, TraverseResponseOutput, ValidateIssueOutput,
     ValidateOutput, ValidateSummaryOutput,
 };
+
+fn structured_with_legacy_text<T: Serialize>(
+    structured: &T,
+    legacy_text: String,
+) -> Result<CallToolResult, String> {
+    let value = serde_json::to_value(structured)
+        .map_err(|error| format!("Failed to serialize structured MCP response: {error}"))?;
+    let mut result = CallToolResult::structured(value);
+    result.content = vec![ContentBlock::text(legacy_text)];
+    Ok(result)
+}
+
+fn object_output_schema<T: schemars::JsonSchema + 'static>() -> Arc<JsonObject> {
+    rmcp::handler::server::tool::schema_for_output::<T>().unwrap_or_else(|error| {
+        tracing::error!(
+            output_type = std::any::type_name::<T>(),
+            %error,
+            "failed to generate MCP output schema"
+        );
+        let mut schema = JsonObject::new();
+        schema.insert("type".to_string(), serde_json::json!("object"));
+        schema.insert("additionalProperties".to_string(), serde_json::json!(true));
+        Arc::new(schema)
+    })
+}
+
+fn parse_metadata_filters(
+    filter: Option<Vec<String>>,
+) -> Result<HashMap<String, serde_json::Value>, String> {
+    let mut filters = HashMap::new();
+    for expression in filter.unwrap_or_default() {
+        let (key, value) = expression
+            .split_once('=')
+            .ok_or_else(|| format!("Invalid filter '{expression}': expected key=value"))?;
+        if key.is_empty() {
+            return Err(format!(
+                "Invalid filter '{expression}': filter key must not be empty"
+            ));
+        }
+        if filters
+            .insert(
+                key.to_string(),
+                serde_json::Value::String(value.to_string()),
+            )
+            .is_some()
+        {
+            return Err(format!(
+                "Invalid filter '{expression}': duplicate key '{key}'"
+            ));
+        }
+    }
+    Ok(filters)
+}
 
 /// MCP server wrapping the OKC service.
 ///
@@ -123,7 +179,7 @@ impl McpServer {
     async fn scan(
         &self,
         Parameters(ScanParams { roots, db_path }): Parameters<ScanParams>,
-    ) -> String {
+    ) -> Result<Json<ScanResultOutput>, String> {
         let config = OkcConfig {
             roots: roots.into_iter().map(std::path::PathBuf::from).collect(),
             db_path: db_path.map_or_else(
@@ -134,7 +190,7 @@ impl McpServer {
         };
 
         match OkcService::open(&config).and_then(|mut svc| svc.scan()) {
-            Ok(r) => serde_json::to_string(&ScanResultOutput {
+            Ok(r) => Ok(Json(ScanResultOutput {
                 total_files: r.total_files,
                 added: r.added,
                 modified: r.modified,
@@ -143,9 +199,8 @@ impl McpServer {
                 broken_links: r.broken_links,
                 total_links: r.total_links,
                 duration_secs: r.duration_secs,
-            })
-            .unwrap_or_default(),
-            Err(e) => format!("Error: {}", e),
+            })),
+            Err(e) => Err(format!("Error: {}", e)),
         }
     }
 
@@ -153,14 +208,14 @@ impl McpServer {
     async fn browse(
         &self,
         Parameters(BrowseParams { path, depth, limit }): Parameters<BrowseParams>,
-    ) -> String {
+    ) -> Result<Json<BrowseResultOutput>, String> {
         let depth = depth.unwrap_or(1);
         let limit = limit.unwrap_or(100);
         let path = path.unwrap_or_default();
 
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.browse(&path, depth, limit) {
-            Ok(r) => serde_json::to_string(&BrowseResultOutput {
+            Ok(r) => Ok(Json(BrowseResultOutput {
                 path: r.path,
                 summary_document: r.summary_document,
                 directories: r.directories,
@@ -175,9 +230,8 @@ impl McpServer {
                     })
                     .collect(),
                 truncated: r.truncated,
-            })
-            .unwrap_or_default(),
-            Err(e) => format!("Error: {}", e),
+            })),
+            Err(e) => Err(format!("Error: {}", e)),
         }
     }
 
@@ -189,39 +243,69 @@ impl McpServer {
             include,
             max_chars,
         }): Parameters<GetDocumentParams>,
-    ) -> String {
+    ) -> Result<Json<DocumentDetailOutput>, String> {
         let include = include.unwrap_or_else(|| vec!["body".to_string(), "headings".to_string()]);
+        let include_custom = include.iter().any(|value| value == "custom");
         let max_chars = max_chars.unwrap_or(12000);
 
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.get_document(&path, &include, max_chars) {
-            Ok(r) => serde_json::to_string(&DocumentDetailOutput {
-                path: r.path,
-                title: r.metadata.title,
-                concept_type: r.metadata.concept_type,
-                description: r.metadata.description,
-                tags: r.metadata.tags,
-                file_size: r.metadata.file_size,
-                modified_at: r.metadata.modified_at,
-                parse_status: r.metadata.parse_status,
-                headings: r
-                    .headings
-                    .into_iter()
-                    .map(|h| HeadingInfoOutput {
-                        level: h.level,
-                        title: h.title,
-                        anchor: h.anchor,
-                    })
-                    .collect(),
-                body: r.body,
-                truncated: r.truncated,
-            })
-            .unwrap_or_default(),
-            Err(e) => format!("Error: {}", e),
+            Ok(r) => {
+                let custom = include_custom.then(|| r.metadata.custom.clone());
+                Ok(Json(DocumentDetailOutput {
+                    path: r.path,
+                    title: r.metadata.title,
+                    concept_type: r.metadata.concept_type,
+                    description: r.metadata.description,
+                    tags: r.metadata.tags,
+                    file_size: r.metadata.file_size,
+                    modified_at: r.metadata.modified_at,
+                    parse_status: r.metadata.parse_status,
+                    headings: r
+                        .headings
+                        .into_iter()
+                        .map(|h| HeadingInfoOutput {
+                            level: h.level,
+                            title: h.title,
+                            anchor: h.anchor,
+                        })
+                        .collect(),
+                    body: r.body,
+                    truncated: r.truncated,
+                    custom,
+                    content_hash: r.content_hash,
+                    parent_path: r.parent_path,
+                    links: r.links.map(|links| {
+                        links
+                            .into_iter()
+                            .map(|link| LinkInfoOutput {
+                                target_path: link.target_path,
+                                target_anchor: link.target_anchor,
+                                external_url: link.external_url,
+                                exists_in_repository: link.exists_in_repository,
+                            })
+                            .collect()
+                    }),
+                    backlinks: r.backlinks.map(|links| {
+                        links
+                            .into_iter()
+                            .map(|link| DocumentBacklinkOutput {
+                                source_path: link.source_path,
+                                target_anchor: link.target_anchor,
+                                exists_in_repository: link.exists_in_repository,
+                            })
+                            .collect()
+                    }),
+                }))
+            }
+            Err(e) => Err(format!("Error: {}", e)),
         }
     }
 
-    #[tool(description = "Get a specific section of a document by heading title or anchor")]
+    #[tool(
+        description = "Get a specific section of a document by heading title or anchor",
+        output_schema = object_output_schema::<SectionResponseOutput>()
+    )]
     async fn get_section(
         &self,
         Parameters(GetSectionParams {
@@ -229,15 +313,18 @@ impl McpServer {
             heading,
             max_chars,
         }): Parameters<GetSectionParams>,
-    ) -> String {
+    ) -> Result<CallToolResult, String> {
         let max_chars = max_chars.unwrap_or(5000);
 
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.get_section(&path, &heading, max_chars) {
-            Ok(Some((heading, content))) => {
-                serde_json::to_string(&SectionOutput { heading, content }).unwrap_or_default()
+            Ok(section) => {
+                let section = section.map(|(heading, content)| SectionOutput { heading, content });
+                let legacy_text = serde_json::to_string(&section)
+                    .map_err(|error| format!("Failed to serialize section response: {error}"))?;
+                structured_with_legacy_text(&SectionResponseOutput { section }, legacy_text)
             }
-            _ => "null".to_string(),
+            Err(e) => Err(format!("Error: {}", e)),
         }
     }
 
@@ -251,7 +338,7 @@ impl McpServer {
             tags,
             limit,
         }): Parameters<SearchParams>,
-    ) -> String {
+    ) -> Result<Json<SearchResponseOutput>, String> {
         let limit = limit.unwrap_or(20);
 
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
@@ -262,7 +349,7 @@ impl McpServer {
             tags.as_deref(),
             limit,
         ) {
-            Ok(r) => serde_json::to_string(&SearchResponseOutput {
+            Ok(r) => Ok(Json(SearchResponseOutput {
                 results: r
                     .results
                     .into_iter()
@@ -277,9 +364,8 @@ impl McpServer {
                     .collect(),
                 total_matches: r.total_matches,
                 truncated: r.truncated,
-            })
-            .unwrap_or_default(),
-            Err(e) => format!("Error: {}", e),
+            })),
+            Err(e) => Err(format!("Error: {}", e)),
         }
     }
 
@@ -291,41 +377,34 @@ impl McpServer {
             select,
             limit,
         }): Parameters<MetadataParams>,
-    ) -> String {
+    ) -> Result<Json<MetadataResponseOutput>, String> {
         let select = select.unwrap_or_default();
         let limit = limit.unwrap_or(100);
-        let filters: HashMap<String, serde_json::Value> = filter
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|f| {
-                let mut parts = f.splitn(2, '=');
-                match (parts.next(), parts.next()) {
-                    (Some(k), Some(v)) => {
-                        Some((k.to_string(), serde_json::Value::String(v.to_string())))
-                    }
-                    _ => None,
-                }
-            })
-            .collect();
+        let filters = parse_metadata_filters(filter)?;
 
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.query_metadata(&filters, &select, limit) {
-            Ok(r) => serde_json::to_string(&MetadataResponseOutput {
+            Ok(r) => Ok(Json(MetadataResponseOutput {
                 results: r.results,
                 total_matches: r.total_matches,
                 truncated: r.truncated,
-            })
-            .unwrap_or_default(),
-            Err(e) => format!("Error: {}", e),
+            })),
+            Err(e) => Err(format!("Error: {}", e)),
         }
     }
 
-    #[tool(description = "Get all outgoing links from a document")]
-    async fn get_links(&self, Parameters(LinkParams { path }): Parameters<LinkParams>) -> String {
+    #[tool(
+        description = "Get all outgoing links from a document",
+        output_schema = object_output_schema::<LinksResponseOutput>()
+    )]
+    async fn get_links(
+        &self,
+        Parameters(LinkParams { path }): Parameters<LinkParams>,
+    ) -> Result<CallToolResult, String> {
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.get_links(&path) {
-            Ok(links) => serde_json::to_string(
-                &links
+            Ok(links) => {
+                let links = links
                     .into_iter()
                     .map(|l| LinkInfoOutput {
                         target_path: l.target_path,
@@ -333,23 +412,28 @@ impl McpServer {
                         external_url: l.external_url,
                         exists_in_repository: l.exists_in_repository,
                     })
-                    .collect::<Vec<_>>(),
-            )
-            .unwrap_or_default(),
-            Err(e) => format!("Error: {}", e),
+                    .collect::<Vec<_>>();
+                let legacy_text = serde_json::to_string(&links)
+                    .map_err(|error| format!("Failed to serialize links response: {error}"))?;
+                structured_with_legacy_text(&LinksResponseOutput { links }, legacy_text)
+            }
+            Err(e) => Err(format!("Error: {}", e)),
         }
     }
 
-    #[tool(description = "Get all backlinks pointing to a document")]
+    #[tool(
+        description = "Get all backlinks pointing to a document",
+        output_schema = object_output_schema::<LinksResponseOutput>()
+    )]
     async fn get_backlinks(
         &self,
         Parameters(BacklinkParams { path, limit }): Parameters<BacklinkParams>,
-    ) -> String {
+    ) -> Result<CallToolResult, String> {
         let limit = limit.unwrap_or(50);
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.get_backlinks(&path, limit) {
-            Ok(links) => serde_json::to_string(
-                &links
+            Ok(links) => {
+                let links = links
                     .into_iter()
                     .map(|l| LinkInfoOutput {
                         target_path: l.target_path,
@@ -357,10 +441,12 @@ impl McpServer {
                         external_url: l.external_url,
                         exists_in_repository: l.exists_in_repository,
                     })
-                    .collect::<Vec<_>>(),
-            )
-            .unwrap_or_default(),
-            Err(e) => format!("Error: {}", e),
+                    .collect::<Vec<_>>();
+                let legacy_text = serde_json::to_string(&links)
+                    .map_err(|error| format!("Failed to serialize backlinks response: {error}"))?;
+                structured_with_legacy_text(&LinksResponseOutput { links }, legacy_text)
+            }
+            Err(e) => Err(format!("Error: {}", e)),
         }
     }
 
@@ -373,14 +459,14 @@ impl McpServer {
             max_depth,
             max_nodes,
         }): Parameters<TraverseParams>,
-    ) -> String {
+    ) -> Result<Json<TraverseResponseOutput>, String> {
         let relations = relations.unwrap_or_default();
         let max_depth = max_depth.unwrap_or(3);
         let max_nodes = max_nodes.unwrap_or(50);
 
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.traverse(&start, &relations, max_depth, max_nodes) {
-            Ok(r) => serde_json::to_string(&TraverseResponseOutput {
+            Ok(r) => Ok(Json(TraverseResponseOutput {
                 nodes: r
                     .nodes
                     .into_iter()
@@ -401,36 +487,34 @@ impl McpServer {
                     })
                     .collect(),
                 truncated: r.truncated,
-            })
-            .unwrap_or_default(),
-            Err(e) => format!("Error: {}", e),
+            })),
+            Err(e) => Err(format!("Error: {}", e)),
         }
     }
 
     #[tool(
         description = "Get index statistics: document count, error count, link count, heading count"
     )]
-    async fn get_stats(&self) -> String {
+    async fn get_stats(&self) -> Result<Json<StatsOutput>, String> {
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.get_stats() {
-            Ok(s) => serde_json::to_string(&StatsOutput {
+            Ok(s) => Ok(Json(StatsOutput {
                 document_count: s.document_count,
                 error_count: s.error_count,
                 link_count: s.link_count,
                 heading_count: s.heading_count,
-            })
-            .unwrap_or_default(),
-            Err(e) => format!("Error: {}", e),
+            })),
+            Err(e) => Err(format!("Error: {}", e)),
         }
     }
 
     #[tool(
         description = "Validate the repository and check for issues across all indexed documents"
     )]
-    async fn validate(&self) -> String {
+    async fn validate(&self) -> Result<Json<ValidateOutput>, String> {
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.validate_report() {
-            Ok(r) => serde_json::to_string(&ValidateOutput {
+            Ok(r) => Ok(Json(ValidateOutput {
                 summary: ValidateSummaryOutput {
                     total_issues: r.summary.total_issues,
                     errors: r.summary.errors,
@@ -448,12 +532,34 @@ impl McpServer {
                         line: i.line,
                     })
                     .collect(),
-            })
-            .unwrap_or_default(),
-            Err(e) => format!("Error: {}", e),
+            })),
+            Err(e) => Err(format!("Error: {}", e)),
         }
     }
 }
 
 #[tool_handler]
 impl ServerHandler for McpServer {}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_metadata_filters;
+
+    #[test]
+    fn metadata_filter_parser_accepts_values_containing_equals() {
+        let filters = parse_metadata_filters(Some(vec!["location=s3://bucket?a=b".to_string()]))
+            .expect("valid metadata filter");
+        assert_eq!(filters["location"], "s3://bucket?a=b");
+    }
+
+    #[test]
+    fn metadata_filter_parser_rejects_malformed_and_duplicate_filters() {
+        assert!(parse_metadata_filters(Some(vec!["type".to_string()])).is_err());
+        assert!(parse_metadata_filters(Some(vec!["=Metric".to_string()])).is_err());
+        assert!(parse_metadata_filters(Some(vec![
+            "type=Metric".to_string(),
+            "type=Dataset".to_string(),
+        ]))
+        .is_err());
+    }
+}
