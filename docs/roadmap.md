@@ -48,6 +48,12 @@ status: published
 
 ## Phase 6 - Advanced Retrieval (Future)
 *Only add after measuring real retrieval failures:*
+
+The initial measurement is recorded in
+[Lexical Search Baseline v1](search-baseline-v1.md). It recommends consolidating
+the production search path and addressing typo and graph-expansion failures
+before deciding on embeddings.
+
 - Fuzzy filename matching
 - Trigram search
 - Semantic embeddings

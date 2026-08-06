@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "corpus": "tests/fixtures/simple",
+  "proposal_gate": {
+    "minimum_absolute_recall_at_5_gain": 0.10,
+    "minimum_absolute_mrr_at_10_gain": 0.05,
+    "maximum_p95_latency_regression_percent": 25.0,
+    "maximum_exact_query_recall_regression": 0.0
+  },
+  "queries": [
+    {
+      "id": "exact-monthly-recurring-revenue",
+      "category": "exact",
+      "query": "monthly recurring revenue",
+      "expected_relevant": [
+        "glossary/mrr.md",
+        "metrics/monthly-revenue.md"
+      ]
+    },
+    {
+      "id": "exact-customer-orders",
+      "category": "exact",
+      "query": "customer orders",
+      "expected_relevant": ["datasets/customer-orders.md"]
+    },
+    {
+      "id": "paraphrase-customer-cancellation",
+      "category": "paraphrase",
+      "query": "customers cancel subscription",
+      "expected_relevant": ["metrics/churn-rate.md"],
+      "failure_class": "semantic_recall"
+    },
+    {
+      "id": "paraphrase-subscription-income-rules",
+      "category": "paraphrase",
+      "query": "subscription income rules",
+      "expected_relevant": ["policies/revenue-recognition.md"],
+      "failure_class": "semantic_recall"
+    },
+    {
+      "id": "intentional-zero-hit",
+      "category": "zero_hit",
+      "query": "quantum entanglement",
+      "expected_relevant": [],
+      "expect_empty": true
+    },
+    {
+      "id": "graph-source-for-monthly-revenue",
+      "category": "graph_assisted",
+      "query": "monthly revenue",
+      "expected_relevant": ["datasets/customer-orders.md"],
+      "failure_class": "graph_expansion"
+    },
+    {
+      "id": "filtered-finance-customer-metrics",
+      "category": "metadata_filtered",
+      "query": "customer",
+      "path_prefix": "metrics",
+      "types": ["Metric"],
+      "tags": ["finance", "customer"],
+      "expected_relevant": [
+        "metrics/churn-rate.md",
+        "metrics/customer-count.md"
+      ],
+      "failure_class": "filter_interaction"
+    },
+    {
+      "id": "typo-monthly-revenue",
+      "category": "typo",
+      "query": "montly reveneu",
+      "expected_relevant": ["metrics/monthly-revenue.md"],
+      "failure_class": "typo_fuzzy_matching"
+    },
+    {
+      "id": "porter-subscription-normalization",
+      "category": "normalization",
+      "query": "subscriptions",
+      "expected_relevant": [
+        "glossary/mrr.md",
+        "metrics/customer-count.md"
+      ],
+      "failure_class": "lexical_normalization"
+    },
+    {
+      "id": "revenue-ranking",
+      "category": "ranking",
+      "query": "revenue",
+      "expected_relevant": [
+        "metrics/monthly-revenue.md",
+        "glossary/mrr.md",
+        "policies/revenue-recognition.md"
+      ],
+      "failure_class": "ranking"
+    }
+  ]
+}
