@@ -176,6 +176,72 @@ fn test_exact_metadata_query() {
 }
 
 #[test]
+fn test_metadata_query_filters_projection_order_and_counts() {
+    let repo = setup_simple_repo();
+    let config = mkconfig(&repo);
+
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
+
+    let filters = HashMap::from([
+        ("type".to_string(), serde_json::json!("Metric")),
+        ("tags_contains".to_string(), serde_json::json!("finance")),
+        ("path_prefix".to_string(), serde_json::json!("metrics/")),
+        ("parse_status".to_string(), serde_json::json!("ok")),
+        ("owner".to_string(), serde_json::json!("Finance Analytics")),
+    ]);
+    let select = ["path", "tags", "owner"]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+
+    let first = service
+        .query_metadata(&filters, &select, 2)
+        .expect("query projected metadata");
+    assert_eq!(first.total_matches, 3);
+    assert!(first.truncated);
+    assert_eq!(first.results.len(), 2);
+    assert_eq!(first.results[0]["path"], "metrics/churn-rate.md");
+    assert_eq!(first.results[1]["path"], "metrics/customer-count.md");
+    assert_eq!(first.results[0]["owner"], "Finance Analytics");
+    assert_eq!(
+        first.results[0]["tags"],
+        serde_json::json!(["customer", "finance", "retention"])
+    );
+
+    let repeated = service
+        .query_metadata(&filters, &select, 2)
+        .expect("repeat projected metadata query");
+    assert_eq!(repeated.results, first.results);
+
+    let empty = service
+        .query_metadata(
+            &HashMap::from([(
+                "path_prefix".to_string(),
+                serde_json::json!("does-not-exist/"),
+            )]),
+            &select,
+            10,
+        )
+        .expect("query empty metadata result");
+    assert_eq!(empty.total_matches, 0);
+    assert!(!empty.truncated);
+    assert!(empty.results.is_empty());
+
+    let invalid_filter = HashMap::from([("type!".to_string(), serde_json::json!("Metric"))]);
+    assert!(service
+        .query_metadata(&invalid_filter, &select, 10)
+        .expect_err("invalid filter operator should fail")
+        .to_string()
+        .contains("Invalid filter"));
+    assert!(service
+        .query_metadata(&HashMap::new(), &["path;drop".to_string()], 10)
+        .expect_err("invalid projection should fail")
+        .to_string()
+        .contains("Invalid select"));
+}
+
+#[test]
 fn test_repository_validation() {
     let repo = setup_edge_cases_repo();
     let config = OkcConfig {

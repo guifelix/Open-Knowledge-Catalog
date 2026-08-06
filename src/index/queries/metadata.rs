@@ -1,9 +1,14 @@
 //! Metadata query operations.
 
+use std::collections::HashMap;
+
+use anyhow::{anyhow, Context};
+use rusqlite::{params_from_iter, types::Value as SqlValue};
+use serde_json::{Map, Value};
+
 use crate::index::database::RepositoryIndex;
 use crate::model::document::MetadataQueryResponse;
 
-/// Valid column names for the documents table to prevent SQL injection.
 const VALID_DOCUMENT_COLUMNS: &[&str] = &[
     "path",
     "title",
@@ -17,7 +22,6 @@ const VALID_DOCUMENT_COLUMNS: &[&str] = &[
     "id",
 ];
 
-/// Default select fields when none are specified.
 const DEFAULT_SELECT: &[&str] = &[
     "path",
     "title",
@@ -28,202 +32,233 @@ const DEFAULT_SELECT: &[&str] = &[
     "parse_status",
 ];
 
-/// Structured metadata query with filtering and projection.
-///
-/// - `filters`: Key-value pairs to match against front-matter fields
-/// - `select`: Fields to return (empty = all default fields)
-/// - `limit`: Maximum rows to return
+/// Structured metadata query with exact-match filtering and field projection.
 pub fn query_metadata(
     index: &RepositoryIndex,
-    filters: &std::collections::HashMap<String, serde_json::Value>,
+    filters: &HashMap<String, Value>,
     select: &[String],
     limit: usize,
 ) -> Result<MetadataQueryResponse, anyhow::Error> {
-    // Validate filter keys — reject syntax that looks like raw user input
-    for key in filters.keys() {
-        if key.contains('=') {
-            return Err(anyhow::anyhow!(
-                "Invalid filter key: '{}'. Filter keys use JSON object syntax, not '='. \
-                 Pass filters as a JSON object, e.g. {{\"type\": \"Documentation\"}}",
-                key
-            ));
-        }
-        if key.contains(' ') {
-            return Err(anyhow::anyhow!(
-                "Invalid filter key: '{}'. Filter keys must not contain spaces. \
-                 Pass filters as a JSON object, e.g. {{\"type\": \"Documentation\"}}",
-                key
-            ));
-        }
-    }
+    validate_filters(filters)?;
 
+    let fields = selected_fields(select)?;
+    let (select_clause, select_params) = build_select(&fields);
+    let (where_clause, filter_params) = build_filters(filters)?;
     let conn = index.pool().get()?;
 
-    // Determine which fields to select
-    let fields: Vec<String> = if select.is_empty() {
-        DEFAULT_SELECT.iter().map(|s| s.to_string()).collect()
+    let count_sql = format!("SELECT COUNT(*) FROM documents d{where_clause}");
+    let total_matches: usize = conn
+        .query_row(&count_sql, params_from_iter(filter_params.iter()), |row| {
+            row.get::<_, i64>(0)
+        })?
+        .try_into()
+        .context("metadata match count does not fit in usize")?;
+
+    let sql = format!(
+        "SELECT {select_clause} FROM documents d{where_clause} \
+         ORDER BY d.path ASC, d.id ASC LIMIT ?"
+    );
+    let mut query_params = select_params;
+    query_params.extend(filter_params);
+    query_params.push(SqlValue::Integer(
+        limit
+            .try_into()
+            .context("metadata query limit exceeds SQLite integer range")?,
+    ));
+
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(params_from_iter(query_params.iter()), |row| {
+        project_row(row, &fields)
+    })?;
+    let results = rows.collect::<Result<Vec<_>, _>>()?;
+
+    Ok(MetadataQueryResponse {
+        truncated: total_matches > results.len(),
+        total_matches,
+        results,
+    })
+}
+
+fn selected_fields(select: &[String]) -> Result<Vec<String>, anyhow::Error> {
+    let fields = if select.is_empty() {
+        DEFAULT_SELECT
+            .iter()
+            .map(|field| (*field).to_string())
+            .collect()
     } else {
         select.to_vec()
     };
 
-    // Build SELECT columns with SQL-injection-safe validation
-    let mut select_cols: Vec<String> = Vec::new();
-    let mut custom_field_joins: Vec<(String, String)> = Vec::new();
-    let mut custom_field_count = 0usize;
-
     for field in &fields {
-        match field.as_str() {
-            "owner" => {
-                let alias = format!("mf_{}", custom_field_count);
-                select_cols.push(format!("{}.value AS {}", alias, field));
-                custom_field_joins.push(("owner".to_string(), alias));
-                custom_field_count += 1;
-            }
-            "status" => {
-                let alias = format!("mf_{}", custom_field_count);
-                select_cols.push(format!("{}.value AS {}", alias, field));
-                custom_field_joins.push(("status".to_string(), alias));
-                custom_field_count += 1;
-            }
-            f if VALID_DOCUMENT_COLUMNS.contains(&f) => {
-                select_cols.push(format!("d.{}", f));
-            }
-            _ => {
-                return Err(anyhow::anyhow!(
-                    "Invalid select field: '{}'. Valid fields: {}",
-                    field,
-                    VALID_DOCUMENT_COLUMNS.join(", ")
-                ));
-            }
+        validate_name(field, "select field")?;
+    }
+    Ok(fields)
+}
+
+fn validate_filters(filters: &HashMap<String, Value>) -> Result<(), anyhow::Error> {
+    for (key, value) in filters {
+        validate_name(key, "filter key")?;
+        if key.ends_with("_contains") && key != "tags_contains" {
+            return Err(anyhow!(
+                "Invalid filter operator in '{key}': only tags_contains is supported"
+            ));
+        }
+        if !value.is_string() {
+            return Err(anyhow!(
+                "Invalid filter value for '{key}': expected a string"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_name(name: &str, kind: &str) -> Result<(), anyhow::Error> {
+    let valid = !name.is_empty()
+        && name.len() <= 128
+        && name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || "_-.".contains(character));
+    if valid {
+        Ok(())
+    } else {
+        Err(anyhow!(
+            "Invalid {kind}: '{name}'. Use letters, numbers, '_', '-', or '.'"
+        ))
+    }
+}
+
+fn build_select(fields: &[String]) -> (String, Vec<SqlValue>) {
+    let mut columns = Vec::with_capacity(fields.len());
+    let mut params = Vec::new();
+
+    for field in fields {
+        if VALID_DOCUMENT_COLUMNS.contains(&field.as_str()) {
+            columns.push(format!("d.{field}"));
+        } else if field == "tags" {
+            columns.push(
+                "COALESCE((SELECT json_group_array(tag) FROM \
+                 (SELECT tag FROM document_tags WHERE document_id = d.id ORDER BY tag)), '[]')"
+                    .to_string(),
+            );
+        } else {
+            columns.push(
+                "(SELECT value FROM metadata_fields \
+                 WHERE document_id = d.id AND key = ? LIMIT 1)"
+                    .to_string(),
+            );
+            params.push(SqlValue::Text(field.clone()));
         }
     }
 
-    let mut sql = format!("SELECT {} FROM documents d", select_cols.join(", "));
+    (columns.join(", "), params)
+}
 
-    // Add custom field joins
-    for (key, alias) in &custom_field_joins {
-        sql.push_str(&format!(
-            " LEFT JOIN metadata_fields {} ON {}.document_id = d.id AND {}.key = '{}'",
-            alias, alias, alias, key
-        ));
-    }
+fn build_filters(
+    filters: &HashMap<String, Value>,
+) -> Result<(String, Vec<SqlValue>), anyhow::Error> {
+    let mut entries = filters.iter().collect::<Vec<_>>();
+    entries.sort_by_key(|(key, _)| key.as_str());
 
-    let mut conditions = Vec::new();
-    let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
-
-    for (key, value) in filters {
+    let mut conditions = Vec::with_capacity(entries.len());
+    let mut params = Vec::new();
+    for (key, value) in entries {
+        let value = value
+            .as_str()
+            .ok_or_else(|| anyhow!("Invalid filter value for '{key}': expected a string"))?;
         match key.as_str() {
-            "type" => {
-                conditions.push(format!("d.type = ?{}", param_values.len() + 1));
-                param_values.push(Box::new(value.as_str().unwrap_or("").to_string()));
+            "type" | "title" | "parse_status" => {
+                conditions.push(format!("d.{key} = ?"));
+                params.push(SqlValue::Text(value.to_string()));
+            }
+            "path_prefix" => {
+                conditions.push("d.path LIKE (? || '%') ESCAPE '\\'".to_string());
+                params.push(SqlValue::Text(escape_like(value)));
             }
             "tags_contains" => {
-                sql.push_str(" JOIN document_tags dt ON dt.document_id = d.id");
-                conditions.push(format!("dt.tag = ?{}", param_values.len() + 1));
-                param_values.push(Box::new(value.as_str().unwrap_or("").to_string()));
-            }
-            "title" => {
-                conditions.push(format!("d.title = ?{}", param_values.len() + 1));
-                param_values.push(Box::new(value.as_str().unwrap_or("").to_string()));
-            }
-            "parse_status" => {
-                conditions.push(format!("d.parse_status = ?{}", param_values.len() + 1));
-                param_values.push(Box::new(value.as_str().unwrap_or("").to_string()));
+                conditions.push(
+                    "EXISTS (SELECT 1 FROM document_tags dt \
+                     WHERE dt.document_id = d.id AND dt.tag = ?)"
+                        .to_string(),
+                );
+                params.push(SqlValue::Text(value.to_string()));
             }
             _ => {
-                // Custom metadata field
-                let alias = format!("mf_{}", param_values.len());
-                sql.push_str(&format!(
-                    " LEFT JOIN metadata_fields {} ON {}.document_id = d.id AND {}.key = ?{}",
-                    alias,
-                    alias,
-                    alias,
-                    param_values.len() + 1
-                ));
-                param_values.push(Box::new(key.clone()));
-                conditions.push(format!("{}.value = ?{}", alias, param_values.len() + 1));
-                param_values.push(Box::new(value.as_str().unwrap_or("").to_string()));
+                conditions.push(
+                    "EXISTS (SELECT 1 FROM metadata_fields mf \
+                     WHERE mf.document_id = d.id AND mf.key = ? AND mf.value = ?)"
+                        .to_string(),
+                );
+                params.push(SqlValue::Text(key.clone()));
+                params.push(SqlValue::Text(serde_json::to_string(value)?));
             }
         }
     }
 
-    if !conditions.is_empty() {
-        sql.push_str(&format!(" WHERE {}", conditions.join(" AND ")));
+    let clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!(" WHERE {}", conditions.join(" AND "))
+    };
+    Ok((clause, params))
+}
+
+fn escape_like(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
+}
+
+fn project_row(row: &rusqlite::Row<'_>, fields: &[String]) -> rusqlite::Result<Value> {
+    let mut result = Map::new();
+    for (index, field) in fields.iter().enumerate() {
+        let value = match field.as_str() {
+            "path" | "parse_status" => Value::String(row.get(index)?),
+            "title" | "type" | "description" | "content_hash" | "parent_path" => row
+                .get::<_, Option<String>>(index)?
+                .map_or(Value::Null, Value::String),
+            "file_size" | "modified_at" | "id" => Value::Number(row.get::<_, i64>(index)?.into()),
+            "tags" => row
+                .get::<_, String>(index)
+                .ok()
+                .and_then(|json| serde_json::from_str(&json).ok())
+                .unwrap_or_else(|| Value::Array(Vec::new())),
+            _ => row
+                .get::<_, Option<String>>(index)?
+                .map_or(Value::Null, |json| {
+                    serde_json::from_str(&json).unwrap_or(Value::String(json))
+                }),
+        };
+        result.insert(field.clone(), value);
+    }
+    Ok(Value::Object(result))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validates_filter_names_and_operators() {
+        assert!(validate_filters(&HashMap::from([(
+            "owner".to_string(),
+            Value::String("Analytics".to_string()),
+        )]))
+        .is_ok());
+        assert!(validate_filters(&HashMap::from([(
+            "type_contains".to_string(),
+            Value::String("Metric".to_string()),
+        )]))
+        .is_err());
+        assert!(validate_filters(&HashMap::from([(
+            "type!".to_string(),
+            Value::String("Metric".to_string()),
+        )]))
+        .is_err());
     }
 
-    if filters.contains_key("tags_contains") {
-        sql.push_str(" GROUP BY d.id");
+    #[test]
+    fn escapes_path_prefix_like_metacharacters() {
+        assert_eq!(escape_like(r"metrics_100%\"), r"metrics\_100\%\\");
     }
-
-    sql.push_str(&format!(" LIMIT ?{}", param_values.len() + 1));
-    param_values.push(Box::new(limit as i64));
-
-    let params_refs: Vec<&dyn rusqlite::types::ToSql> =
-        param_values.iter().map(|p| p.as_ref()).collect();
-
-    let mut stmt = conn.prepare(&sql)?;
-    let mut results = Vec::new();
-
-    let rows = stmt.query_map(params_refs.as_slice(), |row| {
-        let mut map = serde_json::Map::new();
-        for (i, field) in fields.iter().enumerate() {
-            match field.as_str() {
-                "path" | "parse_status" => {
-                    map.insert(
-                        field.clone(),
-                        serde_json::Value::String(row.get::<_, String>(i)?),
-                    );
-                }
-                "title" | "type" | "description" | "content_hash" | "parent_path" => {
-                    map.insert(
-                        field.clone(),
-                        serde_json::Value::String(
-                            row.get::<_, Option<String>>(i)?.unwrap_or_default(),
-                        ),
-                    );
-                }
-                "file_size" => {
-                    map.insert(
-                        field.clone(),
-                        serde_json::Value::Number(serde_json::Number::from(row.get::<_, i64>(i)?)),
-                    );
-                }
-                "modified_at" => {
-                    map.insert(
-                        field.clone(),
-                        serde_json::Value::Number(serde_json::Number::from(row.get::<_, i64>(i)?)),
-                    );
-                }
-                "id" => {
-                    map.insert(
-                        field.clone(),
-                        serde_json::Value::Number(serde_json::Number::from(row.get::<_, i64>(i)?)),
-                    );
-                }
-                // Custom metadata fields (owner, status) — nullable text
-                _ => {
-                    if let Ok(v) = row.get::<_, Option<String>>(i) {
-                        map.insert(
-                            field.clone(),
-                            serde_json::Value::String(v.unwrap_or_default()),
-                        );
-                    }
-                }
-            }
-        }
-        Ok(serde_json::Value::Object(map))
-    })?;
-
-    for row in rows {
-        results.push(row?);
-    }
-
-    let total_matches = results.len();
-    let truncated = total_matches > limit;
-
-    Ok(MetadataQueryResponse {
-        results: results.into_iter().take(limit).collect(),
-        total_matches,
-        truncated,
-    })
 }
