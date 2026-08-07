@@ -131,6 +131,14 @@ pub(crate) struct SearchParams {
     pub types: Option<Vec<String>>,
     pub tags: Option<Vec<String>>,
     pub limit: Option<usize>,
+    /// Maximum number of headings to include per search result.
+    /// Overrides the server config default (default: 1).
+    #[serde(default)]
+    pub max_headings: Option<usize>,
+    /// Maximum heading depth to include (1 = h1 only, 2 = h1+h2, etc.).
+    /// Overrides the server config default (default: 1).
+    #[serde(default)]
+    pub heading_depth: Option<u32>,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]
@@ -144,6 +152,10 @@ pub(crate) struct SearchResultOutput {
     pub concept_type: Option<String>,
     pub score: f64,
     pub excerpt: String,
+    /// Heading titles for the document, filtered by depth and capped at max_headings.
+    /// Empty when no headings found or document has no body.
+    #[serde(default)]
+    pub headings: Vec<String>,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]
