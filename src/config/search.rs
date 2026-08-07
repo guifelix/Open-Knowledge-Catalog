@@ -48,6 +48,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_deserialize() {
         let toml = r#"
             max_headings = 3

@@ -336,7 +336,15 @@ fn bench_search(c: &mut Criterion) {
                 black_box(
                     setup
                         .service
-                        .search(black_box("dashboard"), None, None, None, black_box(100))
+                        .search(
+                            black_box("dashboard"),
+                            None,
+                            None,
+                            None,
+                            black_box(100),
+                            None,
+                            None,
+                        )
                         .expect("search"),
                 );
             });
@@ -359,6 +367,8 @@ fn bench_search(c: &mut Criterion) {
                                 Some(black_box(&types)),
                                 None,
                                 black_box(100),
+                                None,
+                                None,
                             )
                             .expect("search"),
                     );
@@ -379,6 +389,8 @@ fn bench_search(c: &mut Criterion) {
                             None,
                             Some(black_box(&tags)),
                             black_box(100),
+                            None,
+                            None,
                         )
                         .expect("search"),
                 );
@@ -568,7 +580,15 @@ fn bench_technical_docs(c: &mut Criterion) {
             b.iter(|| {
                 black_box(
                     service
-                        .search(black_box("function"), None, None, None, black_box(100))
+                        .search(
+                            black_box("function"),
+                            None,
+                            None,
+                            None,
+                            black_box(100),
+                            None,
+                            None,
+                        )
                         .expect("search"),
                 );
             });
