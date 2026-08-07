@@ -163,6 +163,8 @@ fn run_query(
             (!query.types.is_empty()).then_some(query.types.as_slice()),
             (!query.tags.is_empty()).then_some(query.tags.as_slice()),
             10,
+            None,
+            None,
         )
         .unwrap_or_else(|error| panic!("search evaluation query '{}' failed: {error}", query.id))
 }
