@@ -102,6 +102,12 @@ pub enum Command {
         /// Maximum results
         #[arg(short, long, default_value = "20")]
         limit: usize,
+        /// Maximum headings per result (default: from config, hard default: 1)
+        #[arg(long)]
+        max_headings: Option<usize>,
+        /// Maximum heading depth to include (default: from config, hard default: 1)
+        #[arg(long)]
+        heading_depth: Option<u32>,
     },
     /// Structured metadata query with filtering and projection.
     Metadata {
