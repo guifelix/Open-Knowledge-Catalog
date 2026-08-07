@@ -1,7 +1,7 @@
 ---
 id: OKC-00100
 title: 'Migrate OKC to newer rmcp, tower, tower-http, and toml releases'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-07-29 18:49'
 updated_date: '2026-08-07 17:57'
