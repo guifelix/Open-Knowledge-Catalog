@@ -10,14 +10,17 @@ use anyhow::Context;
 use rmcp::{
     model::{CallToolRequestParams, CallToolResult, ClientInfo},
     service::{QuitReason, RunningService},
-    transport::child_process::TokioChildProcess,
+    transport::{
+        child_process::TokioChildProcess,
+        streamable_http_client::StreamableHttpClientTransportConfig, StreamableHttpClientTransport,
+    },
     ClientHandler, RoleClient, ServiceExt,
 };
 use serde_json::{json, Value};
 use std::{
     path::{Path, PathBuf},
     process::Stdio,
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tempfile::TempDir;
 use tokio::{
@@ -196,6 +199,156 @@ async fn close_stdio_session(mut session: StdioSession) -> anyhow::Result<(QuitR
         .context("timed out waiting for packaged okc stderr")??;
 
     Ok((quit_reason, stderr?))
+}
+
+struct HttpSession {
+    client: Client,
+    stderr_task: tokio::task::JoinHandle<anyhow::Result<String>>,
+    child: tokio::process::Child,
+}
+
+/// Discover the `http://host:port/mcp` endpoint the packaged server bound to.
+///
+/// The server binds to an ephemeral port (we ask for port 0) and logs the real
+/// address with `tracing::info!("MCP HTTP server listening on ...")`. tracing's
+/// `fmt::layer()` writes to stdout (not stderr), so we read the marker from
+/// stdout line-by-line until it appears, then keep draining stderr separately.
+async fn launch_packaged_http_session(workspace: &TempDir) -> anyhow::Result<HttpSession> {
+    let mut command = Command::new(packaged_okc_binary());
+    command.current_dir(workspace.path());
+    command
+        .args([
+            "serve",
+            "--transport",
+            "http",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "0",
+        ])
+        .env("RUST_LOG", "okc=info")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut child = command
+        .spawn()
+        .context("spawn packaged okc serve --transport http")?;
+    let stdout = child
+        .stdout
+        .take()
+        .context("packaged okc stdout was not piped")?;
+    let mut reader = BufReader::new(stdout).lines();
+
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let endpoint = loop {
+        if Instant::now() >= deadline {
+            anyhow::bail!("timed out waiting for MCP HTTP server to report its endpoint");
+        }
+        let line = match timeout(Duration::from_secs(15), reader.next_line()).await {
+            Ok(Ok(Some(line))) => line,
+            Ok(Ok(None)) => anyhow::bail!("packaged okc exited before advertising its endpoint"),
+            Ok(Err(error)) => return Err(error).context("read packaged okc stdout"),
+            Err(_) => continue,
+        };
+        if let Some(idx) = line.find("MCP HTTP server listening on ") {
+            break line[idx + "MCP HTTP server listening on ".len()..]
+                .trim()
+                .to_string();
+        }
+    };
+
+    let stderr = child
+        .stderr
+        .take()
+        .context("packaged okc stderr was not piped")?;
+    let stderr_task = tokio::spawn(async move { collect_child_stderr(stderr).await });
+
+    let transport = StreamableHttpClientTransport::from_config(
+        StreamableHttpClientTransportConfig::with_uri(endpoint),
+    );
+    let client = TestClientHandler
+        .serve(transport)
+        .await
+        .context("initialize packaged MCP HTTP session")?;
+
+    Ok(HttpSession {
+        child,
+        client,
+        stderr_task,
+    })
+}
+
+/// Close the MCP HTTP session: close the client transport and terminate the
+/// packaged server (it would otherwise keep serving until killed).
+async fn close_http_session(mut session: HttpSession) -> anyhow::Result<(QuitReason, String)> {
+    let quit_reason = timeout(Duration::from_secs(5), session.client.close())
+        .await
+        .context("timed out closing packaged MCP HTTP session")??;
+
+    let _ = session.child.kill().await;
+    let _ = session.child.wait().await;
+
+    let stderr = timeout(Duration::from_secs(5), session.stderr_task)
+        .await
+        .context("timed out waiting for packaged okc stderr")??;
+
+    Ok((quit_reason, stderr?))
+}
+
+#[tokio::test]
+async fn test_mcp_http_transport_packaged_binary() -> anyhow::Result<()> {
+    let repo = setup_simple_repo();
+    let session = launch_packaged_http_session(&repo).await?;
+
+    scan_workspace_via_mcp(&session.client, &repo).await?;
+
+    let result = call_tool(
+        &session.client,
+        "browse",
+        Some(json!({
+            "path": "",
+            "depth": 1,
+            "limit": 100
+        })),
+    )
+    .await
+    .context("browse workspace root over HTTP transport")?;
+
+    assert!(
+        result["directories"].is_array(),
+        "browse should return directories over HTTP transport"
+    );
+    assert!(
+        result["directories"]
+            .as_array()
+            .is_some_and(|dirs| dirs.iter().any(|d| d.as_str() == Some("metrics"))),
+        "should have metrics dir over HTTP transport"
+    );
+
+    let result = call_tool(
+        &session.client,
+        "get_document",
+        Some(json!({
+            "path": "metrics/monthly-revenue.md",
+            "include": ["metadata"],
+            "max_chars": 12000
+        })),
+    )
+    .await
+    .context("fetch document over HTTP transport")?;
+    assert_eq!(result["path"], "metrics/monthly-revenue.md");
+    assert_eq!(result["concept_type"], "Metric");
+
+    let (quit_reason, stderr) = close_http_session(session).await?;
+    assert!(
+        matches!(quit_reason, QuitReason::Closed | QuitReason::Cancelled),
+        "expected packaged MCP HTTP session to close cleanly, got {quit_reason:?}"
+    );
+    assert!(
+        !stderr.contains("Connection closed"),
+        "stderr should not contain a premature connection close: {stderr}"
+    );
+    Ok(())
 }
 
 #[tokio::test]

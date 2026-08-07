@@ -10,6 +10,7 @@
 //!
 //! All other keys are stored in `custom` as a `BTreeMap` for round-trip preservation.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use crate::model::document::{FrontMatter, ParseError};
@@ -47,7 +48,21 @@ impl YamlParser {
             });
         }
 
-        let docs = Yaml::load_from_str(raw).map_err(|e| ParseError {
+        // saphyr's scanner can spin forever on a directive line that reaches
+        // end-of-input without a trailing newline (e.g. `%`, `%foo`, or `\n-\n%`)
+        // because its character reader pads EOF and the directive loop keeps
+        // consuming that padding. Normalizing the input to end in a newline
+        // (when absent) guarantees the directive loop terminates. The original
+        // `raw` is preserved for `raw_yaml` below.
+        let input: Cow<'_, str> = if raw.ends_with('\n') {
+            Cow::Borrowed(raw)
+        } else {
+            let mut terminated = raw.to_string();
+            terminated.push('\n');
+            Cow::Owned(terminated)
+        };
+
+        let docs = Yaml::load_from_str(&input).map_err(|e| ParseError {
             stage: "yaml".into(),
             message: format!("YAML scan error: {:?}", e),
             line: None,
@@ -191,5 +206,53 @@ fn yaml_to_json_value(value: &Yaml) -> serde_json::Value {
         Yaml::BadValue => serde_json::Value::Null,
         Yaml::Alias(_) => serde_json::Value::Null,
         Yaml::Tagged(_, inner) => yaml_to_json_value(inner),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::panic)]
+    use super::*;
+
+    /// Inputs that previously caused saphyr to loop forever on `load_from_str`
+    /// (a directive line with no trailing newline). Each must now return an
+    /// error promptly instead of hanging.
+    const HANG_CORPUS: [&str; 4] = ["%", "%foo", "%%", "\n-\n%"];
+
+    #[test]
+    fn directive_without_trailing_newline_terminates() {
+        for input in HANG_CORPUS {
+            let result = YamlParser::parse(input, 8 * 1024 * 1024);
+            // Expect an error (BadValue, scan error, or top-level type), never a hang.
+            assert!(
+                result.is_err(),
+                "expected Err for hang-prone input {:?}, got {:?}",
+                input,
+                result
+            );
+        }
+    }
+
+    #[test]
+    fn valid_documents_parse_unchanged_after_guard() {
+        let cases: [(&str, Option<&str>); 4] = [
+            ("title: Greeting", Some("Greeting")),
+            ("title: T\ndescription: D\n", Some("T")),
+            ("tags:\n  - a\n  - b", None),
+            ("type: concept\ncustom_key: value", None),
+        ];
+        for (input, expected_title) in cases {
+            let mut subject = input.to_string();
+            if !subject.ends_with('\n') {
+                subject.push('\n');
+            }
+            let result = YamlParser::parse(&subject, 8 * 1024 * 1024)
+                .expect("valid YAML mapping should parse");
+            assert_eq!(
+                result.title.as_deref(),
+                expected_title,
+                "for input {input:?}"
+            );
+        }
     }
 }

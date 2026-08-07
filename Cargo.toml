@@ -28,7 +28,7 @@ memchr = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 saphyr = "0.0.11"
-toml = "0.8"
+toml = "1"
 
 # Markdown parsing
 pulldown-cmark = { version = "0.13", default-features = false }
@@ -45,7 +45,7 @@ r2d2_sqlite = "0.35"
 blake3 = "1"
 
 # MCP / Async
-rmcp = { version = "=2.2.0", features = ["server", "client", "transport-child-process", "transport-io", "macros", "transport-streamable-http-server", "transport-streamable-http-server-session", "transport-streamable-http-client", "transport-streamable-http-client-reqwest", "transport-worker"] }
+rmcp = { version = "=3.1.1", features = ["server", "client", "transport-child-process", "transport-io", "macros", "transport-streamable-http-server", "transport-streamable-http-server-session", "transport-streamable-http-client", "transport-streamable-http-client-reqwest", "transport-worker"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "process", "net"] }
 tokio-util = "0.7"
 
@@ -54,8 +54,6 @@ clap = { version = "4", features = ["derive"] }
 
 # HTTP Server
 axum = "0.8"
-tower = "0.4"
-tower-http = { version = "0.6", features = ["cors", "trace"] }
 
 # Error handling
 thiserror = "2"

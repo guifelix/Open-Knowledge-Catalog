@@ -266,6 +266,8 @@ pub(crate) struct ValidateIssueOutput {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used)]
+
     use std::collections::BTreeMap;
 
     use serde_json::json;

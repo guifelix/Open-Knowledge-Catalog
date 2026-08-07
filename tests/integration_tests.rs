@@ -1,6 +1,6 @@
 //! Integration tests for OKF retrieval using fixture repositories
 
-#![allow(clippy::expect_used, clippy::panic)]
+#![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
 use okc::{config::OkcConfig, service::OkcService};
 use std::collections::HashMap;
