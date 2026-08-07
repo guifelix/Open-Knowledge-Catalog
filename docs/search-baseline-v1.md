@@ -39,15 +39,15 @@ search quality.
 Nine queries require evidence; one query intentionally expects no result.
 Metrics are macro-averaged across the nine judged queries.
 
-| Metric | Baseline |
-|---|---:|
-| Recall@5 | 0.6667 |
-| Recall@10 | 0.6667 |
-| MRR@10 | 0.6667 |
-| Zero-required-evidence rate | 0.3333 |
-| Intentional zero-hit accuracy | 1.0000 |
-| Warm p50 latency | 224 µs |
-| Warm p95 latency | 432 µs |
+| Metric | Original baseline | Bounded typo fallback |
+|---|---:|---:|
+| Recall@5 | 0.6667 | 0.7778 |
+| Recall@10 | 0.6667 | 0.7778 |
+| MRR@10 | 0.6667 | 0.7222 |
+| Zero-required-evidence rate | 0.3333 | 0.2222 |
+| Intentional zero-hit accuracy | 1.0000 | 1.0000 |
+| Warm p50 latency | 224 µs | 291 µs |
+| Warm p95 latency | 432 µs | 488 µs |
 
 Latency used 25 in-process samples per query after scan in the Rust test profile.
 It is useful for relative regression checks on the same machine, not as a
@@ -62,7 +62,7 @@ cross-machine service-level objective.
 | Intentional unrelated query | No result | Pass |
 | Monthly-revenue source dataset | Required dataset absent | Graph expansion |
 | Filtered customer metrics | 2/2 relevant metrics in top 5 | Pass |
-| Misspelled monthly revenue | No result | Typo/fuzzy matching |
+| Misspelled monthly revenue | Relevant metric retrieved in top 5 | Pass |
 | Porter subscription normalization | 2/2 relevant documents in top 5 | Pass |
 | Revenue ranking | 3/3 relevant documents in top 5 | Pass |
 
@@ -71,7 +71,7 @@ Observed failure counts by the fixed taxonomy:
 | Failure class | Count |
 |---|---:|
 | Lexical normalization | 0 |
-| Typo/fuzzy matching | 1 |
+| Typo/fuzzy matching | 0 |
 | Ranking | 0 |
 | Semantic recall | 1 |
 | Graph expansion | 1 |
@@ -101,13 +101,25 @@ was removed. Production now applies configured BM25 field weights, uses
 deterministic path ordering for score ties, and computes counts independently of
 the requested page limit.
 
+## Bounded typo fallback
+
+OKC-00113 adds one correction attempt only when the primary filtered FTS query
+has zero matches. Plain ASCII queries are eligible when they contain one to
+eight tokens and every token has at least five characters. Candidate vocabulary
+terms must start with the same character and have edit distance at most one for
+five-character tokens or two for longer tokens. The vocabulary snapshot is
+capped at 50,000 terms, cached after indexing, and invalidated on every search
+index mutation. The corrected query reuses the same filters, ranking, limit,
+count, and deterministic ordering code. Successful primary queries never enter
+the fallback, and at most one corrected FTS query is executed.
+
 ## Recommendation
 
-Choose **lexical enhancement first** on the now-consolidated production path.
-Add a bounded typo/fuzzy fallback and evaluate graph-assisted expansion as a
-distinct retrieval stage. Exact, normalization, filtering, and ranking cases
-already pass on this corpus, while one typo and one graph case account for two
-of the three failures.
+The bounded lexical typo fallback passes the predeclared relevance and latency
+gate. The next evidence-backed retrieval experiment is graph-assisted expansion
+as a distinct stage. Exact, normalization, filtering, ranking, typo, and
+intentional-zero-hit cases now pass; the remaining failures are semantic recall
+and graph expansion.
 
 Do not add embeddings yet. The one semantic zero-candidate failure is evidence
 that FTS-candidate reranking alone cannot solve every case, but this corpus is too

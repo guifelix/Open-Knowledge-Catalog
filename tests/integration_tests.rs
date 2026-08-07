@@ -693,6 +693,20 @@ fn test_search_combined_filters_counts_and_stable_pages() {
     assert_eq!(empty.total_matches, 0);
     assert!(!empty.truncated);
     assert!(empty.results.is_empty());
+
+    let typo = service
+        .search(
+            "montly reveneu",
+            Some("metrics/"),
+            Some(&types),
+            Some(&["finance".to_string()]),
+            5,
+        )
+        .expect("bounded typo fallback with filters");
+    assert!(typo
+        .results
+        .iter()
+        .any(|result| result.path == "metrics/monthly-revenue.md"));
 }
 
 #[test]

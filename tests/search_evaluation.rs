@@ -120,11 +120,21 @@ fn production_lexical_search_baseline_v1() {
     print_report(&results, &metrics, p50, p95);
 
     assert_eq!(results.len(), 10);
-    assert!(metrics.recall_at_5 >= 0.6666);
-    assert!(metrics.recall_at_10 >= 0.6666);
-    assert!(metrics.mrr_at_10 >= 0.6666);
-    assert!(metrics.zero_required_evidence_rate <= 0.3334);
+    assert!(metrics.recall_at_5 >= 0.7777);
+    assert!(metrics.recall_at_10 >= 0.7777);
+    assert!(metrics.mrr_at_10 >= 0.7221);
+    assert!(metrics.zero_required_evidence_rate <= 0.2223);
     assert_eq!(metrics.intentional_zero_hit_accuracy, 1.0);
+    let typo = results
+        .iter()
+        .find(|result| result.id == "typo-monthly-revenue")
+        .expect("versioned typo judgment");
+    assert_eq!(recall_at(typo, 5), 1.0);
+    assert!(
+        p95 <= Duration::from_micros(540),
+        "p95 {:?} exceeds the predeclared 25% budget over the 432us baseline",
+        p95
+    );
     assert!(results
         .iter()
         .filter(|result| result.category == "exact")

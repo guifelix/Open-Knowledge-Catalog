@@ -410,6 +410,25 @@ async fn test_mcp_stdio_transport_all_tools_packaged_binary() -> anyhow::Result<
     assert!(result["results"].is_array());
     assert!(result["total_matches"].is_number());
 
+    let typo_search = call_tool(
+        &session.client,
+        "search",
+        Some(json!({
+            "query": "montly reveneu",
+            "path_prefix": "metrics/",
+            "types": ["Metric"],
+            "tags": ["finance"],
+            "limit": 5
+        })),
+    )
+    .await
+    .context("bounded typo search through packaged MCP binary")?;
+    assert!(typo_search["results"].as_array().is_some_and(|results| {
+        results
+            .iter()
+            .any(|result| result["path"] == "metrics/monthly-revenue.md")
+    }));
+
     let filtered_search = call_tool(
         &session.client,
         "search",
