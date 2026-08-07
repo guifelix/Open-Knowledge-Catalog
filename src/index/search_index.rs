@@ -279,6 +279,7 @@ fn execute_search(
             score: -rank,
             matching_section: None,
             excerpt: extract_excerpt(&body, query, 200),
+            headings: Vec::new(),
         });
     }
 
