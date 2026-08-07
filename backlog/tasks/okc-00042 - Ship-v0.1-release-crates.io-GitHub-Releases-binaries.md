@@ -1,10 +1,11 @@
 ---
 id: OKC-00042
 title: Ship v0.1 release (crates.io + GitHub Releases binaries)
-status: To Do
+status: In Progress
 assignee:
   - '@backend-agent'
 created_date: '2026-07-25 20:00'
+updated_date: '2026-08-07 20:02'
 labels:
   - release
   - distribution
@@ -40,19 +41,11 @@ Make the tool installable without cloning and building from source. Publish to c
 <!-- DOD:END -->
 
 ## Implementation Plan
+
 <!-- SECTION:PLAN:BEGIN -->
-1. **Versioning**: Set `version = "0.1.0"` in `Cargo.toml`; add `version` field to binary via `clap` or `vergen`
-2. **CI release workflow** (depends on DRAFT-00026):
-   - Trigger: Git tag `v*` pushed
-   - Matrix: `ubuntu-latest` (musl), `macos-latest` (universal), `windows-latest` (MSVC)
-   - Steps: `cargo build --release --target <triple>`, strip binary, create checksums
-   - Upload: `gh release create` with artifacts + `SHA256SUMS`
-3. **crates.io publish**: 
-   - `cargo login` with token (GitHub secret)
-   - `cargo publish` in release workflow after successful builds
-   - Verify `cargo install open-knowledge-catalog` works
-4. **README install section**: Add badges (crates.io version, downloads); show `cargo install` + direct download URLs for each platform
-5. **CHANGELOG**: Generate from conventional commits (`git cliff` or manual); include in release body
-6. **Metadata**: Fill `Cargo.toml` `description`, `repository`, `homepage`, `license`, `keywords`, `categories`; verify on crates.io
-7. **Smoke test**: Download linux binary from release; run `okc --version`, `okc scan --help`, `okc mcp --help`
+1. Preflight verified: CRATES_IO_TOKEN set (gh secret), Cargo.toml 0.1.0, release.yml present, CHANGELOG.md generated, README install section, all tests green, HEAD == origin/main, clean tree.
+2. Version: clap auto-version reports 'okc 0.1.0' (no code change needed for AC#1).
+3. Smoke test: okc --version (okc 0.1.0), okc scan --help, okc serve --help (MCP server; subcommand is 'serve', not 'mcp').
+4. Tag v0.1.0 + push to trigger release.yml (build matrix + GitHub Release + crates.io publish).
+5. Verify CI runs, GitHub Release assets, and crates.io page.
 <!-- SECTION:PLAN:END -->
