@@ -63,18 +63,8 @@ fn structured_with_legacy_text<T: Serialize>(
     Ok(result)
 }
 
-fn object_output_schema<T: schemars::JsonSchema + 'static>() -> Arc<JsonObject> {
-    rmcp::handler::server::tool::schema_for_output::<T>().unwrap_or_else(|error| {
-        tracing::error!(
-            output_type = std::any::type_name::<T>(),
-            %error,
-            "failed to generate MCP output schema"
-        );
-        let mut schema = JsonObject::new();
-        schema.insert("type".to_string(), serde_json::json!("object"));
-        schema.insert("additionalProperties".to_string(), serde_json::json!(true));
-        Arc::new(schema)
-    })
+fn object_output_schema<T: schemars::JsonSchema + std::any::Any>() -> Arc<JsonObject> {
+    rmcp::handler::server::tool::schema_for_output::<T>()
 }
 
 fn parse_metadata_filters(
@@ -143,7 +133,7 @@ impl McpServer {
     /// allowing web clients and remote AI assistants to connect.
     pub async fn serve_http(self, addr: SocketAddr) -> Result<(), anyhow::Error> {
         let config = StreamableHttpServerConfig::default()
-            .with_stateful_mode(true)
+            .with_legacy_session_mode(true)
             .with_allowed_hosts(vec!["localhost".to_string(), "127.0.0.1".to_string()])
             .with_allowed_origins(vec![
                 "http://localhost".to_string(),
@@ -158,7 +148,8 @@ impl McpServer {
         let router = Router::new().nest_service("/mcp", http_service);
 
         let listener = TcpListener::bind(addr).await?;
-        tracing::info!("MCP HTTP server listening on http://{}/mcp", addr);
+        let bound = listener.local_addr()?;
+        tracing::info!("MCP HTTP server listening on http://{}/mcp", bound);
 
         let ct = CancellationToken::new();
         axum::serve(listener, router)
@@ -543,6 +534,8 @@ impl ServerHandler for McpServer {}
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used)]
+
     use crate::config::OkcConfig;
 
     use super::{parse_metadata_filters, McpServer};
