@@ -21,7 +21,7 @@ use std::sync::Arc;
 
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::Connection;
+use rusqlite::{params, Connection, OptionalExtension};
 use tracing::info;
 
 use crate::config::OkcConfig;
@@ -443,6 +443,48 @@ impl RepositoryIndex {
             .query_map([], |row| row.get::<_, String>(0))?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(paths)
+    }
+
+    /// Get headings for a document by path, filtered by max depth and count.
+    ///
+    /// Returns a list of heading titles, ordered by position in the document.
+    /// Only headings with level <= `heading_depth` are included.
+    /// At most `max_headings` headings are returned.
+    /// Returns empty vec if document not found or no headings match criteria.
+    pub fn get_headings_by_path(
+        &self,
+        path: &str,
+        heading_depth: u32,
+        max_headings: usize,
+    ) -> Result<Vec<String>, anyhow::Error> {
+        let conn = self.pool.get()?;
+
+        // First get the document ID
+        let doc_id: Option<i64> = conn
+            .query_row(
+                "SELECT id FROM documents WHERE path = ?1",
+                params![path],
+                |row| row.get(0),
+            )
+            .optional()?;
+
+        let Some(doc_id) = doc_id else {
+            return Ok(Vec::new());
+        };
+
+        // Query headings filtered by level and ordered by position
+        let mut stmt = conn.prepare(
+            "SELECT title FROM headings WHERE document_id = ?1 AND level <= ?2 ORDER BY position LIMIT ?3"
+        )?;
+
+        let headings = stmt
+            .query_map(
+                params![doc_id, heading_depth as i32, max_headings as i64],
+                |row| row.get::<_, String>(0),
+            )?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(headings)
     }
 }
 

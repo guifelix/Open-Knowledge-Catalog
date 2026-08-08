@@ -328,6 +328,8 @@ impl McpServer {
             types,
             tags,
             limit,
+            max_headings,
+            heading_depth,
         }): Parameters<SearchParams>,
     ) -> Result<Json<SearchResponseOutput>, String> {
         let limit = limit.unwrap_or(20);
@@ -339,6 +341,8 @@ impl McpServer {
             types.as_deref(),
             tags.as_deref(),
             limit,
+            max_headings,
+            heading_depth,
         ) {
             Ok(r) => Ok(Json(SearchResponseOutput {
                 results: r
@@ -351,6 +355,7 @@ impl McpServer {
                         concept_type: r.concept_type,
                         score: r.score,
                         excerpt: r.excerpt,
+                        headings: r.headings,
                     })
                     .collect(),
                 total_matches: r.total_matches,

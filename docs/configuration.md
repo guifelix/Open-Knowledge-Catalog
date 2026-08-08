@@ -103,7 +103,16 @@ OKC_DB_PATH="/data/okc_index.db"
 |--------|------|---------|-------------|
 | `require_index_files` | `bool` | `false` | Treat missing `index.md` as validation error |
 
-## Search Configuration (BM25)
+## Search Configuration
+
+### Search Result Headings
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `max_headings` | `usize` | `1` | Maximum number of heading titles per search result |
+| `heading_depth` | `u32` | `1` | Maximum heading depth to include (1=h1 only, 2=h1+h2, etc.) |
+
+### BM25 Weights
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
@@ -121,6 +130,8 @@ Example TOML configuration:
 
 ```toml
 [search]
+max_headings = 3
+heading_depth = 2
 bm25_title_weight = 10.0
 bm25_description_weight = 5.0
 bm25_headings_weight = 2.0
@@ -133,6 +144,8 @@ bm25_b = 0.75
 Environment variable overrides:
 
 ```bash
+OKC_SEARCH_MAX_HEADINGS=5
+OKC_SEARCH_HEADING_DEPTH=3
 OKC_SEARCH_BM25_TITLE_WEIGHT=15.0
 OKC_SEARCH_BM25_K1=1.5
 OKC_SEARCH_BM25_B=0.5

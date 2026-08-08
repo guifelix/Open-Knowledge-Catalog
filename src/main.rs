@@ -156,6 +156,8 @@ fn main() -> anyhow::Result<()> {
             types,
             tags,
             limit,
+            max_headings,
+            heading_depth,
         } => {
             let service = OkcService::open(&config)?;
             let result = service.search(
@@ -164,6 +166,8 @@ fn main() -> anyhow::Result<()> {
                 if types.is_empty() { None } else { Some(&types) },
                 if tags.is_empty() { None } else { Some(&tags) },
                 limit,
+                max_headings,
+                heading_depth,
             )?;
             println!("Search results for '{}':", query);
             println!("  Total matches: {}", result.total_matches);
@@ -175,6 +179,9 @@ fn main() -> anyhow::Result<()> {
                     r.score
                 );
                 println!("    {}", r.excerpt);
+                if !r.headings.is_empty() {
+                    println!("    Headings: {}", r.headings.join(" > "));
+                }
             }
             if result.truncated {
                 println!("  ... (truncated)");

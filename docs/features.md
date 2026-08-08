@@ -50,6 +50,42 @@ When running as an MCP server, these tools are exposed to AI agents:
 All successful MCP tool responses advertise an `outputSchema` and return matching `structuredContent`. A JSON text
 content block remains available for compatibility with clients that have not adopted structured MCP output.
 
+## Search with Structured Headings
+
+Search results include optional heading lists for each matching document, providing a quick outline view without fetching the full document.
+
+**CLI options:**
+```bash
+okc search "query" --max-headings 3 --heading-depth 2
+```
+
+**MCP tool params:**
+```json
+{
+  "query": "query",
+  "max_headings": 3,
+  "heading_depth": 2
+}
+```
+
+**Configurable via TOML or environment variables:**
+```toml
+[search]
+max_headings = 3    # default: 1
+heading_depth = 2   # default: 1 (h1 only)
+```
+
+```bash
+OKC_SEARCH_MAX_HEADINGS=5
+OKC_SEARCH_HEADING_DEPTH=3
+```
+
+**Behavior:**
+- Only headings at or below `heading_depth` are included (1=h1, 2=h1+h2, etc.)
+- `max_headings` caps the total across all allowed depths (budget interaction)
+- Headings inside fenced code blocks are excluded
+- Returns empty list for documents with no body or no matching headings
+
 ## MCP Server Transport
 
 Run the MCP server in two modes:

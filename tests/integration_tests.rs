@@ -127,7 +127,15 @@ fn test_direct_concept_lookup() {
 
     // Search for monthly recurring revenue
     let results = service
-        .search("monthly recurring revenue", None, None, None, 10)
+        .search(
+            "monthly recurring revenue",
+            None,
+            None,
+            None,
+            10,
+            None,
+            None,
+        )
         .expect("search monthly recurring revenue");
 
     assert!(
@@ -613,7 +621,7 @@ fn test_search_with_filters() {
 
     // First test basic search
     let basic_results = service
-        .search("revenue", None, None, None, 10)
+        .search("revenue", None, None, None, 10, None, None)
         .expect("basic search");
     println!(
         "Basic search results: {} matches",
@@ -630,7 +638,15 @@ fn test_search_with_filters() {
 
     // Search with type filter
     let results = service
-        .search("revenue", None, Some(&["Metric".to_string()]), None, 10)
+        .search(
+            "revenue",
+            None,
+            Some(&["Metric".to_string()]),
+            None,
+            10,
+            None,
+            None,
+        )
         .expect("search with type filter");
     println!("Filtered search results: {} matches", results.total_matches);
     for r in &results.results {
@@ -649,7 +665,7 @@ fn test_search_with_filters() {
 
     // Search with path prefix
     let results = service
-        .search("revenue", Some("metrics"), None, None, 10)
+        .search("revenue", Some("metrics"), None, None, 10, None, None)
         .expect("search with path prefix");
     println!(
         "Path prefix search results: {} matches",
@@ -675,7 +691,15 @@ fn test_search_combined_filters_counts_and_stable_pages() {
     let types = ["Metric".to_string()];
     let tags = ["customer".to_string()];
     let first = service
-        .search("customer", Some("metrics/"), Some(&types), Some(&tags), 1)
+        .search(
+            "customer",
+            Some("metrics/"),
+            Some(&types),
+            Some(&tags),
+            1,
+            None,
+            None,
+        )
         .expect("search with combined filters");
     assert_eq!(first.total_matches, 2);
     assert_eq!(first.results.len(), 1);
@@ -683,12 +707,20 @@ fn test_search_combined_filters_counts_and_stable_pages() {
     assert_eq!(first.results[0].path, "metrics/customer-count.md");
 
     let repeated = service
-        .search("customer", Some("metrics/"), Some(&types), Some(&tags), 1)
+        .search(
+            "customer",
+            Some("metrics/"),
+            Some(&types),
+            Some(&tags),
+            1,
+            None,
+            None,
+        )
         .expect("repeat combined search");
     assert_eq!(repeated.results[0].path, first.results[0].path);
 
     let empty = service
-        .search("quantum entanglement", None, None, None, 10)
+        .search("quantum entanglement", None, None, None, 10, None, None)
         .expect("empty search");
     assert_eq!(empty.total_matches, 0);
     assert!(!empty.truncated);
@@ -701,6 +733,8 @@ fn test_search_combined_filters_counts_and_stable_pages() {
             Some(&types),
             Some(&["finance".to_string()]),
             5,
+            None,
+            None,
         )
         .expect("bounded typo fallback with filters");
     assert!(typo
@@ -738,11 +772,11 @@ fn test_search_uses_configured_bm25_field_weights() {
     let mut default_service = OkcService::open(&default_config).expect("open default service");
     default_service.scan().expect("scan default weights");
     let default_results = default_service
-        .search("needle", None, None, None, 10)
+        .search("needle", None, None, None, 10, None, None)
         .expect("search default weights");
     assert_eq!(default_results.results[0].path, "title-match.md");
     let tied_results = default_service
-        .search("tieonly", None, None, None, 10)
+        .search("tieonly", None, None, None, 10, None, None)
         .expect("search equal-score documents");
     assert_eq!(
         tied_results
@@ -772,7 +806,7 @@ fn test_search_uses_configured_bm25_field_weights() {
         .scan()
         .expect("scan body-weighted search");
     let body_weighted_results = body_weighted_service
-        .search("needle", None, None, None, 10)
+        .search("needle", None, None, None, 10, None, None)
         .expect("search body weights");
     assert_eq!(body_weighted_results.results[0].path, "body-match.md");
 }

@@ -1,7 +1,7 @@
 //! Heading extraction from markdown events.
 
 use crate::model::document::Heading;
-use pulldown_cmark::{Event, HeadingLevel};
+use pulldown_cmark::{Event, HeadingLevel, Tag, TagEnd};
 
 /// Extract all headings from markdown events.
 pub fn extract_headings(events: &[Event]) -> Vec<Heading> {
@@ -9,10 +9,21 @@ pub fn extract_headings(events: &[Event]) -> Vec<Heading> {
     let mut pending_heading = None;
     let mut pending_heading_level = 0;
     let mut heading_counter = 0;
+    let mut in_code_block = false;
 
     for event in events {
         match event {
-            Event::Start(pulldown_cmark::Tag::Heading { level, .. }) => {
+            Event::Start(Tag::CodeBlock(_)) => {
+                in_code_block = true;
+            }
+            Event::End(TagEnd::CodeBlock) => {
+                in_code_block = false;
+            }
+            Event::Start(Tag::Heading { level, .. }) => {
+                if in_code_block {
+                    // Skip headings inside code blocks
+                    continue;
+                }
                 let level_num = match level {
                     HeadingLevel::H1 => 1,
                     HeadingLevel::H2 => 2,
@@ -24,7 +35,7 @@ pub fn extract_headings(events: &[Event]) -> Vec<Heading> {
                 pending_heading_level = level_num;
                 pending_heading = Some(String::new());
             }
-            Event::End(pulldown_cmark::TagEnd::Heading(_)) => {
+            Event::End(TagEnd::Heading(_)) => {
                 if let Some(heading_text) = pending_heading.take() {
                     heading_counter += 1;
                     let anchor = Some(slugify(&heading_text));
@@ -81,6 +92,20 @@ mod tests {
         assert_eq!(headings[1].level, 2);
         assert_eq!(headings[2].title, "H3");
         assert_eq!(headings[2].level, 3);
+    }
+
+    #[test]
+    fn test_extract_headings_skips_code_blocks() {
+        let markdown = "# Real Heading\n\n```rust\n# Fake Heading in Code Block\n## Another Fake\n```\n\n## Real H2";
+        let parser = Parser::new(markdown);
+        let events: Vec<_> = parser.collect();
+        let headings = extract_headings(&events);
+
+        assert_eq!(headings.len(), 2);
+        assert_eq!(headings[0].title, "Real Heading");
+        assert_eq!(headings[0].level, 1);
+        assert_eq!(headings[1].title, "Real H2");
+        assert_eq!(headings[1].level, 2);
     }
 
     #[test]

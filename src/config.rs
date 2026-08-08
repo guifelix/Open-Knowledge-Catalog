@@ -17,10 +17,13 @@ use thiserror::Error;
 
 pub mod bm25;
 
+pub mod search;
+
 #[cfg(test)]
 pub mod tests;
 
 pub use bm25::Bm25Config;
+pub use search::SearchConfig;
 
 /// Configuration for the OKC indexer and service.
 ///
@@ -119,6 +122,11 @@ pub struct OkcConfig {
     /// Controls field weights and algorithm parameters for FTS5 search.
     #[serde(default)]
     pub bm25: Bm25Config,
+
+    /// Search result configuration.
+    /// Controls heading extraction and display in search results.
+    #[serde(default)]
+    pub search: SearchConfig,
 }
 
 fn default_exclude_patterns() -> Vec<String> {
@@ -186,6 +194,7 @@ impl Default for OkcConfig {
             watcher_debounce_ms: default_watcher_debounce_ms(),
             watcher_reconcile_secs: default_watcher_reconcile_secs(),
             bm25: Bm25Config::default(),
+            search: SearchConfig::default(),
         }
     }
 }
@@ -389,6 +398,20 @@ impl OkcConfig {
                 .collect();
         }
 
+        // Search max headings
+        if let Ok(val) = std::env::var("OKC_SEARCH_MAX_HEADINGS") {
+            self.search.max_headings = val.parse().map_err(|_| {
+                ConfigError::EnvParseError(format!("OKC_SEARCH_MAX_HEADINGS: invalid usize: {val}"))
+            })?;
+        }
+
+        // Search heading depth
+        if let Ok(val) = std::env::var("OKC_SEARCH_HEADING_DEPTH") {
+            self.search.heading_depth = val.parse().map_err(|_| {
+                ConfigError::EnvParseError(format!("OKC_SEARCH_HEADING_DEPTH: invalid u32: {val}"))
+            })?;
+        }
+
         // BM25 title weight
         if let Ok(val) = std::env::var("OKC_BM25_TITLE_WEIGHT") {
             self.bm25.title_weight = val.parse().map_err(|_| {
@@ -512,6 +535,19 @@ impl OkcConfig {
         if self.watcher_reconcile_secs == 0 {
             return Err(ConfigError::ValidationError(
                 "watcher_reconcile_secs must be greater than 0".into(),
+            ));
+        }
+
+        // Validate search config
+        if self.search.max_headings == 0 {
+            return Err(ConfigError::ValidationError(
+                "search.max_headings must be greater than 0".into(),
+            ));
+        }
+
+        if self.search.heading_depth == 0 {
+            return Err(ConfigError::ValidationError(
+                "search.heading_depth must be greater than 0".into(),
             ));
         }
 

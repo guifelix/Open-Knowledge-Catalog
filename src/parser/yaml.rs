@@ -234,6 +234,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::expect_used)]
     fn valid_documents_parse_unchanged_after_guard() {
         let cases: [(&str, Option<&str>); 4] = [
             ("title: Greeting", Some("Greeting")),

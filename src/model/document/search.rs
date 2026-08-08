@@ -52,6 +52,10 @@ pub struct SearchResult {
     pub matching_section: Option<String>,
     /// Text excerpt around match.
     pub excerpt: String,
+    /// Heading titles for the document, filtered by depth and capped at max_headings.
+    /// Empty when no headings found or document has no body.
+    #[serde(default)]
+    pub headings: Vec<String>,
 }
 
 /// Search response with results and metadata.
