@@ -46,7 +46,7 @@ pub struct SearchFilters {
 }
 
 /// Type alias for storage operation results.
-pub type Result<T> = std::result::Result<T, anyhow::Error>;
+pub type Result<T> = crate::error::Result<T>;
 
 /// Trait for document storage operations.
 ///

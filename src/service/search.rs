@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 
+use crate::error::Result;
 use crate::model::document::{MetadataQueryResponse, SearchResponse, SearchResult};
 use crate::service::OkcService;
 
@@ -50,7 +51,7 @@ impl OkcService {
         limit: usize,
         max_headings: Option<usize>,
         heading_depth: Option<u32>,
-    ) -> Result<SearchResponse, anyhow::Error> {
+    ) -> Result<SearchResponse> {
         // Apply fallback chain: per-request > config > hard default (1)
         let max_headings = max_headings.unwrap_or(self.index.config.search.max_headings);
         let heading_depth = heading_depth.unwrap_or(self.index.config.search.heading_depth);
@@ -75,7 +76,7 @@ impl OkcService {
         filters: &HashMap<String, serde_json::Value>,
         select: &[String],
         limit: usize,
-    ) -> Result<MetadataQueryResponse, anyhow::Error> {
+    ) -> Result<MetadataQueryResponse> {
         self.index.query_metadata(filters, select, limit)
     }
 }

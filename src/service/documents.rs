@@ -3,6 +3,7 @@
 //! Provides detailed document access including full content, specific sections,
 //! and recently modified listings.
 
+use crate::error::Result;
 use crate::model::document::{DocumentDetail, DocumentSummary};
 use crate::service::OkcService;
 
@@ -16,7 +17,7 @@ impl OkcService {
         path: &str,
         include: &[String],
         max_chars: usize,
-    ) -> Result<DocumentDetail, anyhow::Error> {
+    ) -> Result<DocumentDetail> {
         self.index.get_document(path, include, max_chars)
     }
 
@@ -28,7 +29,7 @@ impl OkcService {
         path: &str,
         heading: &str,
         max_chars: usize,
-    ) -> Result<Option<(String, String)>, anyhow::Error> {
+    ) -> Result<Option<(String, String)>> {
         self.index.get_section(path, heading, max_chars)
     }
 
@@ -36,10 +37,7 @@ impl OkcService {
     ///
     /// Returns lightweight summaries sorted by modification time (newest first).
     #[allow(dead_code)]
-    pub fn get_recently_modified(
-        &self,
-        limit: usize,
-    ) -> Result<Vec<DocumentSummary>, anyhow::Error> {
+    pub fn get_recently_modified(&self, limit: usize) -> Result<Vec<DocumentSummary>> {
         self.index.get_recently_modified(limit)
     }
 }

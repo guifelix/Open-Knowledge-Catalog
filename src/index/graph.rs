@@ -2,20 +2,20 @@
 //!
 //! Public API: get_links, get_backlinks, traverse_graph.
 
+use super::database::RepositoryIndex;
+use crate::error::Result;
+use crate::model::document::LinkInfo;
+use crate::model::graph::{GraphEdge, TraverseNode, TraverseResponse};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
-
-use super::database::RepositoryIndex;
-use crate::model::document::LinkInfo;
-use crate::model::graph::{GraphEdge, TraverseNode, TraverseResponse};
 
 impl RepositoryIndex {
     /// Get forward links from a document.
     ///
     /// Returns all links originating from the given document with
     /// resolution status (exists in repo, external, broken).
-    pub fn get_links(&self, doc_path: &str) -> Result<Vec<LinkInfo>, anyhow::Error> {
+    pub fn get_links(&self, doc_path: &str) -> Result<Vec<LinkInfo>> {
         let conn = self.pool().get()?;
         let mut stmt = conn.prepare(
             "SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository
@@ -42,11 +42,7 @@ impl RepositoryIndex {
     /// Get backlinks to a document.
     ///
     /// Returns documents that link to the given path, limited by `limit`.
-    pub fn get_backlinks(
-        &self,
-        doc_path: &str,
-        limit: usize,
-    ) -> Result<Vec<LinkInfo>, anyhow::Error> {
+    pub fn get_backlinks(&self, doc_path: &str, limit: usize) -> Result<Vec<LinkInfo>> {
         let conn = self.pool().get()?;
         let mut stmt = conn.prepare(
             "SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository
@@ -80,7 +76,7 @@ impl RepositoryIndex {
         relations: &[String],
         max_depth: usize,
         max_nodes: usize,
-    ) -> Result<TraverseResponse, anyhow::Error> {
+    ) -> Result<TraverseResponse> {
         let mut visited = std::collections::HashSet::new();
         let mut nodes = Vec::new();
         let mut edges = Vec::new();

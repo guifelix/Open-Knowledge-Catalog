@@ -64,10 +64,9 @@ impl SqliteSearchIndex {
     }
 
     fn fuzzy_vocabulary(&self, conn: &Connection) -> Result<Arc<Vec<(String, i64)>>> {
-        let mut cache = self
-            .fuzzy_vocabulary
-            .lock()
-            .map_err(|_| anyhow::anyhow!("fuzzy vocabulary cache lock poisoned"))?;
+        let mut cache = self.fuzzy_vocabulary.lock().map_err(|_| {
+            crate::error::OkfError::internal("fuzzy vocabulary cache lock poisoned", None)
+        })?;
         if let Some(vocabulary) = cache.as_ref() {
             return Ok(vocabulary.clone());
         }

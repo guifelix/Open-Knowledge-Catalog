@@ -1,11 +1,11 @@
 //! Directory browsing operations.
 
+use crate::error::Result;
+use crate::index::database::RepositoryIndex;
+use crate::model::directory::{BrowseResponse, DirectoryDocument};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
-
-use crate::index::database::RepositoryIndex;
-use crate::model::directory::{BrowseResponse, DirectoryDocument};
 
 /// Browse a directory in the knowledge base.
 pub fn browse_directory(
@@ -13,7 +13,7 @@ pub fn browse_directory(
     path: &str,
     depth: usize,
     limit: usize,
-) -> Result<BrowseResponse, anyhow::Error> {
+) -> Result<BrowseResponse> {
     let prefix = if path.is_empty() || path == "/" || path == "." {
         String::new()
     } else {

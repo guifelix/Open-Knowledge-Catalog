@@ -1,9 +1,8 @@
 //! Document retrieval operations.
 
+use crate::error::Result;
 use crate::index::database::RepositoryIndex;
 use std::collections::BTreeMap;
-
-use anyhow::{anyhow, Context};
 
 use crate::model::document::{
     BacklinkInfo, DocumentDetail, DocumentMetadata, HeadingInfo, LinkInfo, ParseError,
@@ -27,12 +26,16 @@ pub fn get_document(
     doc_path: &str,
     include: &[String],
     max_body_chars: usize,
-) -> Result<DocumentDetail, anyhow::Error> {
+) -> Result<DocumentDetail> {
     for value in include {
         if !VALID_INCLUDES.contains(&value.as_str()) {
-            return Err(anyhow!(
-                "Unknown include value '{value}'. Valid values: {}",
-                VALID_INCLUDES.join(", ")
+            return Err(crate::error::OkfError::validation(
+                format!(
+                    "Unknown include value '{value}'. Valid values: {}",
+                    VALID_INCLUDES.join(", ")
+                ),
+                Some("include".to_string()),
+                Some(value.clone()),
             ));
         }
     }
@@ -91,7 +94,8 @@ pub fn get_document(
             conn.prepare("SELECT tag FROM document_tags WHERE document_id = ?1 ORDER BY tag")?;
         tags = tag_stmt
             .query_map(params![id], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|r| r.map_err(crate::error::OkfError::from))
+            .collect::<Result<Vec<_>>>()?;
     }
 
     let include_metadata = includes(include, "metadata");
@@ -124,7 +128,8 @@ pub fn get_document(
                     anchor: row.get(2)?,
                 })
             })?
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|r| r.map_err(crate::error::OkfError::from))
+            .collect::<Result<Vec<_>>>()?;
     }
 
     let mut errors = vec![];
@@ -139,7 +144,8 @@ pub fn get_document(
                     line: row.get::<_, Option<i64>>(2)?.map(|l| l as usize),
                 })
             })?
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|r| r.map_err(crate::error::OkfError::from))
+            .collect::<Result<Vec<_>>>()?;
     }
 
     let links = if includes(include, "links") {
@@ -157,7 +163,8 @@ pub fn get_document(
                     exists_in_repository: row.get::<_, i32>(3)? != 0,
                 })
             })?
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|r| r.map_err(crate::error::OkfError::from))
+            .collect::<Result<Vec<_>>>()?;
         Some(items)
     } else {
         None
@@ -179,7 +186,8 @@ pub fn get_document(
                     exists_in_repository: row.get::<_, i32>(2)? != 0,
                 })
             })?
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|r| r.map_err(crate::error::OkfError::from))
+            .collect::<Result<Vec<_>>>()?;
         Some(items)
     } else {
         None
@@ -236,10 +244,7 @@ fn includes(include: &[String], value: &str) -> bool {
     include.iter().any(|candidate| candidate == value)
 }
 
-fn enforce_response_limit(
-    detail: &mut DocumentDetail,
-    max_chars: usize,
-) -> Result<(), anyhow::Error> {
+fn enforce_response_limit(detail: &mut DocumentDetail, max_chars: usize) -> Result<()> {
     if serialized_chars(detail)? <= max_chars {
         return Ok(());
     }
@@ -262,8 +267,11 @@ fn enforce_response_limit(
         {
             continue;
         }
-        return Err(anyhow!(
-            "max_response_chars ({max_chars}) is too small for the document response envelope"
+        return Err(crate::error::OkfError::internal(
+            format!(
+                "max_response_chars ({max_chars}) is too small for the document response envelope"
+            ),
+            None,
         ));
     }
 
@@ -285,9 +293,9 @@ fn enforce_response_limit(
     Ok(())
 }
 
-fn serialized_chars(detail: &DocumentDetail) -> Result<usize, anyhow::Error> {
+fn serialized_chars(detail: &DocumentDetail) -> Result<usize> {
     Ok(serde_json::to_string(detail)
-        .context("serialize document response for size enforcement")?
+        .map_err(|e| crate::error::OkfError::serde(e.to_string()))?
         .chars()
         .count())
 }
@@ -298,7 +306,7 @@ pub fn get_section(
     doc_path: &str,
     heading: &str,
     max_chars: usize,
-) -> Result<Option<(String, String)>, anyhow::Error> {
+) -> Result<Option<(String, String)>> {
     let conn = index.pool().get()?;
     let mut stmt = conn.prepare("SELECT body_text, title FROM documents WHERE path = ?1")?;
 

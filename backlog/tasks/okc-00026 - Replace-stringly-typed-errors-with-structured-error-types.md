@@ -1,10 +1,10 @@
 ---
 id: OKC-00026
 title: Replace stringly-typed errors with structured error types
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-07-23 19:03'
-updated_date: '2026-07-23 19:04'
+updated_date: '2026-08-08 01:13'
 labels:
   - quality
 dependencies: []

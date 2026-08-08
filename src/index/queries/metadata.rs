@@ -2,12 +2,11 @@
 
 use std::collections::HashMap;
 
-use anyhow::{anyhow, Context};
-use rusqlite::{params_from_iter, types::Value as SqlValue};
-use serde_json::{Map, Value};
-
+use crate::error::Result;
 use crate::index::database::RepositoryIndex;
 use crate::model::document::MetadataQueryResponse;
+use rusqlite::{params_from_iter, types::Value as SqlValue};
+use serde_json::{Map, Value};
 
 const VALID_DOCUMENT_COLUMNS: &[&str] = &[
     "path",
@@ -38,7 +37,7 @@ pub fn query_metadata(
     filters: &HashMap<String, Value>,
     select: &[String],
     limit: usize,
-) -> Result<MetadataQueryResponse, anyhow::Error> {
+) -> Result<MetadataQueryResponse> {
     validate_filters(filters)?;
 
     let fields = selected_fields(select)?;
@@ -52,7 +51,9 @@ pub fn query_metadata(
             row.get::<_, i64>(0)
         })?
         .try_into()
-        .context("metadata match count does not fit in usize")?;
+        .map_err(|_| {
+            crate::error::OkfError::internal("metadata match count does not fit in usize", None)
+        })?;
 
     let sql = format!(
         "SELECT {select_clause} FROM documents d{where_clause} \
@@ -60,17 +61,17 @@ pub fn query_metadata(
     );
     let mut query_params = select_params;
     query_params.extend(filter_params);
-    query_params.push(SqlValue::Integer(
-        limit
-            .try_into()
-            .context("metadata query limit exceeds SQLite integer range")?,
-    ));
+    query_params.push(SqlValue::Integer(limit.try_into().map_err(|_| {
+        crate::error::OkfError::internal("metadata query limit exceeds SQLite integer range", None)
+    })?));
 
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map(params_from_iter(query_params.iter()), |row| {
         project_row(row, &fields)
     })?;
-    let results = rows.collect::<Result<Vec<_>, _>>()?;
+    let results = rows
+        .map(|r| r.map_err(crate::error::OkfError::from))
+        .collect::<Result<Vec<_>>>()?;
 
     Ok(MetadataQueryResponse {
         truncated: total_matches > results.len(),
@@ -79,7 +80,7 @@ pub fn query_metadata(
     })
 }
 
-fn selected_fields(select: &[String]) -> Result<Vec<String>, anyhow::Error> {
+fn selected_fields(select: &[String]) -> Result<Vec<String>> {
     let fields = if select.is_empty() {
         DEFAULT_SELECT
             .iter()
@@ -95,24 +96,28 @@ fn selected_fields(select: &[String]) -> Result<Vec<String>, anyhow::Error> {
     Ok(fields)
 }
 
-fn validate_filters(filters: &HashMap<String, Value>) -> Result<(), anyhow::Error> {
+fn validate_filters(filters: &HashMap<String, Value>) -> Result<()> {
     for (key, value) in filters {
         validate_name(key, "filter key")?;
         if key.ends_with("_contains") && key != "tags_contains" {
-            return Err(anyhow!(
-                "Invalid filter operator in '{key}': only tags_contains is supported"
+            return Err(crate::error::OkfError::validation(
+                format!("Invalid filter operator in '{key}': only tags_contains is supported"),
+                Some("filter".to_string()),
+                Some(key.clone()),
             ));
         }
         if !value.is_string() {
-            return Err(anyhow!(
-                "Invalid filter value for '{key}': expected a string"
+            return Err(crate::error::OkfError::validation(
+                format!("Invalid filter value for '{key}': expected a string"),
+                Some("filter".to_string()),
+                Some(key.clone()),
             ));
         }
     }
     Ok(())
 }
 
-fn validate_name(name: &str, kind: &str) -> Result<(), anyhow::Error> {
+fn validate_name(name: &str, kind: &str) -> Result<()> {
     let valid = !name.is_empty()
         && name.len() <= 128
         && name
@@ -121,8 +126,10 @@ fn validate_name(name: &str, kind: &str) -> Result<(), anyhow::Error> {
     if valid {
         Ok(())
     } else {
-        Err(anyhow!(
-            "Invalid {kind}: '{name}'. Use letters, numbers, '_', '-', or '.'"
+        Err(crate::error::OkfError::validation(
+            format!("Invalid {kind}: '{name}'. Use letters, numbers, '_', '-', or '.'"),
+            Some(kind.to_string()),
+            Some(name.to_string()),
         ))
     }
 }
@@ -153,18 +160,20 @@ fn build_select(fields: &[String]) -> (String, Vec<SqlValue>) {
     (columns.join(", "), params)
 }
 
-fn build_filters(
-    filters: &HashMap<String, Value>,
-) -> Result<(String, Vec<SqlValue>), anyhow::Error> {
+fn build_filters(filters: &HashMap<String, Value>) -> Result<(String, Vec<SqlValue>)> {
     let mut entries = filters.iter().collect::<Vec<_>>();
     entries.sort_by_key(|(key, _)| key.as_str());
 
     let mut conditions = Vec::with_capacity(entries.len());
     let mut params = Vec::new();
     for (key, value) in entries {
-        let value = value
-            .as_str()
-            .ok_or_else(|| anyhow!("Invalid filter value for '{key}': expected a string"))?;
+        let value = value.as_str().ok_or_else(|| {
+            crate::error::OkfError::validation(
+                format!("Invalid filter value for '{key}': expected a string"),
+                Some("filter".to_string()),
+                Some(key.clone()),
+            )
+        })?;
         match key.as_str() {
             "type" | "title" | "parse_status" => {
                 conditions.push(format!("d.{key} = ?"));
@@ -189,7 +198,10 @@ fn build_filters(
                         .to_string(),
                 );
                 params.push(SqlValue::Text(key.clone()));
-                params.push(SqlValue::Text(serde_json::to_string(value)?));
+                params.push(SqlValue::Text(
+                    serde_json::to_string(value)
+                        .map_err(|e| crate::error::OkfError::serde(e.to_string()))?,
+                ));
             }
         }
     }

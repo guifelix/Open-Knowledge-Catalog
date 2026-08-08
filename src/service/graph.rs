@@ -3,6 +3,7 @@
 //! Provides link graph operations: forward links, backlinks, and
 //! multi-hop traversal with depth and node limits.
 
+use crate::error::Result;
 use crate::model::document::LinkInfo;
 use crate::model::graph::TraverseResponse;
 use crate::service::OkcService;
@@ -12,14 +13,14 @@ impl OkcService {
     ///
     /// Returns all links originating from the given document with
     /// resolution status (exists in repo, external, broken).
-    pub fn get_links(&self, path: &str) -> Result<Vec<LinkInfo>, anyhow::Error> {
+    pub fn get_links(&self, path: &str) -> Result<Vec<LinkInfo>> {
         self.index.get_links(path)
     }
 
     /// Get backlinks to a document.
     ///
     /// Returns documents that link to the given path, limited by `limit`.
-    pub fn get_backlinks(&self, path: &str, limit: usize) -> Result<Vec<LinkInfo>, anyhow::Error> {
+    pub fn get_backlinks(&self, path: &str, limit: usize) -> Result<Vec<LinkInfo>> {
         self.index.get_backlinks(path, limit)
     }
 
@@ -34,7 +35,7 @@ impl OkcService {
         relations: &[String],
         max_depth: usize,
         max_nodes: usize,
-    ) -> Result<TraverseResponse, anyhow::Error> {
+    ) -> Result<TraverseResponse> {
         self.index
             .traverse_graph(start, relations, max_depth, max_nodes)
     }
