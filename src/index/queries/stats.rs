@@ -1,11 +1,12 @@
 //! Statistics query operations.
 
+use crate::error::Result;
 use crate::index::database::RepositoryIndex;
 use crate::model::document::IndexStats;
 use rusqlite::params;
 
 /// Get index statistics (document count, link count, etc.).
-pub fn get_stats(index: &RepositoryIndex) -> Result<IndexStats, anyhow::Error> {
+pub fn get_stats(index: &RepositoryIndex) -> Result<IndexStats> {
     let conn = index.pool().get()?;
 
     let document_count: i64 =
@@ -34,7 +35,7 @@ pub fn get_stats(index: &RepositoryIndex) -> Result<IndexStats, anyhow::Error> {
 pub fn get_recently_modified(
     index: &RepositoryIndex,
     limit: usize,
-) -> Result<Vec<crate::model::document::DocumentSummary>, anyhow::Error> {
+) -> Result<Vec<crate::model::document::DocumentSummary>> {
     let conn = index.pool().get()?;
     let mut stmt = conn.prepare(
         "SELECT path, title, type, description FROM documents

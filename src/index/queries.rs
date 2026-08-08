@@ -8,6 +8,7 @@ pub mod document;
 pub mod metadata;
 pub mod stats;
 
+use crate::error::Result;
 use crate::index::traits::{SearchFilters, SearchIndex};
 use crate::model::directory::{BrowseResponse, DirectoryDocument};
 use crate::model::document::{
@@ -22,7 +23,7 @@ impl super::database::RepositoryIndex {
         path: &str,
         depth: usize,
         limit: usize,
-    ) -> Result<BrowseResponse, anyhow::Error> {
+    ) -> Result<BrowseResponse> {
         browse::browse_directory(self, path, depth, limit)
     }
 
@@ -32,7 +33,7 @@ impl super::database::RepositoryIndex {
         doc_path: &str,
         include: &[String],
         max_body_chars: usize,
-    ) -> Result<DocumentDetail, anyhow::Error> {
+    ) -> Result<DocumentDetail> {
         document::get_document(self, doc_path, include, max_body_chars)
     }
 
@@ -42,7 +43,7 @@ impl super::database::RepositoryIndex {
         doc_path: &str,
         heading: &str,
         max_chars: usize,
-    ) -> Result<Option<(String, String)>, anyhow::Error> {
+    ) -> Result<Option<(String, String)>> {
         document::get_section(self, doc_path, heading, max_chars)
     }
 
@@ -54,7 +55,7 @@ impl super::database::RepositoryIndex {
         types: Option<&[String]>,
         tags: Option<&[String]>,
         limit: usize,
-    ) -> Result<SearchResponse, anyhow::Error> {
+    ) -> Result<SearchResponse> {
         self.search_index.search(
             query,
             &SearchFilters {
@@ -72,20 +73,17 @@ impl super::database::RepositoryIndex {
         filters: &std::collections::HashMap<String, serde_json::Value>,
         select: &[String],
         limit: usize,
-    ) -> Result<MetadataQueryResponse, anyhow::Error> {
+    ) -> Result<MetadataQueryResponse> {
         metadata::query_metadata(self, filters, select, limit)
     }
 
     /// Get recently modified documents.
-    pub fn get_recently_modified(
-        &self,
-        limit: usize,
-    ) -> Result<Vec<DocumentSummary>, anyhow::Error> {
+    pub fn get_recently_modified(&self, limit: usize) -> Result<Vec<DocumentSummary>> {
         stats::get_recently_modified(self, limit)
     }
 
     /// Get index statistics.
-    pub fn get_stats(&self) -> Result<IndexStats, anyhow::Error> {
+    pub fn get_stats(&self) -> Result<IndexStats> {
         stats::get_stats(self)
     }
 }

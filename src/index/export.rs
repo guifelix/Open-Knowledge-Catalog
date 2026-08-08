@@ -10,11 +10,11 @@
 //! - Links (internal and external)
 //! - Custom front-matter fields
 
+use super::database::RepositoryIndex;
+use crate::error::Result;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
-
-use super::database::RepositoryIndex;
 
 impl RepositoryIndex {
     /// Export all documents in the index as a JSON array.
@@ -22,7 +22,7 @@ impl RepositoryIndex {
     /// Each entry contains: path, title, type, description, tags,
     /// headings, body_text, links, and front-matter custom fields.
     #[allow(dead_code)]
-    pub fn export_to_json(&self) -> Result<serde_json::Value, anyhow::Error> {
+    pub fn export_to_json(&self) -> Result<serde_json::Value> {
         let conn = self.pool().get()?;
         let mut stmt = conn.prepare(
             "SELECT path, title, type, description, body_text, file_size, modified_at, parse_status

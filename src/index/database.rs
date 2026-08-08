@@ -19,12 +19,8 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use r2d2::Pool;
-use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, Connection, OptionalExtension};
-use tracing::info;
-
 use crate::config::OkcConfig;
+use crate::error::Result;
 use crate::index::document_store::SqliteDocumentStore;
 use crate::index::graph_store::SqliteGraphStore;
 use crate::index::parser::{process_changes, DocumentParser};
@@ -33,6 +29,10 @@ use crate::index::traits::{DocumentStore, GraphStore, SearchIndex};
 use crate::model::document::{FileRecord, ParseStatus, ProcessChangesResult, ScanResult};
 use crate::scanner::changes::{ChangeDetector, FileChanges};
 use crate::scanner::walker::Scanner;
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::{params, Connection, OptionalExtension};
+use tracing::info;
 
 /// Primary repository index backed by SQLite with connection pooling.
 ///
@@ -60,7 +60,7 @@ impl RepositoryIndex {
     ///
     /// Initializes the schema if needed (via migrations) and prepares
     /// the graph store connection.
-    pub fn open(config: &OkcConfig) -> Result<Self, anyhow::Error> {
+    pub fn open(config: &OkcConfig) -> Result<Self> {
         // Create connection manager with WAL mode and foreign keys
         let manager = SqliteConnectionManager::file(&config.db_path).with_init(|conn| {
             conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
@@ -96,7 +96,7 @@ impl RepositoryIndex {
     /// multiple connections to the same in-memory DB.
     /// The graph store is not available in this mode.
     #[allow(dead_code)]
-    pub fn open_in_memory(config: &OkcConfig) -> Result<Self, anyhow::Error> {
+    pub fn open_in_memory(config: &OkcConfig) -> Result<Self> {
         // Use shared cache URI to allow multiple connections to the same in-memory DB
         let manager = SqliteConnectionManager::memory().with_init(|conn| {
             conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
@@ -125,7 +125,7 @@ impl RepositoryIndex {
         Ok(index)
     }
 
-    fn ensure_schema(&self) -> Result<(), anyhow::Error> {
+    fn ensure_schema(&self) -> Result<()> {
         self.document_store.init()?;
         self.search_index.init()?;
         if let Some(ref gs) = self.graph_store {
@@ -139,7 +139,7 @@ impl RepositoryIndex {
     /// Discovers all markdown files under configured roots, compares against
     /// the previous index state, and incrementally processes additions,
     /// modifications, and deletions.
-    pub fn scan(&mut self) -> Result<ScanResult, anyhow::Error> {
+    pub fn scan(&mut self) -> Result<ScanResult> {
         let start = std::time::Instant::now();
 
         let current_files = Scanner::discover(&self.config)?;
@@ -174,13 +174,12 @@ impl RepositoryIndex {
 
     /// Process a set of file changes (added, modified, deleted) incrementally.
     /// Used by both full `scan()` and the incremental watcher.
-    /// This method
-    /// wraps all changes in a single transaction for atomicity.
+    /// This method wraps all changes in a single transaction for atomicity.
     pub fn process_changes(
         &mut self,
         changes: &FileChanges,
         known_paths: &[String],
-    ) -> Result<ProcessChangesResult, anyhow::Error> {
+    ) -> Result<ProcessChangesResult> {
         self.process_changes_transactional(changes, known_paths)
     }
 
@@ -189,7 +188,7 @@ impl RepositoryIndex {
         &mut self,
         changes: &FileChanges,
         known_paths: &[String],
-    ) -> Result<ProcessChangesResult, anyhow::Error> {
+    ) -> Result<ProcessChangesResult> {
         // Get a connection from the pool and start a transaction
         let mut conn = self.pool.get()?;
         let tx = conn.transaction()?;
@@ -218,10 +217,7 @@ impl RepositoryIndex {
         Ok(result)
     }
 
-    fn store_parsed_document(
-        &self,
-        parsed: &crate::index::parser::ParsedDocument,
-    ) -> Result<(), anyhow::Error> {
+    fn store_parsed_document(&self, parsed: &crate::index::parser::ParsedDocument) -> Result<()> {
         use crate::index::traits::DocumentRecord;
 
         // Create document record
@@ -315,7 +311,7 @@ impl RepositoryIndex {
         &self,
         tx: &rusqlite::Transaction,
         parsed: &crate::index::parser::ParsedDocument,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<()> {
         use crate::index::traits::DocumentRecord;
 
         // Create document record
@@ -406,20 +402,20 @@ impl RepositoryIndex {
         Ok(())
     }
 
-    fn get_doc_id_tx(&self, tx: &rusqlite::Transaction, path: &str) -> Result<i64, anyhow::Error> {
+    fn get_doc_id_tx(&self, tx: &rusqlite::Transaction, path: &str) -> Result<i64> {
         let mut stmt = tx.prepare("SELECT id FROM documents WHERE path = ?1")?;
         let id: i64 = stmt.query_row([path], |row| row.get(0))?;
         Ok(id)
     }
 
-    fn get_doc_id(&self, path: &str) -> Result<i64, anyhow::Error> {
+    fn get_doc_id(&self, path: &str) -> Result<i64> {
         let conn = self.pool.get()?;
         let mut stmt = conn.prepare("SELECT id FROM documents WHERE path = ?1")?;
         let id: i64 = stmt.query_row([path], |row| row.get(0))?;
         Ok(id)
     }
 
-    fn load_file_records(&self) -> Result<Vec<FileRecord>, anyhow::Error> {
+    fn load_file_records(&self) -> Result<Vec<FileRecord>> {
         let conn = self.pool.get()?;
         let mut stmt = conn.prepare("SELECT path, file_size, modified_at FROM documents")?;
         let records = stmt
@@ -431,17 +427,19 @@ impl RepositoryIndex {
                     modified_at: row.get(2)?,
                 })
             })?
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|r| r.map_err(crate::error::OkfError::from))
+            .collect::<Result<Vec<_>>>()?;
         Ok(records)
     }
 
     /// Load all known document paths (for link-resolution in incremental updates).
-    pub fn load_paths(&self) -> Result<Vec<String>, anyhow::Error> {
+    pub fn load_paths(&self) -> Result<Vec<String>> {
         let conn = self.pool.get()?;
         let mut stmt = conn.prepare("SELECT path FROM documents")?;
         let paths = stmt
             .query_map([], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|r| r.map_err(crate::error::OkfError::from))
+            .collect::<Result<Vec<_>>>()?;
         Ok(paths)
     }
 
@@ -456,7 +454,7 @@ impl RepositoryIndex {
         path: &str,
         heading_depth: u32,
         max_headings: usize,
-    ) -> Result<Vec<String>, anyhow::Error> {
+    ) -> Result<Vec<String>> {
         let conn = self.pool.get()?;
 
         // First get the document ID
@@ -482,7 +480,8 @@ impl RepositoryIndex {
                 params![doc_id, heading_depth as i32, max_headings as i64],
                 |row| row.get::<_, String>(0),
             )?
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|r| r.map_err(crate::error::OkfError::from))
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(headings)
     }

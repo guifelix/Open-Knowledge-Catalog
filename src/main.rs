@@ -15,6 +15,7 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use crate::service::OkcService;
 
 mod config;
+mod error;
 mod index;
 mod model;
 mod parser;

@@ -19,6 +19,7 @@ mod validation;
 mod watch;
 
 use crate::config::OkcConfig;
+use crate::error::Result;
 use crate::index::RepositoryIndex;
 use crate::model::document::ScanResult;
 
@@ -32,7 +33,7 @@ pub struct OkcService {
 
 impl OkcService {
     /// Open a service connected to the configured database.
-    pub fn open(config: &OkcConfig) -> Result<Self, anyhow::Error> {
+    pub fn open(config: &OkcConfig) -> Result<Self> {
         config.validate()?;
         let index = RepositoryIndex::open(config)?;
         Ok(Self { index })
@@ -42,7 +43,7 @@ impl OkcService {
     ///
     /// Uses an in-memory SQLite database. Graph store is not available.
     #[allow(dead_code)]
-    pub fn open_in_memory(config: &OkcConfig) -> Result<Self, anyhow::Error> {
+    pub fn open_in_memory(config: &OkcConfig) -> Result<Self> {
         config.validate()?;
         let index = RepositoryIndex::open_in_memory(config)?;
         Ok(Self { index })
@@ -52,7 +53,7 @@ impl OkcService {
     ///
     /// Discovers all markdown files, processes changes, and updates indexes.
     /// Returns scan statistics including counts and duration.
-    pub fn scan(&mut self) -> Result<ScanResult, anyhow::Error> {
+    pub fn scan(&mut self) -> Result<ScanResult> {
         self.index.scan()
     }
 
@@ -61,7 +62,7 @@ impl OkcService {
     /// See OKC-00022 (Add JSON output mode for non-MCP agent consumption) and
     /// OKC-00027 (Add criterion benchmarks for core operations - export_bundle_json target).
     #[allow(dead_code)]
-    pub fn export_to_json(&self) -> Result<serde_json::Value, anyhow::Error> {
+    pub fn export_to_json(&self) -> Result<serde_json::Value> {
         self.index.export_to_json()
     }
 }

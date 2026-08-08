@@ -13,6 +13,7 @@
 
 mod checks;
 
+use crate::error::Result;
 use std::collections::HashMap;
 
 use super::database::RepositoryIndex;
@@ -38,12 +39,12 @@ const CHECKS: &[&str] = &[
 
 impl RepositoryIndex {
     /// Run all validation checks and return a flat list of issues.
-    pub fn validate(&self) -> Result<Vec<ValidationIssue>, anyhow::Error> {
+    pub fn validate(&self) -> Result<Vec<ValidationIssue>> {
         Ok(self.validate_report()?.issues)
     }
 
     /// Run all validation checks and return a structured report.
-    pub fn validate_report(&self) -> Result<ValidationReport, anyhow::Error> {
+    pub fn validate_report(&self) -> Result<ValidationReport> {
         let mut issues = Vec::new();
 
         if let Some(ref gs) = self.graph_store {
@@ -70,7 +71,7 @@ impl RepositoryIndex {
     pub fn validate_incremental(
         &self,
         previous_hashes: Option<&HashMap<String, String>>,
-    ) -> Result<ValidationReport, anyhow::Error> {
+    ) -> Result<ValidationReport> {
         let mut issues = Vec::new();
 
         if let Some(ref gs) = self.graph_store {

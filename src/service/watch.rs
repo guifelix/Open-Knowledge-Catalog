@@ -10,24 +10,25 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::time::Duration;
 
-use tracing::{error, info, warn};
-
+use crate::error::Result;
 use crate::model::document::FileRecord;
 use crate::scanner::changes::FileChanges;
 use crate::scanner::watcher::{FileWatcher, WatchEvent};
 use crate::service::OkcService;
+use tracing::{error, info, warn};
 
 impl OkcService {
     /// Watch the configured roots for changes and update the index incrementally.
     ///
     /// `initial_scan` – if `true`, runs a full scan before watching.
     /// Returns when the watcher thread exits (currently only on unrecoverable error).
-    pub fn watch(&mut self, initial_scan: bool) -> Result<(), anyhow::Error> {
+    pub fn watch(&mut self, initial_scan: bool) -> Result<()> {
         let roots = self.index.config.roots.clone();
         if roots.is_empty() {
-            anyhow::bail!(
-                "No root directories configured. Set `roots` in config or pass `--root`."
-            );
+            return Err(crate::error::OkfError::config(
+                "No root directories configured. Set `roots` in config or pass `--root`.",
+                Some("roots".to_string()),
+            ));
         }
 
         if initial_scan {
@@ -88,10 +89,7 @@ impl OkcService {
     /// Handle an incremental batch of changed file paths from the watcher.
     /// Determines which files were added/modified vs deleted, then processes
     /// them through the index.
-    fn handle_watch_changes(
-        &mut self,
-        changed: &HashSet<std::path::PathBuf>,
-    ) -> Result<(), anyhow::Error> {
+    fn handle_watch_changes(&mut self, changed: &HashSet<std::path::PathBuf>) -> Result<()> {
         let canonical_roots: Vec<std::path::PathBuf> = self
             .index
             .config
@@ -155,7 +153,7 @@ impl OkcService {
         Ok(())
     }
 
-    fn stat_file(path: &Path, rel_path: &str) -> Result<FileRecord, anyhow::Error> {
+    fn stat_file(path: &Path, rel_path: &str) -> Result<FileRecord> {
         let meta = std::fs::metadata(path)?;
         Ok(FileRecord {
             path: rel_path.to_string(),
