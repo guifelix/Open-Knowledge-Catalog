@@ -5,6 +5,7 @@
 
 use crate::config::ConfigError;
 use crate::model::document::frontmatter::LimitError;
+use std::fmt;
 use std::path::PathBuf;
 use thiserror::Error;
 
@@ -45,10 +46,11 @@ pub enum OkfError {
     },
 
     /// Resource not found (document, file, directory)
-    #[error("Not found: {resource}")]
+    #[error(fmt = fmt_not_found)]
     NotFound {
         resource: String,
         path: Option<PathBuf>,
+        hints: Vec<String>,
     },
 
     /// Database/SQL error
@@ -123,6 +125,24 @@ impl OkfError {
         Self::NotFound {
             resource: resource.into(),
             path,
+            hints: Vec::new(),
+        }
+    }
+
+    /// Create a not found error with recovery hints.
+    ///
+    /// Hints are bounded, deterministic "did you mean" candidates derived from
+    /// the repository index; they are never empty when the error is surfaced to
+    /// avoid misleading recovery context.
+    pub fn not_found_with_hints(
+        resource: impl Into<String>,
+        path: Option<PathBuf>,
+        hints: Vec<String>,
+    ) -> Self {
+        Self::NotFound {
+            resource: resource.into(),
+            path,
+            hints,
         }
     }
 
@@ -187,6 +207,24 @@ impl OkfError {
             OkfError::Transport { code, .. } => *code,
         }
     }
+}
+
+/// Format a [`OkfError::NotFound`], keeping the base shape and appending a
+/// bounded, deterministic "Did you mean" block only when hints exist.
+fn fmt_not_found(
+    resource: &str,
+    _path: &Option<PathBuf>,
+    hints: &[String],
+    f: &mut fmt::Formatter<'_>,
+) -> fmt::Result {
+    write!(f, "Not found: {resource}")?;
+    if !hints.is_empty() {
+        write!(f, "\nDid you mean:")?;
+        for hint in hints {
+            write!(f, "\n  - {hint}")?;
+        }
+    }
+    Ok(())
 }
 
 // Conversion from common error types
@@ -313,6 +351,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_from_serde_json_error() {
         let json_err = serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err();
         let err: OkfError = json_err.into();
@@ -332,6 +371,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)]
     fn test_from_try_from_int_error() {
         let int_err = u32::try_from(-1i32).unwrap_err();
         let err: OkfError = int_err.into();
@@ -355,6 +395,47 @@ mod tests {
         let debug = format!("{:?}", err);
         assert!(debug.contains("NotFound"));
         assert!(debug.contains("/test.md"));
+    }
+
+    #[test]
+    fn test_not_found_display_hint_free_passthrough() {
+        let err = OkfError::not_found("document", Some(std::path::PathBuf::from("docs/x.md")));
+        assert_eq!(err.to_string(), "Not found: document");
+    }
+
+    #[test]
+    fn test_not_found_display_with_hints() {
+        let err = OkfError::not_found_with_hints(
+            "document",
+            Some(std::path::PathBuf::from("docs/udnerstanding.md")),
+            vec![
+                "docs/understanding.md".to_string(),
+                "docs/understand.md".to_string(),
+            ],
+        );
+        let display = err.to_string();
+        assert!(display.starts_with("Not found: document"));
+        assert!(display.contains("Did you mean:"));
+        assert!(display.contains("\n  - docs/understanding.md"));
+        assert!(display.contains("\n  - docs/understand.md"));
+    }
+
+    #[test]
+    fn test_not_found_display_does_not_expose_path() {
+        let err = OkfError::not_found_with_hints(
+            "document",
+            Some(std::path::PathBuf::from("docs/secret.md")),
+            vec!["docs/answer.md".to_string()],
+        );
+        let display = err.to_string();
+        assert!(!display.contains("secret.md"));
+    }
+
+    #[test]
+    fn test_not_found_mcp_code_with_hints() {
+        let err =
+            OkfError::not_found_with_hints("document", None, vec!["docs/answer.md".to_string()]);
+        assert_eq!(err.mcp_code(), -32602);
     }
 
     #[test]

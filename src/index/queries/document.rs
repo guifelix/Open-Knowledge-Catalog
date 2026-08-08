@@ -2,6 +2,7 @@
 
 use crate::error::Result;
 use crate::index::database::RepositoryIndex;
+use crate::index::queries::suggest;
 use std::collections::BTreeMap;
 
 use crate::model::document::{
@@ -19,6 +20,21 @@ const VALID_INCLUDES: &[&str] = &[
     "links",
     "backlinks",
 ];
+
+/// Check whether a document exists at the given path.
+///
+/// Lightweight existence probe used to distinguish a genuinely-missing
+/// document (which should surface recovery hints) from an existing document
+/// whose requested section was not found (which keeps the base shape).
+pub fn document_exists(index: &RepositoryIndex, doc_path: &str) -> Result<bool> {
+    let conn = index.pool().get()?;
+    let exists = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM documents WHERE path = ?1)",
+        params![doc_path],
+        |row| row.get::<_, bool>(0),
+    )?;
+    Ok(exists)
+}
 
 /// Get a document by path with optional section inclusion and truncation.
 pub fn get_document(
@@ -47,7 +63,7 @@ pub fn get_document(
          FROM documents WHERE path = ?1",
     )?;
 
-    let doc = stmt.query_row(params![doc_path], |row| {
+    let doc = match stmt.query_row(params![doc_path], |row| {
         let id: i64 = row.get(0)?;
         let path: String = row.get(1)?;
         let title: Option<String> = row.get(2)?;
@@ -72,7 +88,23 @@ pub fn get_document(
             content_hash,
             parent_path,
         ))
-    })?;
+    }) {
+        Ok(doc) => doc,
+        Err(rusqlite::Error::QueryReturnedNoRows) => {
+            let hints = index
+                .load_paths()
+                .map(|paths| suggest::suggest_paths(doc_path, &paths, suggest::MAX_SUGGESTIONS))
+                .unwrap_or_default();
+            return Err(crate::error::OkfError::not_found_with_hints(
+                "document",
+                Some(std::path::PathBuf::from(doc_path)),
+                hints,
+            ));
+        }
+        Err(err) => {
+            return Err(crate::error::OkfError::from(err));
+        }
+    };
 
     let (
         id,

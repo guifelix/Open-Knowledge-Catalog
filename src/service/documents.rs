@@ -8,6 +8,11 @@ use crate::model::document::{DocumentDetail, DocumentSummary};
 use crate::service::OkcService;
 
 impl OkcService {
+    /// Check whether a document exists at the given path.
+    pub fn document_exists(&self, path: &str) -> Result<bool> {
+        self.index.document_exists(path)
+    }
+
     /// Get a document by path with optional section inclusion and truncation.
     ///
     /// - `include`: Section names to include (empty = all)

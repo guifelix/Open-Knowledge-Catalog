@@ -331,6 +331,29 @@ The tool contract encourages the model to:
 
 The tool enforces limits even when the AI requests excessive output.
 
+### Typo Recovery Hints
+
+When `get_document` (or `get_section`) refers to a document that does not exist in the catalog, the error
+mentions the closest existing paths so an agent can recover without a second guess:
+
+```text
+Error: Not found: document
+Did you mean:
+  - metrics/monthly-revenue.md
+  - metrics/churn-rate.md
+```
+
+Recovery-hint contract:
+
+- Hints are bounded: at most 4 candidates, each within edit distance 3 of the requested path.
+- Hints never return true positives: the requested path itself is never listed, and no path that
+  exists is ever hidden (partial-path prefixes still resolve to the closest full path).
+- Hints are deterministic: the same catalog always yields the same candidate set.
+- Hints never leak data: only paths that already exist in the catalog are suggested; nothing else is
+  copied from disk.
+- A document that exists but has no matching section is **not** an error — `get_section` returns
+  `{ "section": null }` and suggests nothing, so hints are never misleading.
+
 ## Response Size Limits
 
 Default limits (configurable):

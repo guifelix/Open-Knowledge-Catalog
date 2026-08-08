@@ -7,6 +7,7 @@ pub mod browse;
 pub mod document;
 pub mod metadata;
 pub mod stats;
+pub mod suggest;
 
 use crate::error::Result;
 use crate::index::traits::{SearchFilters, SearchIndex};
@@ -25,6 +26,11 @@ impl super::database::RepositoryIndex {
         limit: usize,
     ) -> Result<BrowseResponse> {
         browse::browse_directory(self, path, depth, limit)
+    }
+
+    /// Check whether a document exists at the given path.
+    pub fn document_exists(&self, doc_path: &str) -> Result<bool> {
+        document::document_exists(self, doc_path)
     }
 
     /// Get a document by path with optional section inclusion and truncation.

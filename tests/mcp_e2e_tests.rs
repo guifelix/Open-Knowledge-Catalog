@@ -1015,3 +1015,156 @@ async fn test_mcp_scan_rejects_invalid_configuration_before_storage() -> anyhow:
     close_stdio_session(session).await?;
     Ok(())
 }
+
+/// get_document with a near-miss path raises a not-found error whose text suggests the closest existing document.
+#[tokio::test]
+async fn test_mcp_get_document_typo_suggests_path() -> anyhow::Result<()> {
+    let repo = setup_simple_repo();
+    let session = launch_packaged_stdio_session(&repo).await?;
+    scan_workspace_via_mcp(&session.client, &repo).await?;
+
+    let result = invoke_tool(
+        &session.client,
+        "get_document",
+        Some(json!({
+            "path": "metrics/monthly-revenu.md",
+            "include": ["metadata"],
+            "max_chars": 12000
+        })),
+    )
+    .await
+    .context("invoke get_document with a typo path")?;
+
+    assert_eq!(result.is_error, Some(true));
+    let text = result
+        .content
+        .first()
+        .and_then(|content| content.as_text())
+        .map(|content| content.text.as_str())
+        .expect("error response should carry text fallback");
+    assert!(
+        text.contains("Not found: document"),
+        "error should be a structured not-found, got: {text}"
+    );
+    assert!(
+        text.contains("Did you mean:") && text.contains("metrics/monthly-revenue.md"),
+        "error should suggest the closest existing path, got: {text}"
+    );
+
+    close_stdio_session(session).await?;
+    Ok(())
+}
+
+/// get_document typo below the bounded candidate window yields no misleading "Did you mean:" hint.
+#[tokio::test]
+async fn test_mcp_get_document_typo_far_away_has_no_suggestion() -> anyhow::Result<()> {
+    let repo = setup_simple_repo();
+    let session = launch_packaged_stdio_session(&repo).await?;
+    scan_workspace_via_mcp(&session.client, &repo).await?;
+
+    let result = invoke_tool(
+        &session.client,
+        "get_document",
+        Some(json!({
+            "path": "finance/budgets/quarterly-review.md",
+            "include": ["metadata"],
+            "max_chars": 12000
+        })),
+    )
+    .await
+    .context("invoke get_document with an unrelated path")?;
+
+    assert_eq!(result.is_error, Some(true));
+    let text = result
+        .content
+        .first()
+        .and_then(|content| content.as_text())
+        .map(|content| content.text.as_str())
+        .expect("error should carry text fallback");
+    assert!(
+        text.contains("Not found: document"),
+        "error should be a structured not-found, got: {text}"
+    );
+    assert!(
+        !text.contains("Did you mean:"),
+        "unrelated path must not produce recovery hints (AC #5), got: {text}"
+    );
+
+    close_stdio_session(session).await?;
+    Ok(())
+}
+
+/// get_section on a missing document raises an error with a path suggestion, distinct from a missing heading.
+#[tokio::test]
+async fn test_mcp_get_section_missing_document_suggests_path() -> anyhow::Result<()> {
+    let repo = setup_simple_repo();
+    let session = launch_packaged_stdio_session(&repo).await?;
+    scan_workspace_via_mcp(&session.client, &repo).await?;
+
+    let missing_doc = invoke_tool(
+        &session.client,
+        "get_section",
+        Some(json!({
+            "path": "metrics/monthly-revenu.md",
+            "heading": "Definition",
+            "max_chars": 5000
+        })),
+    )
+    .await
+    .context("invoke get_section on a missing document")?;
+
+    assert_eq!(missing_doc.is_error, Some(true));
+    let doc_error = missing_doc
+        .content
+        .first()
+        .and_then(|content| content.as_text())
+        .map(|content| content.text.as_str())
+        .expect("error should carry text fallback");
+    assert!(
+        doc_error.contains("Did you mean:") && doc_error.contains("metrics/monthly-revenue.md"),
+        "missing document should suggest an existing path, got: {doc_error}"
+    );
+
+    close_stdio_session(session).await?;
+    Ok(())
+}
+
+/// get_section on an existing document with an unknown heading is a base success (`section: null`),
+/// not a missing-document error (AC #5).
+#[tokio::test]
+async fn test_mcp_get_section_unknown_heading_is_not_missing_document() -> anyhow::Result<()> {
+    let repo = setup_simple_repo();
+    let session = launch_packaged_stdio_session(&repo).await?;
+    scan_workspace_via_mcp(&session.client, &repo).await?;
+
+    let result = invoke_tool(
+        &session.client,
+        "get_section",
+        Some(json!({
+            "path": "metrics/monthly-revenue.md",
+            "heading": "NonexistentHeading",
+            "max_chars": 5000
+        })),
+    )
+    .await
+    .context("invoke get_section with an unknown heading")?;
+
+    assert_eq!(
+        result.is_error,
+        Some(false),
+        "unknown heading is not an error"
+    );
+    let text = result
+        .content
+        .first()
+        .and_then(|content| content.as_text())
+        .map(|content| content.text.as_str())
+        .expect("response should carry text fallback");
+    assert_eq!(
+        text, "null",
+        "section None should serialize to the base null form, got: {text}"
+    );
+
+    close_stdio_session(session).await?;
+    Ok(())
+}
