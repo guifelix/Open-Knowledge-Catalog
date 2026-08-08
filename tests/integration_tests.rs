@@ -865,3 +865,67 @@ fn test_stats() {
     assert!(stats.document_count > 0);
     assert!(stats.link_count > 0);
 }
+
+#[test]
+fn test_document_exists_discriminates_present_and_missing() {
+    let repo = setup_simple_repo();
+    let config = mkconfig(&repo);
+
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
+
+    assert!(
+        service
+            .document_exists("metrics/monthly-revenue.md")
+            .expect("existence probe for existing document"),
+        "existing document should report exists = true"
+    );
+    assert!(
+        !service
+            .document_exists("metrics/nonexistent.md")
+            .expect("existence probe for missing document"),
+        "missing document should report exists = false"
+    );
+}
+
+#[test]
+fn test_get_document_missing_surfaces_path_hints() {
+    let repo = setup_simple_repo();
+    let config = mkconfig(&repo);
+
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
+
+    let error = service
+        .get_document("metrics/monthly-revenu.md", &[], 12000)
+        .expect_err("missing document must raise a not-found error");
+
+    let display = error.to_string();
+    assert!(
+        display.contains("Did you mean:"),
+        "missing-document error should carry recovery hints, got: {display}"
+    );
+    assert!(
+        display.contains("metrics/monthly-revenue.md"),
+        "hints should include the closest existing path, got: {display}"
+    );
+}
+
+#[test]
+fn test_get_document_missing_without_candidates_has_no_hints() {
+    let repo = setup_simple_repo();
+    let config = mkconfig(&repo);
+
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
+
+    let error = service
+        .get_document("unrelated/topic.md", &[], 12000)
+        .expect_err("completely unrelated path must raise not-found");
+
+    let display = error.to_string();
+    assert!(
+        !display.contains("Did you mean:"),
+        "no candidates should mean no hints (AC #5), got: {display}"
+    );
+}

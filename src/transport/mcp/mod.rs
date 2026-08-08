@@ -309,11 +309,54 @@ impl McpServer {
 
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
         match svc.get_section(&path, &heading, max_chars) {
-            Ok(section) => {
-                let section = section.map(|(heading, content)| SectionOutput { heading, content });
-                let legacy_text = serde_json::to_string(&section)
+            Ok(Some(section)) => {
+                let section = SectionOutput {
+                    heading: section.0,
+                    content: section.1,
+                };
+                let legacy_text = serde_json::to_string(&Some(&section))
                     .map_err(|error| format!("Failed to serialize section response: {error}"))?;
-                structured_with_legacy_text(&SectionResponseOutput { section }, legacy_text)
+                structured_with_legacy_text(
+                    &SectionResponseOutput {
+                        section: Some(section),
+                    },
+                    legacy_text,
+                )
+            }
+            Ok(None) => {
+                // Distinguish a genuinely-missing document from an existing
+                // document whose requested section was not found. Only a
+                // missing document should surface a NOT_FOUND error with
+                // recovery hints; a missing heading keeps the base success
+                // shape (`section: null`) so hints are never misleading.
+                match svc.document_exists(&path) {
+                    Ok(true) => structured_with_legacy_text(
+                        &SectionResponseOutput { section: None },
+                        "null".to_string(),
+                    ),
+                    Ok(false) => {
+                        let hints = svc
+                            .index
+                            .load_paths()
+                            .map(|paths| {
+                                crate::index::queries::suggest::suggest_paths(
+                                    &path,
+                                    &paths,
+                                    crate::index::queries::suggest::MAX_SUGGESTIONS,
+                                )
+                            })
+                            .unwrap_or_default();
+                        Err(format!(
+                            "Error: {}",
+                            crate::error::OkfError::not_found_with_hints(
+                                "document",
+                                Some(std::path::PathBuf::from(path)),
+                                hints,
+                            )
+                        ))
+                    }
+                    Err(e) => Err(format!("Error: {}", e)),
+                }
             }
             Err(e) => Err(format!("Error: {}", e)),
         }
