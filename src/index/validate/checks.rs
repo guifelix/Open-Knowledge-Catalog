@@ -115,7 +115,7 @@ impl RepositoryIndex {
                 .config
                 .roots
                 .iter()
-                .map(|root| root.join(path))
+                .map(|root| root.path.join(path))
                 .find(|p| p.exists());
 
             let abs_path = match abs_path {
