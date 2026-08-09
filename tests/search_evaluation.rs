@@ -8,7 +8,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use okc::{config::OkcConfig, service::OkcService};
+use okc::{
+    config::{OkcConfig, RootConfig},
+    service::OkcService,
+};
 use serde::Deserialize;
 use tempfile::TempDir;
 
@@ -94,7 +97,10 @@ fn production_lexical_search_baseline_v1() {
 
     let repo = copy_fixture(Path::new(&corpus.corpus));
     let config = OkcConfig {
-        roots: vec![repo.path().to_path_buf()],
+        roots: vec![RootConfig {
+            id: None,
+            path: repo.path().to_path_buf(),
+        }],
         db_path: repo.path().join("evaluation.db"),
         ..Default::default()
     };
@@ -165,6 +171,7 @@ fn run_query(
             10,
             None,
             None,
+            None, // root_id
         )
         .unwrap_or_else(|error| panic!("search evaluation query '{}' failed: {error}", query.id))
 }

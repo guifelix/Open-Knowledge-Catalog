@@ -154,10 +154,15 @@ async fn call_tool(
 ) -> anyhow::Result<Value> {
     let result = invoke_tool(client, tool_name, arguments).await?;
 
-    let structured = result
-        .structured_content
-        .clone()
-        .with_context(|| format!("{tool_name} response missing structuredContent"))?;
+    let structured = result.structured_content.clone().with_context(|| {
+        let error_text = result
+            .content
+            .first()
+            .and_then(|c| c.as_text())
+            .map(|t| t.text.as_str())
+            .unwrap_or("no error text");
+        format!("{tool_name} response missing structuredContent: {error_text}")
+    })?;
 
     let text = result
         .content

@@ -2,7 +2,10 @@
 
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
-use okc::{config::OkcConfig, service::OkcService};
+use okc::{
+    config::{OkcConfig, RootConfig},
+    service::OkcService,
+};
 use std::collections::HashMap;
 use tempfile::TempDir;
 
@@ -24,7 +27,10 @@ fn setup_edge_cases_repo() -> TempDir {
 
 fn mkconfig(repo: &TempDir) -> OkcConfig {
     OkcConfig {
-        roots: vec![repo.path().to_path_buf()],
+        roots: vec![RootConfig {
+            id: None,
+            path: repo.path().to_path_buf(),
+        }],
         db_path: repo.path().join("test.db"),
         ..Default::default()
     }
@@ -61,7 +67,10 @@ fn test_service_rejects_invalid_configuration_before_opening_storage() {
         (
             "nonexistent root",
             OkcConfig {
-                roots: vec![repo.path().join("does-not-exist")],
+                roots: vec![RootConfig {
+                    id: None,
+                    path: repo.path().join("does-not-exist"),
+                }],
                 db_path: repo.path().join("nonexistent-root.db"),
                 ..Default::default()
             },
@@ -70,7 +79,10 @@ fn test_service_rejects_invalid_configuration_before_opening_storage() {
         (
             "invalid response limit",
             OkcConfig {
-                roots: vec![repo.path().to_path_buf()],
+                roots: vec![RootConfig {
+                    id: None,
+                    path: repo.path().to_path_buf(),
+                }],
                 db_path: repo.path().join("invalid-limit.db"),
                 max_response_chars: 0,
                 ..Default::default()
@@ -80,7 +92,10 @@ fn test_service_rejects_invalid_configuration_before_opening_storage() {
         (
             "invalid BM25 weight",
             OkcConfig {
-                roots: vec![repo.path().to_path_buf()],
+                roots: vec![RootConfig {
+                    id: None,
+                    path: repo.path().to_path_buf(),
+                }],
                 db_path: repo.path().join("invalid-bm25.db"),
                 bm25: okc::config::Bm25Config {
                     title_weight: -1.0,
@@ -135,6 +150,7 @@ fn test_direct_concept_lookup() {
             10,
             None,
             None,
+            None, // root_id
         )
         .expect("search monthly recurring revenue");
 
@@ -326,7 +342,10 @@ fn test_metadata_query_filters_projection_order_and_counts() {
 fn test_repository_validation() {
     let repo = setup_edge_cases_repo();
     let config = OkcConfig {
-        roots: vec![repo.path().to_path_buf()],
+        roots: vec![RootConfig {
+            id: None,
+            path: repo.path().to_path_buf(),
+        }],
         db_path: repo.path().join("test.db"),
         require_index_files: false,
         ..Default::default()
@@ -373,7 +392,10 @@ fn test_repository_validation() {
 fn test_validation_oversized_frontmatter() {
     let repo = setup_edge_cases_repo();
     let config = OkcConfig {
-        roots: vec![repo.path().to_path_buf()],
+        roots: vec![RootConfig {
+            id: None,
+            path: repo.path().to_path_buf(),
+        }],
         db_path: repo.path().join("test.db"),
         max_front_matter_size: 10,
         require_index_files: false,
@@ -621,7 +643,7 @@ fn test_search_with_filters() {
 
     // First test basic search
     let basic_results = service
-        .search("revenue", None, None, None, 10, None, None)
+        .search("revenue", None, None, None, 10, None, None, None)
         .expect("basic search");
     println!(
         "Basic search results: {} matches",
@@ -646,6 +668,7 @@ fn test_search_with_filters() {
             10,
             None,
             None,
+            None, // root_id
         )
         .expect("search with type filter");
     println!("Filtered search results: {} matches", results.total_matches);
@@ -665,7 +688,7 @@ fn test_search_with_filters() {
 
     // Search with path prefix
     let results = service
-        .search("revenue", Some("metrics"), None, None, 10, None, None)
+        .search("revenue", Some("metrics"), None, None, 10, None, None, None)
         .expect("search with path prefix");
     println!(
         "Path prefix search results: {} matches",
@@ -699,6 +722,7 @@ fn test_search_combined_filters_counts_and_stable_pages() {
             1,
             None,
             None,
+            None, // root_id
         )
         .expect("search with combined filters");
     assert_eq!(first.total_matches, 2);
@@ -715,12 +739,22 @@ fn test_search_combined_filters_counts_and_stable_pages() {
             1,
             None,
             None,
+            None, // root_id
         )
         .expect("repeat combined search");
     assert_eq!(repeated.results[0].path, first.results[0].path);
 
     let empty = service
-        .search("quantum entanglement", None, None, None, 10, None, None)
+        .search(
+            "quantum entanglement",
+            None,
+            None,
+            None,
+            10,
+            None,
+            None,
+            None,
+        )
         .expect("empty search");
     assert_eq!(empty.total_matches, 0);
     assert!(!empty.truncated);
@@ -735,6 +769,7 @@ fn test_search_combined_filters_counts_and_stable_pages() {
             5,
             None,
             None,
+            None, // root_id
         )
         .expect("bounded typo fallback with filters");
     assert!(typo
@@ -765,18 +800,21 @@ fn test_search_uses_configured_bm25_field_weights() {
     }
 
     let default_config = OkcConfig {
-        roots: vec![repo.path().to_path_buf()],
+        roots: vec![RootConfig {
+            id: None,
+            path: repo.path().to_path_buf(),
+        }],
         db_path: repo.path().join("default.db"),
         ..Default::default()
     };
     let mut default_service = OkcService::open(&default_config).expect("open default service");
     default_service.scan().expect("scan default weights");
     let default_results = default_service
-        .search("needle", None, None, None, 10, None, None)
+        .search("needle", None, None, None, 10, None, None, None)
         .expect("search default weights");
     assert_eq!(default_results.results[0].path, "title-match.md");
     let tied_results = default_service
-        .search("tieonly", None, None, None, 10, None, None)
+        .search("tieonly", None, None, None, 10, None, None, None)
         .expect("search equal-score documents");
     assert_eq!(
         tied_results
@@ -788,7 +826,10 @@ fn test_search_uses_configured_bm25_field_weights() {
     );
 
     let body_weighted_config = OkcConfig {
-        roots: vec![repo.path().to_path_buf()],
+        roots: vec![RootConfig {
+            id: None,
+            path: repo.path().to_path_buf(),
+        }],
         db_path: repo.path().join("body-weighted.db"),
         bm25: okc::config::Bm25Config {
             title_weight: 0.0,
@@ -806,7 +847,7 @@ fn test_search_uses_configured_bm25_field_weights() {
         .scan()
         .expect("scan body-weighted search");
     let body_weighted_results = body_weighted_service
-        .search("needle", None, None, None, 10, None, None)
+        .search("needle", None, None, None, 10, None, None, None)
         .expect("search body weights");
     assert_eq!(body_weighted_results.results[0].path, "body-match.md");
 }
@@ -845,7 +886,10 @@ fn test_stats() {
     let temp_dir = tempfile::TempDir::new().expect("temp dir for stats");
     let db_path = temp_dir.path().join("test.db");
     let config = OkcConfig {
-        roots: vec![repo.path().to_path_buf()],
+        roots: vec![RootConfig {
+            id: None,
+            path: repo.path().to_path_buf(),
+        }],
         db_path,
         ..Default::default()
     };
