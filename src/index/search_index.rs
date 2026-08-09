@@ -11,6 +11,8 @@
 
 use crate::config::Bm25Config;
 use crate::index::traits::{Result, SearchFilters, SearchIndex, SearchableDocument};
+use crate::model::document::stats::RootStats;
+use crate::model::document::stats::RootStats as RootStatsModel;
 use crate::model::document::{derive_display_title, IndexStats, SearchResponse, SearchResult};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -112,10 +114,11 @@ impl SearchIndex for SqliteSearchIndex {
         let conn = self.get_conn()?;
         conn.execute(
             r#"
-            INSERT OR REPLACE INTO document_search (path, title, description, headings, body, concept_type)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            INSERT OR REPLACE INTO document_search (root_id, path, title, description, headings, body, concept_type)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
             "#,
             params![
+                doc.root_id,
                 doc.path,
                 doc.title.clone().unwrap_or_default(),
                 doc.description.clone().unwrap_or_default(),
@@ -131,10 +134,11 @@ impl SearchIndex for SqliteSearchIndex {
         self.invalidate_fuzzy_vocabulary();
         tx.execute(
             r#"
-            INSERT OR REPLACE INTO document_search (path, title, description, headings, body, concept_type)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            INSERT OR REPLACE INTO document_search (root_id, path, title, description, headings, body, concept_type)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
             "#,
             params![
+                doc.root_id,
                 doc.path,
                 doc.title.clone().unwrap_or_default(),
                 doc.description.clone().unwrap_or_default(),
@@ -146,16 +150,24 @@ impl SearchIndex for SqliteSearchIndex {
         Ok(())
     }
 
-    fn remove_document(&self, path: &str) -> Result<()> {
+    fn remove_document(&self, path: &str, root_id: Option<i64>) -> Result<()> {
         self.invalidate_fuzzy_vocabulary();
+        let root_id = root_id.unwrap_or(1);
         let conn = self.get_conn()?;
-        conn.execute("DELETE FROM document_search WHERE path = ?1", params![path])?;
+        conn.execute(
+            "DELETE FROM document_search WHERE root_id = ?1 AND path = ?2",
+            params![root_id, path],
+        )?;
         Ok(())
     }
 
-    fn remove_document_tx(&self, tx: &Transaction, path: &str) -> Result<()> {
+    fn remove_document_tx(&self, tx: &Transaction, path: &str, root_id: Option<i64>) -> Result<()> {
         self.invalidate_fuzzy_vocabulary();
-        tx.execute("DELETE FROM document_search WHERE path = ?1", params![path])?;
+        let root_id = root_id.unwrap_or(1);
+        tx.execute(
+            "DELETE FROM document_search WHERE root_id = ?1 AND path = ?2",
+            params![root_id, path],
+        )?;
         Ok(())
     }
 
@@ -176,6 +188,8 @@ impl SearchIndex for SqliteSearchIndex {
     }
 
     fn stats(&self) -> Result<IndexStats> {
+        // Delegate to document store for consistent stats including per-root breakdown
+        // This is a simplified implementation - in practice, we'd need access to document_store
         let conn = self.get_conn()?;
         let doc_count: i64 =
             conn.query_row("SELECT COUNT(*) FROM documents", [], |row| row.get(0))?;
@@ -185,11 +199,45 @@ impl SearchIndex for SqliteSearchIndex {
         let heading_count: i64 =
             conn.query_row("SELECT COUNT(*) FROM headings", [], |row| row.get(0))?;
 
+        // Per-root stats
+        let mut stmt = conn.prepare(
+            "SELECT r.root_id,
+                    COUNT(d.id) as doc_count,
+                    COUNT(se.id) as error_count,
+                    COUNT(l.id) as link_count,
+                    COUNT(h.document_id) as heading_count
+             FROM roots r
+             LEFT JOIN documents d ON d.root_id = r.id
+             LEFT JOIN scan_errors se ON se.path = d.path
+             LEFT JOIN links l ON l.source_document_id = d.id
+             LEFT JOIN headings h ON h.document_id = d.id
+             GROUP BY r.id, r.root_id
+             ORDER BY r.root_id",
+        )?;
+        use std::collections::BTreeMap;
+
+        fn row_to_root_stats(row: &rusqlite::Row<'_>) -> rusqlite::Result<RootStats> {
+            Ok(RootStats {
+                root_id: row.get(0)?,
+                document_count: row.get::<_, i64>(1)? as usize,
+                error_count: row.get::<_, i64>(2)? as usize,
+                link_count: row.get::<_, i64>(3)? as usize,
+                heading_count: row.get::<_, i64>(4)? as usize,
+            })
+        }
+
+        let roots: BTreeMap<String, RootStats> = stmt
+            .query_map([], row_to_root_stats)?
+            .filter_map(|r| r.ok())
+            .map(|rs| (rs.root_id.clone(), rs))
+            .collect();
+
         Ok(IndexStats {
             document_count: doc_count as usize,
             error_count: error_count as usize,
             link_count: link_count as usize,
             heading_count: heading_count as usize,
+            roots,
         })
     }
 }
@@ -201,9 +249,15 @@ fn execute_search(
     limit: usize,
     bm25_expr: &str,
 ) -> Result<SearchResponse> {
-    let from = " FROM document_search ds JOIN documents d ON d.path = ds.path";
+    let from =
+        " FROM document_search ds JOIN documents d ON d.path = ds.path AND d.root_id = ds.root_id";
     let mut conditions = vec!["document_search MATCH ?".to_string()];
     let mut params = vec![SqlValue::Text(query.to_string())];
+
+    if let Some(root_id) = filters.root_id {
+        conditions.push("ds.root_id = ?".to_string());
+        params.push(SqlValue::Integer(root_id));
+    }
 
     if let Some(prefix) = &filters.path_prefix {
         let prefix = prefix.trim_matches('/');
