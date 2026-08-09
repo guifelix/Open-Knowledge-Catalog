@@ -299,7 +299,30 @@ Required protections:
 
 Exclusion policy is configurable for repositories that intentionally document similarly-named concepts.
 
-## Design Principles
+## Multi-Root Repositories
+
+Starting with OKC-00105, the index supports multiple repository roots within a single database. Each root is assigned a stable integer ID and a user-provided or auto-generated string `root_id`. Documents are uniquely identified by the composite key `(root_id, path)`, allowing documents with the same relative path in different roots to coexist without collision.
+
+### Root Configuration
+Roots are configured via `OkcConfig.roots` as a list of `RootConfig` objects:
+```rust
+pub struct RootConfig {
+    pub id: Option<String>,  // Stable root identifier (auto-generated from path hash if omitted)
+    pub path: PathBuf,       // Absolute path to the root directory
+}
+```
+
+### Key Behaviors
+- **Collision-safe identity**: Documents with the same relative path in different roots are stored separately
+- **Root-aware queries**: All query operations (search, browse, get_document, metadata, graph) accept an optional `root_id` filter
+- **Cross-root link resolution**: Links are resolved within the same root by default. Cross-root links require explicit `target_root_id` and are represented with a `links_to_cross_root` relation type
+- **Per-root statistics**: `IndexStats.roots` provides per-root breakdown of document/error/link/heading counts
+- **Migration safety**: Existing single-root indexes upgrade automatically (assigned `root_id = 1`)
+
+### Transport
+- **CLI**: `--root` flag to select root
+- **MCP**: `root_id` parameter on `search`, `query_metadata`, `browse`, `get_document` tools
+- **CLI scan**: Accepts both simple paths and root config objects with explicit IDs
 
 1. **Deterministic software, probabilistic AI** — Tool does retrieval; AI does reasoning
 2. **Progressive disclosure** — Browse hierarchy → search → get document → get section

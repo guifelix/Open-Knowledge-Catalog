@@ -19,9 +19,17 @@ okc --help
 ```
 
 Global options:
-- `--root <PATH>` - Root directory to scan (can be specified multiple times)
+- `--root <PATH>` - Root directory to scan (can be specified multiple times; each gets auto-generated ID)
+- `--root-id <ID> --root-path <PATH>` - Explicit root with custom ID (repeatable, must be paired)
 - `--db-path <PATH>` - SQLite database path (default: `okc_index.db`)
 - `--config <PATH>` - Configuration file (default: `~/.config/okc/config.toml` or `./okc.toml`)
+
+For multi-root with explicit IDs, use the paired flags:
+```bash
+okc scan --root-id main --root-path ./knowledge --root-id docs --root-path ./docs
+```
+
+## Configuration File
 
 ## Configuration File
 
