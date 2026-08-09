@@ -25,6 +25,30 @@ pub mod tests;
 pub use bm25::Bm25Config;
 pub use search::SearchConfig;
 
+/// Configuration for a single repository root.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct RootConfig {
+    /// Unique identifier for this root (stable across restarts).
+    /// If not provided, a hash of the path will be used.
+    pub id: Option<String>,
+    /// Path to the root directory.
+    pub path: PathBuf,
+}
+
+impl RootConfig {
+    /// Get the stable root ID, generating one from the path if not provided.
+    pub fn root_id(&self) -> String {
+        self.id.clone().unwrap_or_else(|| {
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::{Hash, Hasher};
+            let mut hasher = DefaultHasher::new();
+            self.path.hash(&mut hasher);
+            format!("{:x}", hasher.finish())
+        })
+    }
+}
+
 /// Configuration for the OKC indexer and service.
 ///
 /// This struct controls all aspects of the indexing process:
@@ -39,11 +63,11 @@ pub use search::SearchConfig;
 /// # Example
 ///
 /// ```rust
-/// use okc::config::OkcConfig;
+/// use okc::config::{OkcConfig, RootConfig};
 /// use std::path::PathBuf;
 ///
 /// let config = OkcConfig {
-///     roots: vec![PathBuf::from("/path/to/knowledge-base")],
+///     roots: vec![RootConfig { id: Some("main".into()), path: PathBuf::from("/path/to/knowledge-base") }],
 ///     ..Default::default()
 /// };
 /// ```
@@ -53,7 +77,7 @@ pub struct OkcConfig {
     /// Root directories to scan for markdown files.
     /// Each root is walked recursively (respecting exclude patterns).
     #[serde(default)]
-    pub roots: Vec<PathBuf>,
+    pub roots: Vec<RootConfig>,
 
     /// Glob patterns for files and directories to exclude from scanning.
     /// Defaults include common VCS, dependency, and build directories.
@@ -281,7 +305,7 @@ impl OkcConfig {
     /// Apply environment variable overrides to the configuration.
     ///
     /// Environment variables use the `OKC_` prefix with uppercase snake_case names:
-    /// - OKC_ROOTS (comma-separated paths)
+    /// - OKC_ROOTS (comma-separated paths, or JSON array of objects with id/path)
     /// - OKC_DB_PATH
     /// - OKC_MAX_FILE_SIZE
     /// - OKC_MAX_FRONT_MATTER_SIZE
@@ -302,13 +326,37 @@ impl OkcConfig {
     /// - OKC_BM25_K1
     /// - OKC_BM25_B
     fn apply_env_overrides(&mut self) -> Result<(), ConfigError> {
-        // Roots (comma-separated)
+        // Roots (comma-separated paths, or JSON array)
         if let Ok(roots) = std::env::var("OKC_ROOTS") {
-            self.roots = roots
-                .split(',')
-                .map(|s| PathBuf::from(s.trim()))
-                .filter(|p| !p.as_os_str().is_empty())
-                .collect();
+            // Try to parse as JSON array first (for structured config with ids)
+            if roots.trim_start().starts_with('[') {
+                match serde_json::from_str::<Vec<RootConfig>>(&roots) {
+                    Ok(configs) => {
+                        self.roots = configs;
+                    }
+                    Err(_) => {
+                        // Fall back to comma-separated paths
+                        self.roots = roots
+                            .split(',')
+                            .map(|s| RootConfig {
+                                id: None,
+                                path: PathBuf::from(s.trim()),
+                            })
+                            .filter(|r| !r.path.as_os_str().is_empty())
+                            .collect();
+                    }
+                }
+            } else {
+                // Comma-separated paths (backward compatible)
+                self.roots = roots
+                    .split(',')
+                    .map(|s| RootConfig {
+                        id: None,
+                        path: PathBuf::from(s.trim()),
+                    })
+                    .filter(|r| !r.path.as_os_str().is_empty())
+                    .collect();
+            }
         }
 
         // Database path
@@ -477,16 +525,16 @@ impl OkcConfig {
         }
 
         for root in &self.roots {
-            if !root.exists() {
+            if !root.path.exists() {
                 return Err(ConfigError::ValidationError(format!(
                     "Root directory does not exist: {}",
-                    root.display()
+                    root.path.display()
                 )));
             }
-            if !root.is_dir() {
+            if !root.path.is_dir() {
                 return Err(ConfigError::ValidationError(format!(
                     "Root path is not a directory: {}",
-                    root.display()
+                    root.path.display()
                 )));
             }
         }
