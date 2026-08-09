@@ -8,7 +8,8 @@ pub fn init(conn: &Connection) -> Result<()> {
         r#"
         CREATE TABLE IF NOT EXISTS documents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            path TEXT NOT NULL UNIQUE,
+            root_id INTEGER NOT NULL DEFAULT 1,
+            path TEXT NOT NULL,
             parent_path TEXT NOT NULL DEFAULT '',
             title TEXT,
             type TEXT,
@@ -17,9 +18,11 @@ pub fn init(conn: &Connection) -> Result<()> {
             file_size INTEGER NOT NULL DEFAULT 0,
             modified_at INTEGER NOT NULL DEFAULT 0,
             content_hash TEXT NOT NULL DEFAULT '',
-            parse_status TEXT NOT NULL DEFAULT 'ok'
+            parse_status TEXT NOT NULL DEFAULT 'ok',
+            UNIQUE(root_id, path)
         );
         CREATE INDEX IF NOT EXISTS idx_documents_path ON documents(path);
+        CREATE INDEX IF NOT EXISTS idx_documents_root ON documents(root_id);
         CREATE INDEX IF NOT EXISTS idx_documents_parent_path ON documents(parent_path);
         CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(type);
         CREATE INDEX IF NOT EXISTS idx_documents_parse_status ON documents(parse_status);
@@ -102,6 +105,7 @@ pub fn init(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_scan_errors_path ON scan_errors(path);
 
         CREATE VIRTUAL TABLE IF NOT EXISTS document_search USING fts5(
+            root_id UNINDEXED,
             path UNINDEXED,
             title,
             description,
@@ -117,9 +121,10 @@ pub fn init(conn: &Connection) -> Result<()> {
 pub fn upsert_document(conn: &Connection, doc: &DocumentRecord) -> Result<()> {
     conn.execute(
         "INSERT OR REPLACE INTO documents
-         (path, parent_path, title, type, description, body_text, file_size, modified_at, content_hash, parse_status)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+         (root_id, path, parent_path, title, type, description, body_text, file_size, modified_at, content_hash, parse_status)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         params![
+            doc.root_id,
             doc.path,
             doc.parent_path,
             doc.title,
@@ -138,9 +143,10 @@ pub fn upsert_document(conn: &Connection, doc: &DocumentRecord) -> Result<()> {
 pub fn upsert_document_tx(tx: &Transaction, doc: &DocumentRecord) -> Result<()> {
     tx.execute(
         "INSERT OR REPLACE INTO documents
-         (path, parent_path, title, type, description, body_text, file_size, modified_at, content_hash, parse_status)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+         (root_id, path, parent_path, title, type, description, body_text, file_size, modified_at, content_hash, parse_status)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         params![
+            doc.root_id,
             doc.path,
             doc.parent_path,
             doc.title,
@@ -156,44 +162,59 @@ pub fn upsert_document_tx(tx: &Transaction, doc: &DocumentRecord) -> Result<()> 
     Ok(())
 }
 
-pub fn get_document(conn: &Connection, path: &str) -> Result<Option<DocumentRecord>> {
+pub fn get_document(
+    conn: &Connection,
+    path: &str,
+    root_id: Option<i64>,
+) -> Result<Option<DocumentRecord>> {
+    let root_id = root_id.unwrap_or(1);
     let mut stmt = conn.prepare(
-        "SELECT id, path, parent_path, title, type, description, body_text, file_size, modified_at, content_hash, parse_status
-         FROM documents WHERE path = ?1"
+        "SELECT id, root_id, path, parent_path, title, type, description, body_text, file_size, modified_at, content_hash, parse_status
+         FROM documents WHERE root_id = ?1 AND path = ?2"
     )?;
     let doc = stmt
-        .query_row(params![path], |row| {
+        .query_row(params![root_id, path], |row| {
             Ok(DocumentRecord {
                 id: row.get(0)?,
-                path: row.get(1)?,
-                parent_path: row.get(2)?,
-                title: row.get(3)?,
-                concept_type: row.get(4)?,
-                description: row.get(5)?,
-                body_text: row.get(6)?,
-                file_size: row.get::<_, i64>(7)? as u64,
-                modified_at: row.get(8)?,
-                content_hash: row.get(9)?,
-                parse_status: row.get(10)?,
+                root_id: row.get(1)?,
+                path: row.get(2)?,
+                parent_path: row.get(3)?,
+                title: row.get(4)?,
+                concept_type: row.get(5)?,
+                description: row.get(6)?,
+                body_text: row.get(7)?,
+                file_size: row.get::<_, i64>(8)? as u64,
+                modified_at: row.get(9)?,
+                content_hash: row.get(10)?,
+                parse_status: row.get(11)?,
             })
         })
         .optional()?;
     Ok(doc)
 }
 
-pub fn delete_document(conn: &Connection, path: &str) -> Result<()> {
-    conn.execute("DELETE FROM documents WHERE path = ?1", params![path])?;
+pub fn delete_document(conn: &Connection, path: &str, root_id: Option<i64>) -> Result<()> {
+    let root_id = root_id.unwrap_or(1);
+    conn.execute(
+        "DELETE FROM documents WHERE root_id = ?1 AND path = ?2",
+        params![root_id, path],
+    )?;
     Ok(())
 }
 
-pub fn delete_document_tx(tx: &Transaction, path: &str) -> Result<()> {
-    tx.execute("DELETE FROM documents WHERE path = ?1", params![path])?;
+pub fn delete_document_tx(tx: &Transaction, path: &str, root_id: Option<i64>) -> Result<()> {
+    let root_id = root_id.unwrap_or(1);
+    tx.execute(
+        "DELETE FROM documents WHERE root_id = ?1 AND path = ?2",
+        params![root_id, path],
+    )?;
     Ok(())
 }
 
-pub fn get_doc_id_tx(tx: &Transaction, path: &str) -> Result<i64> {
-    let mut stmt = tx.prepare("SELECT id FROM documents WHERE path = ?1")?;
-    let id: i64 = stmt.query_row([path], |row| row.get(0))?;
+pub fn get_doc_id_tx(tx: &Transaction, path: &str, root_id: Option<i64>) -> Result<i64> {
+    let root_id = root_id.unwrap_or(1);
+    let mut stmt = tx.prepare("SELECT id FROM documents WHERE root_id = ?1 AND path = ?2")?;
+    let id: i64 = stmt.query_row(params![root_id, path], |row| row.get(0))?;
     Ok(id)
 }
 
@@ -201,16 +222,21 @@ pub fn list_documents(
     conn: &Connection,
     path_prefix: Option<&str>,
     limit: Option<usize>,
+    root_id: Option<i64>,
 ) -> Result<Vec<DocumentRecord>> {
+    let root_id = root_id.unwrap_or(1);
     let mut sql = String::from(
-        "SELECT id, path, parent_path, title, type, description, body_text, file_size, modified_at, content_hash, parse_status
+        "SELECT id, root_id, path, parent_path, title, type, description, body_text, file_size, modified_at, content_hash, parse_status
          FROM documents"
     );
     let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
 
+    sql.push_str(" WHERE root_id = ?1");
+    params_vec.push(Box::new(root_id));
+
     if let Some(prefix) = path_prefix {
         if !prefix.is_empty() {
-            sql.push_str(" WHERE path LIKE ?1");
+            sql.push_str(" AND path LIKE ?2");
             params_vec.push(Box::new(format!("{}%", prefix)));
         }
     }
@@ -225,16 +251,17 @@ pub fn list_documents(
         .query_map(params_refs.as_slice(), |row| {
             Ok(DocumentRecord {
                 id: row.get(0)?,
-                path: row.get(1)?,
-                parent_path: row.get(2)?,
-                title: row.get(3)?,
-                concept_type: row.get(4)?,
-                description: row.get(5)?,
-                body_text: row.get(6)?,
-                file_size: row.get::<_, i64>(7)? as u64,
-                modified_at: row.get(8)?,
-                content_hash: row.get(9)?,
-                parse_status: row.get(10)?,
+                root_id: row.get(1)?,
+                path: row.get(2)?,
+                parent_path: row.get(3)?,
+                title: row.get(4)?,
+                concept_type: row.get(5)?,
+                description: row.get(6)?,
+                body_text: row.get(7)?,
+                file_size: row.get::<_, i64>(8)? as u64,
+                modified_at: row.get(9)?,
+                content_hash: row.get(10)?,
+                parse_status: row.get(11)?,
             })
         })?
         .filter_map(|r| r.ok())

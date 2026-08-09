@@ -61,31 +61,32 @@ impl DocumentStore for SqliteDocumentStore {
         documents::upsert_document_tx(tx, doc)
     }
 
-    fn get_document(&self, path: &str) -> Result<Option<DocumentRecord>> {
+    fn get_document(&self, path: &str, root_id: Option<i64>) -> Result<Option<DocumentRecord>> {
         let conn = self.get_conn()?;
-        documents::get_document(&conn, path)
+        documents::get_document(&conn, path, root_id)
     }
 
-    fn delete_document(&self, path: &str) -> Result<()> {
+    fn delete_document(&self, path: &str, root_id: Option<i64>) -> Result<()> {
         let conn = self.get_conn()?;
-        documents::delete_document(&conn, path)
+        documents::delete_document(&conn, path, root_id)
     }
 
-    fn delete_document_tx(&self, tx: &Transaction, path: &str) -> Result<()> {
-        documents::delete_document_tx(tx, path)
+    fn delete_document_tx(&self, tx: &Transaction, path: &str, root_id: Option<i64>) -> Result<()> {
+        documents::delete_document_tx(tx, path, root_id)
     }
 
-    fn get_doc_id_tx(&self, tx: &Transaction, path: &str) -> Result<i64> {
-        documents::get_doc_id_tx(tx, path)
+    fn get_doc_id_tx(&self, tx: &Transaction, path: &str, root_id: Option<i64>) -> Result<i64> {
+        documents::get_doc_id_tx(tx, path, root_id)
     }
 
     fn list_documents(
         &self,
         path_prefix: Option<&str>,
         limit: usize,
+        root_id: Option<i64>,
     ) -> Result<Vec<DocumentRecord>> {
         let conn = self.get_conn()?;
-        documents::list_documents(&conn, path_prefix, Some(limit))
+        documents::list_documents(&conn, path_prefix, Some(limit), root_id)
     }
 
     fn insert_tags(&self, doc_id: i64, tags: &[String]) -> Result<()> {

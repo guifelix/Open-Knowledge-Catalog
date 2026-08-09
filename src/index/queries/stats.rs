@@ -2,33 +2,13 @@
 
 use crate::error::Result;
 use crate::index::database::RepositoryIndex;
+use crate::index::traits::DocumentStore;
 use crate::model::document::IndexStats;
 use rusqlite::params;
 
 /// Get index statistics (document count, link count, etc.).
 pub fn get_stats(index: &RepositoryIndex) -> Result<IndexStats> {
-    let conn = index.pool().get()?;
-
-    let document_count: i64 =
-        conn.query_row("SELECT COUNT(*) FROM documents", [], |row| row.get(0))?;
-
-    let error_count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM documents WHERE parse_status != 'Ok'",
-        [],
-        |row| row.get(0),
-    )?;
-
-    let link_count: i64 = conn.query_row("SELECT COUNT(*) FROM links", [], |row| row.get(0))?;
-
-    let heading_count: i64 =
-        conn.query_row("SELECT COUNT(*) FROM headings", [], |row| row.get(0))?;
-
-    Ok(IndexStats {
-        document_count: document_count as usize,
-        error_count: error_count as usize,
-        link_count: link_count as usize,
-        heading_count: heading_count as usize,
-    })
+    index.document_store.get_stats()
 }
 
 /// Get recently modified documents.

@@ -197,12 +197,18 @@ impl RepositoryIndex {
         let (parsed_docs, result) = process_changes(&self.config, changes, known_paths);
 
         // Handle deletions within transaction
-        for path in &changes.deleted {
-            info!("Removing deleted document: {path}");
-            self.document_store.delete_document_tx(&tx, path)?;
-            self.search_index.remove_document_tx(&tx, path)?;
+        for file in &changes.deleted {
+            info!(
+                "Removing deleted document: {} (root: {})",
+                file.path, file.root_id
+            );
+            let root_id = self.get_or_create_root_id_tx(&tx, &file.root_id)?;
+            self.document_store
+                .delete_document_tx(&tx, &file.path, Some(root_id))?;
+            self.search_index
+                .remove_document_tx(&tx, &file.path, Some(root_id))?;
             if let Some(ref gs) = self.graph_store {
-                gs.remove_links_tx(&tx, path)?;
+                gs.remove_links_tx(&tx, &file.path)?;
             }
         }
 
@@ -220,9 +226,13 @@ impl RepositoryIndex {
     fn store_parsed_document(&self, parsed: &crate::index::parser::ParsedDocument) -> Result<()> {
         use crate::index::traits::DocumentRecord;
 
+        // Get or create the internal root ID
+        let root_id = self.get_or_create_root_id(&parsed.root_id)?;
+
         // Create document record
         let doc_record = DocumentRecord {
             id: 0, // Will be assigned by database
+            root_id,
             path: parsed.path.clone(),
             parent_path: parsed.parent_path.clone(),
             title: parsed.title.clone(),
@@ -239,7 +249,7 @@ impl RepositoryIndex {
         self.document_store.upsert_document(&doc_record)?;
 
         // Get the document ID
-        let doc_id = self.get_doc_id(&parsed.path)?;
+        let doc_id = self.get_doc_id(&parsed.path, Some(root_id))?;
 
         // Store tags
         if !parsed.tags.is_empty() {
@@ -289,6 +299,7 @@ impl RepositoryIndex {
 
         // Index for search
         let searchable = crate::index::traits::SearchableDocument {
+            root_id,
             path: parsed.path.clone(),
             title: parsed.title.clone(),
             description: parsed.description.clone(),
@@ -314,9 +325,13 @@ impl RepositoryIndex {
     ) -> Result<()> {
         use crate::index::traits::DocumentRecord;
 
+        // Get or create the internal root ID
+        let root_id = self.get_or_create_root_id_tx(tx, &parsed.root_id)?;
+
         // Create document record
         let doc_record = DocumentRecord {
             id: 0, // Will be assigned by database
+            root_id,
             path: parsed.path.clone(),
             parent_path: parsed.parent_path.clone(),
             title: parsed.title.clone(),
@@ -333,7 +348,7 @@ impl RepositoryIndex {
         self.document_store.upsert_document_tx(tx, &doc_record)?;
 
         // Get the document ID
-        let doc_id = self.get_doc_id_tx(tx, &parsed.path)?;
+        let doc_id = self.get_doc_id_tx(tx, &parsed.path, Some(root_id))?;
 
         // Store tags
         if !parsed.tags.is_empty() {
@@ -385,6 +400,7 @@ impl RepositoryIndex {
 
         // Index for search
         let searchable = crate::index::traits::SearchableDocument {
+            root_id,
             path: parsed.path.clone(),
             title: parsed.title.clone(),
             description: parsed.description.clone(),
@@ -402,29 +418,38 @@ impl RepositoryIndex {
         Ok(())
     }
 
-    fn get_doc_id_tx(&self, tx: &rusqlite::Transaction, path: &str) -> Result<i64> {
-        let mut stmt = tx.prepare("SELECT id FROM documents WHERE path = ?1")?;
-        let id: i64 = stmt.query_row([path], |row| row.get(0))?;
+    fn get_doc_id_tx(
+        &self,
+        tx: &rusqlite::Transaction,
+        path: &str,
+        root_id: Option<i64>,
+    ) -> Result<i64> {
+        let root_id = root_id.unwrap_or(1);
+        let mut stmt = tx.prepare("SELECT id FROM documents WHERE root_id = ?1 AND path = ?2")?;
+        let id: i64 = stmt.query_row(params![root_id, path], |row| row.get(0))?;
         Ok(id)
     }
 
-    fn get_doc_id(&self, path: &str) -> Result<i64> {
+    fn get_doc_id(&self, path: &str, root_id: Option<i64>) -> Result<i64> {
+        let root_id = root_id.unwrap_or(1);
         let conn = self.pool.get()?;
-        let mut stmt = conn.prepare("SELECT id FROM documents WHERE path = ?1")?;
-        let id: i64 = stmt.query_row([path], |row| row.get(0))?;
+        let mut stmt = conn.prepare("SELECT id FROM documents WHERE root_id = ?1 AND path = ?2")?;
+        let id: i64 = stmt.query_row(params![root_id, path], |row| row.get(0))?;
         Ok(id)
     }
 
     fn load_file_records(&self) -> Result<Vec<FileRecord>> {
         let conn = self.pool.get()?;
-        let mut stmt = conn.prepare("SELECT path, file_size, modified_at FROM documents")?;
+        let mut stmt = conn
+            .prepare("SELECT CAST(root_id AS TEXT), path, file_size, modified_at FROM documents")?;
         let records = stmt
             .query_map([], |row| {
                 Ok(FileRecord {
-                    path: row.get(0)?,
+                    root_id: row.get(0)?,
+                    path: row.get(1)?,
                     absolute_path: String::new(),
-                    size: row.get::<_, i64>(1)? as u64,
-                    modified_at: row.get(2)?,
+                    size: row.get::<_, i64>(2)? as u64,
+                    modified_at: row.get(3)?,
                 })
             })?
             .map(|r| r.map_err(crate::error::OkfError::from))
@@ -441,6 +466,42 @@ impl RepositoryIndex {
             .map(|r| r.map_err(crate::error::OkfError::from))
             .collect::<Result<Vec<_>>>()?;
         Ok(paths)
+    }
+
+    /// Get or create the internal integer root ID for a given string root_id.
+    /// Creates the root entry in the roots table if it doesn't exist.
+    fn get_or_create_root_id(&self, root_id_str: &str) -> Result<i64> {
+        let conn = self.pool.get()?;
+        let mut stmt = conn.prepare("SELECT id FROM roots WHERE root_id = ?1")?;
+        if let Ok(id) = stmt.query_row([root_id_str], |row| row.get::<_, i64>(0)) {
+            return Ok(id);
+        }
+        // Insert new root
+        conn.execute(
+            "INSERT INTO roots (root_id, path) VALUES (?1, ?2)",
+            params![root_id_str, ""],
+        )?;
+        let id: i64 = conn.last_insert_rowid();
+        Ok(id)
+    }
+
+    /// Get or create root ID within a transaction.
+    fn get_or_create_root_id_tx(
+        &self,
+        tx: &rusqlite::Transaction,
+        root_id_str: &str,
+    ) -> Result<i64> {
+        let mut stmt = tx.prepare("SELECT id FROM roots WHERE root_id = ?1")?;
+        if let Ok(id) = stmt.query_row([root_id_str], |row| row.get::<_, i64>(0)) {
+            return Ok(id);
+        }
+        // Insert new root
+        tx.execute(
+            "INSERT INTO roots (root_id, path) VALUES (?1, ?2)",
+            params![root_id_str, ""],
+        )?;
+        let id: i64 = tx.last_insert_rowid();
+        Ok(id)
     }
 
     /// Get headings for a document by path, filtered by max depth and count.

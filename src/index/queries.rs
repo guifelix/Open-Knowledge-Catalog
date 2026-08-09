@@ -61,6 +61,7 @@ impl super::database::RepositoryIndex {
         types: Option<&[String]>,
         tags: Option<&[String]>,
         limit: usize,
+        root_id: Option<i64>,
     ) -> Result<SearchResponse> {
         self.search_index.search(
             query,
@@ -68,6 +69,7 @@ impl super::database::RepositoryIndex {
                 path_prefix: path_prefix.map(str::to_string),
                 concept_types: types.map(<[String]>::to_vec),
                 tags: tags.map(<[String]>::to_vec),
+                root_id,
             },
             limit,
         )
