@@ -4,13 +4,25 @@
 //! Every param/output pair matches a corresponding tool handler in `tools.rs`.
 
 use rmcp::schemars;
-use serde::{Deserialize, Serialize};
+use serde::{de::Deserializer, Deserialize, Serialize};
+use serde_json::Value as JsonValue;
+use std::path::PathBuf;
 
 // ── Scan ────────────────────────────────────────────────────────────────────
 
+#[derive(Deserialize, schemars::JsonSchema, Debug, Clone)]
+pub(crate) struct RootConfig {
+    pub id: Option<String>,
+    pub path: PathBuf,
+}
+
 #[derive(Deserialize, schemars::JsonSchema)]
 pub(crate) struct ScanParams {
+    /// Root directories to scan (simple paths, IDs auto-generated)
     pub roots: Vec<String>,
+    /// Explicit root configurations with custom IDs (optional)
+    #[serde(default)]
+    pub root_configs: Vec<RootConfig>,
     pub db_path: Option<String>,
 }
 
@@ -139,6 +151,9 @@ pub(crate) struct SearchParams {
     /// Overrides the server config default (default: 1).
     #[serde(default)]
     pub heading_depth: Option<u32>,
+    /// Optional root ID to filter by (for multi-root repositories).
+    #[serde(default)]
+    pub root_id: Option<i64>,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]
@@ -198,6 +213,8 @@ pub(crate) struct LinkInfoOutput {
     pub target_anchor: Option<String>,
     pub external_url: Option<String>,
     pub exists_in_repository: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_root_id: Option<i64>,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]
@@ -312,6 +329,7 @@ mod tests {
                 target_anchor: None,
                 external_url: None,
                 exists_in_repository: true,
+                target_root_id: Some(1),
             }]),
             backlinks: Some(vec![DocumentBacklinkOutput {
                 source_path: "policies/revenue.md".to_string(),
