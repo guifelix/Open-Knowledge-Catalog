@@ -133,4 +133,7 @@ pub struct LinkInfo {
     pub external_url: Option<String>,
     /// Whether target exists in repository.
     pub exists_in_repository: bool,
+    /// Target root ID for multi-root repositories.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_root_id: Option<i64>,
 }

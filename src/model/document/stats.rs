@@ -4,6 +4,22 @@
 //! and processing outcomes.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+/// Per-root statistics breakdown.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RootStats {
+    /// Root identifier.
+    pub root_id: String,
+    /// Document count for this root.
+    pub document_count: usize,
+    /// Error count for this root.
+    pub error_count: usize,
+    /// Link count for this root.
+    pub link_count: usize,
+    /// Heading count for this root.
+    pub heading_count: usize,
+}
 
 /// Index statistics.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,6 +32,9 @@ pub struct IndexStats {
     pub link_count: usize,
     /// Total headings in index.
     pub heading_count: usize,
+    /// Per-root statistics breakdown.
+    #[serde(default)]
+    pub roots: BTreeMap<String, RootStats>,
 }
 
 /// Result of a full repository scan.
