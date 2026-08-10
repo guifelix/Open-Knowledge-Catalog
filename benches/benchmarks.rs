@@ -232,7 +232,10 @@ fn generate_technical_docs(root: &Path, count: usize) {
 
 fn bench_config(root: &Path) -> OkcConfig {
     OkcConfig {
-        roots: vec![root.to_path_buf()],
+        roots: vec![okc::config::RootConfig {
+            id: None,
+            path: root.to_path_buf(),
+        }],
         ..OkcConfig::default()
     }
 }
@@ -344,6 +347,7 @@ fn bench_search(c: &mut Criterion) {
                             black_box(100),
                             None,
                             None,
+                            None,
                         )
                         .expect("search"),
                 );
@@ -369,6 +373,7 @@ fn bench_search(c: &mut Criterion) {
                                 black_box(100),
                                 None,
                                 None,
+                                None,
                             )
                             .expect("search"),
                     );
@@ -389,6 +394,7 @@ fn bench_search(c: &mut Criterion) {
                             None,
                             Some(black_box(&tags)),
                             black_box(100),
+                            None,
                             None,
                             None,
                         )
@@ -586,6 +592,7 @@ fn bench_technical_docs(c: &mut Criterion) {
                             None,
                             None,
                             black_box(100),
+                            None,
                             None,
                             None,
                         )
