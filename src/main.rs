@@ -209,7 +209,7 @@ fn main() -> anyhow::Result<()> {
         }
         Command::Links { path } => {
             let service = OkcService::open(&config)?;
-            let result = service.get_links(&path)?;
+            let result = service.get_links(&path, None)?;
             println!("Links from {}:", path);
             for l in &result {
                 if l.external_url.is_some() {
@@ -226,7 +226,7 @@ fn main() -> anyhow::Result<()> {
         }
         Command::Backlinks { path, limit } => {
             let service = OkcService::open(&config)?;
-            let result = service.get_backlinks(&path, limit)?;
+            let result = service.get_backlinks(&path, limit, None)?;
             println!("Backlinks to {}:", path);
             for l in &result {
                 if l.external_url.is_some() {

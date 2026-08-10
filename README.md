@@ -40,7 +40,7 @@ OKF files → scanner & parser → structured index → bounded AI tool calls �
 - **Performance**: Repository parsed once, updated incrementally; unchanged files skipped
 - **Accuracy**: YAML metadata queried as structured data, not plain text search
 - **Context Efficiency**: AI receives only relevant metadata, headings, excerpts, or sections
-- **Navigability**: Directory hierarchy supports progressive disclosure; document graph supports link-following
+- **Navigability**: Directory hierarchy supports progressive disclosure; document graph supports link-following, including typed relationships (`depends-on`, `imports`, …) via the `typed_links` extension
 - **Safety**: Restricts accessible directories, file types, sizes, traversal depth, output size
 - **Source Traceability**: Every result includes repository path and source location
 
@@ -60,8 +60,8 @@ OKC provides a comprehensive set of tools for browsing, parsing, searching, and 
 | `okc metadata` | Structured metadata queries with filtering and projection |
 | `okc links` | Outgoing links from a document |
 | `okc backlinks` | Documents referencing a concept |
-| `okc traverse` | Explore related concepts via graph edges |
-| `okc validate` | 8-category repository validation |
+| `okc traverse` | Explore related concepts via graph edges (typed relations via `--relations`) |
+| `okc validate` | Multi-category repository validation |
 | `okc stats` | Repository statistics |
 | `okc serve` | Start MCP server (stdio for local clients, HTTP for remote/shared use) |
 | `okc watch` | File system watching with incremental updates |
@@ -129,6 +129,8 @@ okc backlinks metrics/monthly-revenue.md
 
 # Graph traversal
 okc traverse metrics/monthly-revenue.md --max-depth 3
+# Graph traversal following only typed relationships
+okc traverse metrics/monthly-revenue.md --relations depends-on,imports
 
 # Validate
 okc validate

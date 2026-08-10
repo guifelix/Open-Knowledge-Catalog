@@ -35,6 +35,7 @@ pub fn extract_links(events: &[Event], source_text: &str) -> Vec<Link> {
                     target_anchor: extract_anchor(&link_url),
                     is_external,
                     exists_in_repository: false, // Will be resolved later
+                    relation: None,
                 });
                 in_link = false;
             }
@@ -54,6 +55,7 @@ pub fn extract_links(events: &[Event], source_text: &str) -> Vec<Link> {
             target_anchor: extract_anchor(&wiki_target),
             is_external,
             exists_in_repository: false,
+            relation: None,
         });
     }
 

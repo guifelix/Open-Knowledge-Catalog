@@ -4,37 +4,59 @@
 
 use super::database::RepositoryIndex;
 use crate::error::Result;
+use crate::index::traits::relation_condition;
 use crate::model::document::LinkInfo;
 use crate::model::graph::{GraphEdge, TraverseNode, TraverseResponse};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::params;
+use rusqlite::{params, Row};
+
+/// Parse a `LinkInfo` from a links-table row that selects, in order:
+/// `target_path, target_anchor, external_url, exists_in_repository, relation`.
+fn link_info_from_row(row: &Row<'_>) -> rusqlite::Result<LinkInfo> {
+    Ok(LinkInfo {
+        target_path: row.get(0)?,
+        target_anchor: row.get(1)?,
+        external_url: row.get(2)?,
+        exists_in_repository: row.get::<_, i32>(3)? != 0,
+        relation: row.get(4)?,
+    })
+}
 
 impl RepositoryIndex {
     /// Get forward links from a document.
     ///
     /// Returns all links originating from the given document with
-    /// resolution status (exists in repo, external, broken).
-    pub fn get_links(&self, doc_path: &str) -> Result<Vec<LinkInfo>> {
+    /// resolution status (exists in repo, external, broken). When
+    /// `relation_filter` is `Some`, only edges whose stored relation equals
+    /// that value are returned (untyped NULL-relation links are excluded);
+    /// `None` returns all edges including untyped links.
+    pub fn get_links(
+        &self,
+        doc_path: &str,
+        relation_filter: Option<&str>,
+    ) -> Result<Vec<LinkInfo>> {
         let conn = self.pool().get()?;
-        let mut stmt = conn.prepare(
-            "SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository
+        let mut sql = String::from(
+            "SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository, l.relation
              FROM links l
              JOIN documents d ON d.id = l.source_document_id
              WHERE d.path = ?1",
-        )?;
+        );
+        if relation_filter.is_some() {
+            sql.push_str(" AND l.relation = ?2");
+        }
 
-        let links = stmt
-            .query_map(params![doc_path], |row| {
-                Ok(LinkInfo {
-                    target_path: row.get(0)?,
-                    target_anchor: row.get(1)?,
-                    external_url: row.get(2)?,
-                    exists_in_repository: row.get::<_, i32>(3)? != 0,
-                })
-            })?
-            .filter_map(|r| r.ok())
-            .collect();
+        let mut stmt = conn.prepare(&sql)?;
+        let links = if let Some(relation) = relation_filter {
+            stmt.query_map(params![doc_path, relation], link_info_from_row)?
+                .filter_map(|r| r.ok())
+                .collect()
+        } else {
+            stmt.query_map(params![doc_path], link_info_from_row)?
+                .filter_map(|r| r.ok())
+                .collect()
+        };
 
         Ok(links)
     }
@@ -42,23 +64,34 @@ impl RepositoryIndex {
     /// Get backlinks to a document.
     ///
     /// Returns documents that link to the given path, limited by `limit`.
-    pub fn get_backlinks(&self, doc_path: &str, limit: usize) -> Result<Vec<LinkInfo>> {
+    /// When `relation_filter` is `Some`, only edges carrying that relation are
+    /// returned; `None` returns all edges including untyped (NULL-relation)
+    /// links.
+    pub fn get_backlinks(
+        &self,
+        doc_path: &str,
+        limit: usize,
+        relation_filter: Option<&str>,
+    ) -> Result<Vec<LinkInfo>> {
         let conn = self.pool().get()?;
-        let mut stmt = conn.prepare(
-            "SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository
+        let mut sql = String::from(
+            "SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository, l.relation
              FROM links l
-             WHERE l.target_path = ?1
-             LIMIT ?2",
-        )?;
+             WHERE l.target_path = ?1",
+        );
+        let mut bound: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(doc_path)];
+        if let Some(relation) = relation_filter {
+            sql.push_str(" AND l.relation = ?2");
+            bound.push(Box::new(relation));
+        }
+        let limit_pos = bound.len() + 1;
+        sql.push_str(&format!(" LIMIT ?{limit_pos}"));
+        bound.push(Box::new(limit as i64));
 
+        let mut stmt = conn.prepare(&sql)?;
         let backlinks = stmt
-            .query_map(params![doc_path, limit as i64], |row| {
-                Ok(LinkInfo {
-                    target_path: row.get(0)?,
-                    target_anchor: row.get(1)?,
-                    external_url: row.get(2)?,
-                    exists_in_repository: row.get::<_, i32>(3)? != 0,
-                })
+            .query_map(rusqlite::params_from_iter(bound.iter()), |row| {
+                link_info_from_row(row)
             })?
             .filter_map(|r| r.ok())
             .collect();
@@ -121,22 +154,13 @@ impl RepositoryIndex {
                 continue;
             }
 
-            let link_condition = if relations.is_empty() {
-                "1=1".to_string()
-            } else {
-                let _or_conds: Vec<String> = relations
-                    .iter()
-                    .map(|r| format!("'{}'", r.replace('\'', "''")))
-                    .collect();
-                "target_path IS NOT NULL AND target_path != ''".to_string()
-            };
+            let link_condition = relation_condition(relations);
 
             let sql = format!(
                 "SELECT target_path FROM links l
                  JOIN documents d ON d.id = l.source_document_id
-                 WHERE d.path = ?1 AND {}
-                 LIMIT ?2",
-                link_condition
+                 WHERE d.path = ?1 AND target_path IS NOT NULL AND target_path != '' {link_condition}
+                 LIMIT ?2"
             );
 
             // First query: forward links
@@ -162,12 +186,13 @@ impl RepositoryIndex {
             // Second query: backlinks
             {
                 let conn = self.pool().get()?;
-                let mut stmt = conn.prepare(
+                let backlink_sql = format!(
                     "SELECT d.path FROM links l
                      JOIN documents d ON d.id = l.source_document_id
-                     WHERE l.target_path = ?1
-                     LIMIT ?2",
-                )?;
+                     WHERE l.target_path = ?1 {link_condition}
+                     LIMIT ?2"
+                );
+                let mut stmt = conn.prepare(&backlink_sql)?;
                 let rows: Vec<String> = stmt
                     .query_map(
                         params![current_path, (effective_max_nodes - visited.len()) as i64],

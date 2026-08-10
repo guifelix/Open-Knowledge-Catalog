@@ -71,6 +71,8 @@ pub struct Link {
     pub is_external: bool,
     /// Whether the target exists in the repository (for internal links).
     pub exists_in_repository: bool,
+    /// Optional typed relationship from the `typed_links` front-matter extension.
+    pub relation: Option<String>,
 }
 
 /// Fully parsed document with all extracted structure.
@@ -133,4 +135,7 @@ pub struct LinkInfo {
     pub external_url: Option<String>,
     /// Whether target exists in repository.
     pub exists_in_repository: bool,
+    /// Optional typed relationship from the `typed_links` front-matter extension.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relation: Option<String>,
 }

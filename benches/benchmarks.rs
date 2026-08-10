@@ -454,7 +454,7 @@ fn bench_graph(c: &mut Criterion) {
                 black_box(
                     setup
                         .service
-                        .get_links(black_box(doc_path))
+                        .get_links(black_box(doc_path), None)
                         .expect("get_links"),
                 );
             });
@@ -466,7 +466,7 @@ fn bench_graph(c: &mut Criterion) {
                 black_box(
                     setup
                         .service
-                        .get_backlinks(black_box(doc_path), black_box(50))
+                        .get_backlinks(black_box(doc_path), black_box(50), None)
                         .expect("get_backlinks"),
                 );
             });

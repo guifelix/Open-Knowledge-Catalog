@@ -95,6 +95,7 @@ fn prop_link_anchor_handling(base: String, anchor: String) -> TestCaseResult {
         target_anchor: Some(anchor.clone()),
         is_external: false,
         exists_in_repository: true,
+        relation: None,
     };
 
     let resolved = LinkResolver::resolve_links(&source, &[link], &[]);

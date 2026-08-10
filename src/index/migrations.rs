@@ -61,6 +61,7 @@ pub fn run(conn: &Connection) -> Result<(), rusqlite::Error> {
             target_anchor TEXT,
             external_url TEXT,
             exists_in_repository INTEGER NOT NULL DEFAULT 0,
+            relation TEXT,
             FOREIGN KEY(source_document_id) REFERENCES documents(id) ON DELETE CASCADE
         );
 
@@ -155,5 +156,125 @@ pub fn run(conn: &Connection) -> Result<(), rusqlite::Error> {
         conn.execute("INSERT INTO schema_version (version) VALUES (2)", [])?;
     }
 
+    // Migration 3: Add optional relation column to links for typed_links.
+    // Guarded so it is safe on fresh databases (column already present via
+    // CREATE TABLE) and on existing ones (column added by ALTER TABLE).
+    if version < 3 {
+        let has_relation: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('links') WHERE name = 'relation'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .is_ok_and(|count| count > 0);
+        if !has_relation {
+            conn.execute("ALTER TABLE links ADD COLUMN relation TEXT", [])?;
+        }
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_links_relation ON links(relation)",
+            [],
+        )?;
+        conn.execute("INSERT INTO schema_version (version) VALUES (3)", [])?;
+    }
+
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn column_exists(conn: &Connection, column: &str) -> bool {
+        conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('links') WHERE name = ?1",
+            [column],
+            |row| row.get::<_, i64>(0),
+        )
+        .is_ok_and(|count| count > 0)
+    }
+
+    #[allow(clippy::expect_used)]
+    fn latest_version(conn: &Connection) -> i64 {
+        conn.query_row("SELECT MAX(version) FROM schema_version", [], |row| {
+            row.get(0)
+        })
+        .expect("schema_version exists")
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn fresh_database_has_relation_column_and_index() {
+        let conn = Connection::open_in_memory().expect("open in-memory db");
+        run(&conn).expect("migrations succeed on a fresh database");
+
+        assert!(column_exists(&conn, "relation"));
+        let index_exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'index' AND name = 'idx_links_relation'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("index lookup");
+        assert_eq!(index_exists, 1);
+        assert_eq!(latest_version(&conn), 3);
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn migration_v3_upgrades_v2_database() {
+        let conn = Connection::open_in_memory().expect("open in-memory db");
+        conn.execute_batch(
+            "
+            CREATE TABLE schema_version (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            INSERT INTO schema_version (version) VALUES (1);
+            INSERT INTO schema_version (version) VALUES (2);
+            CREATE TABLE documents (
+                id INTEGER PRIMARY KEY,
+                path TEXT NOT NULL UNIQUE,
+                parent_path TEXT NOT NULL DEFAULT '',
+                title TEXT,
+                type TEXT,
+                description TEXT,
+                body_text TEXT,
+                file_size INTEGER NOT NULL DEFAULT 0,
+                modified_at INTEGER NOT NULL DEFAULT 0,
+                content_hash TEXT,
+                parse_status TEXT NOT NULL DEFAULT 'ok'
+            );
+            CREATE TABLE links (
+                source_document_id INTEGER NOT NULL,
+                target_path TEXT,
+                target_anchor TEXT,
+                external_url TEXT,
+                exists_in_repository INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY(source_document_id) REFERENCES documents(id) ON DELETE CASCADE
+            );
+            CREATE INDEX idx_links_source ON links(source_document_id);
+            CREATE INDEX idx_links_target ON links(target_path);
+            ",
+        )
+        .expect("seed v2 schema with untyped links");
+
+        run(&conn).expect("migrations upgrade v2 to v3");
+
+        assert!(column_exists(&conn, "relation"), "relation column added");
+        assert_eq!(latest_version(&conn), 3);
+        let row_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM links", [], |row| row.get(0))
+            .expect("links preserved");
+        assert_eq!(row_count, 0, "existing links rows remain untouched");
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn run_is_idempotent() {
+        let conn = Connection::open_in_memory().expect("open in-memory db");
+        run(&conn).expect("first migration run");
+        run(&conn).expect("second migration run is a no-op");
+        assert_eq!(latest_version(&conn), 3);
+    }
 }

@@ -190,6 +190,9 @@ pub(crate) struct MetadataResponseOutput {
 #[derive(Deserialize, schemars::JsonSchema)]
 pub(crate) struct LinkParams {
     pub path: String,
+    /// Optional relation type to filter links by. When omitted, all links
+    /// (including untyped Markdown links) are returned.
+    pub relation: Option<String>,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]
@@ -198,6 +201,10 @@ pub(crate) struct LinkInfoOutput {
     pub target_anchor: Option<String>,
     pub external_url: Option<String>,
     pub exists_in_repository: bool,
+    /// The typed relation of the link, if any. Omitted from JSON when the
+    /// link is untyped (plain Markdown link).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relation: Option<String>,
 }
 
 #[derive(Serialize, schemars::JsonSchema)]
@@ -209,6 +216,9 @@ pub(crate) struct LinksResponseOutput {
 pub(crate) struct BacklinkParams {
     pub path: String,
     pub limit: Option<usize>,
+    /// Optional relation type to filter backlinks by. When omitted, all
+    /// backlinks (including untyped Markdown links) are returned.
+    pub relation: Option<String>,
 }
 
 // ── Traverse ─────────────────────────────────────────────────────────────────
@@ -312,6 +322,7 @@ mod tests {
                 target_anchor: None,
                 external_url: None,
                 exists_in_repository: true,
+                relation: None,
             }]),
             backlinks: Some(vec![DocumentBacklinkOutput {
                 source_path: "policies/revenue.md".to_string(),

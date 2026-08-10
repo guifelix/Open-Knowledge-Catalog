@@ -12,16 +12,25 @@ impl OkcService {
     /// Get forward links from a document.
     ///
     /// Returns all links originating from the given document with
-    /// resolution status (exists in repo, external, broken).
-    pub fn get_links(&self, path: &str) -> Result<Vec<LinkInfo>> {
-        self.index.get_links(path)
+    /// resolution status (exists in repo, external, broken). When
+    /// `relation_filter` is `Some`, only edges carrying that relation are
+    /// returned; `None` returns all edges including untyped links.
+    pub fn get_links(&self, path: &str, relation_filter: Option<&str>) -> Result<Vec<LinkInfo>> {
+        self.index.get_links(path, relation_filter)
     }
 
     /// Get backlinks to a document.
     ///
     /// Returns documents that link to the given path, limited by `limit`.
-    pub fn get_backlinks(&self, path: &str, limit: usize) -> Result<Vec<LinkInfo>> {
-        self.index.get_backlinks(path, limit)
+    /// When `relation_filter` is `Some`, only edges carrying that relation
+    /// are returned; `None` returns all edges including untyped links.
+    pub fn get_backlinks(
+        &self,
+        path: &str,
+        limit: usize,
+        relation_filter: Option<&str>,
+    ) -> Result<Vec<LinkInfo>> {
+        self.index.get_backlinks(path, limit, relation_filter)
     }
 
     /// Traverse the link graph from a starting document.

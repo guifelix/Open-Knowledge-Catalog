@@ -19,6 +19,35 @@ use crate::model::graph::TraverseResponse;
 use rusqlite::Transaction;
 use std::collections::{BTreeMap, HashMap};
 
+/// Build a SQL fragment that restricts links to the given relations.
+///
+/// Returns an empty string (no filter) when `relations` is empty. Relation
+/// values are single-quote escaped to prevent SQL injection.
+///
+/// Untyped Markdown links are stored with a `NULL` relation and represent the
+/// direction edges `links_to`/`linked_from`. When a direction relation is
+/// requested, `NULL`-relation links must match so plain Markdown links remain
+/// traversable. Typed relations such as `depends-on` only match their stored
+/// value and never match plain Markdown links.
+pub(crate) fn relation_condition(relations: &[String]) -> String {
+    if relations.is_empty() {
+        return String::new();
+    }
+    let quoted: Vec<String> = relations
+        .iter()
+        .map(|r| format!("'{}'", r.replace('\'', "''")))
+        .collect();
+    let direction_requested = relations
+        .iter()
+        .any(|r| r == "links_to" || r == "linked_from");
+    let include_null = if direction_requested {
+        " OR l.relation IS NULL"
+    } else {
+        ""
+    };
+    format!(" AND (l.relation IN ({}){include_null})", quoted.join(", "))
+}
+
 /// Document suitable for full-text search indexing.
 pub struct SearchableDocument {
     /// Document path (relative to repository root)

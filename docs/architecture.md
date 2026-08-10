@@ -217,6 +217,18 @@ Links assert a relationship; the specific kind (parent/child, references, joins-
 
 Consumers MUST tolerate broken links — a link whose target does not exist is not malformed; it may represent not-yet-written knowledge.
 
+#### Typed Links (OKC extension, per `docs/references/okc-typed-links.md`)
+
+A versioned `typed_links` front-matter block adds relationship semantics
+(`depends-on`, `imports`, `extends`, …) over the same graph. Typed edges
+live as **additive rows** in the same `links` table, each carrying a
+nullable `relation` column — they never overwrite or dedupe canonical
+Markdown edges. A source that declares both an untyped and a typed edge
+to the same target is reported by `okc validate` as a `typed_link_conflict`
+warning; consumers resolve deterministically by filtering on `relation`.
+Missing typed targets follow the same broken-link tolerance as Markdown
+links.
+
 ### Directory Index (`index.md`, per §8)
 
 Optional file at any directory level providing a listing for progressive disclosure. Consumers can synthesize this from frontmatter at consumption time.
@@ -233,7 +245,7 @@ Key tables:
 - `documents` — core document metadata + content hash + parse status
 - `document_tags` — many-to-many tags
 - `headings` — heading level, title, anchor, position
-- `links` — source doc, target path, anchor, external URL, existence
+- `links` — source doc, target path, anchor, external URL, existence, optional typed relation
 - `metadata_fields` — custom front-matter fields as key/value
 - `scan_errors` — parse failures per file
 - `file_records` — incremental scan state (path, mtime, size, hash)

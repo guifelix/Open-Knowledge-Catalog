@@ -24,7 +24,7 @@ OKC provides a comprehensive set of tools for browsing, parsing, searching, and 
 | `okc links` | Outgoing links from a document |
 | `okc backlinks` | Documents referencing a concept |
 | `okc traverse` | Explore related concepts via graph edges |
-| `okc validate` | 8-category repository validation |
+| `okc validate` | Multi-category repository validation |
 | `okc stats` | Repository statistics |
 | `okc serve` | Start MCP server (stdio for local clients, HTTP for remote/shared use) |
 | `okc watch` | File system watching with incremental updates |
@@ -41,9 +41,9 @@ When running as an MCP server, these tools are exposed to AI agents:
 | `get_section` | Extract a specific Markdown section without the full document |
 | `search_documents` | Full-text search with optional path/type/tag filters |
 | `query_metadata` | Exact structured filtering on front-matter fields |
-| `get_links` | Outgoing links from a document |
-| `get_backlinks` | Documents referencing a concept |
-| `traverse_graph` | Explore related concepts via graph edges |
+| `get_links` | Outgoing links from a document (optional `relation` filter) |
+| `get_backlinks` | Documents referencing a concept (optional `relation` filter) |
+| `traverse_graph` | Explore related concepts via graph edges (optional `relations`) |
 | `get_stats` | Repository statistics (file counts, link counts, etc.) |
 | `validate_repository` | Report structural problems (broken links, malformed YAML, missing index files) |
 
@@ -158,9 +158,49 @@ Revenue is recognized when...
 - Relative links between documents are resolved and validated
 - Custom front-matter fields are preserved as generic metadata
 
+## Typed Links
+
+The `typed_links` front-matter extension adds relationship semantics
+(`depends-on`, `imports`, `extends`, …) over the canonical Markdown
+graph. Typed edges are additive rows in the same link store — they never
+override Markdown links. See
+[docs/references/okc-typed-links.md](references/okc-typed-links.md) for
+the format, vocabulary, and resolution rules.
+
+```yaml
+---
+typed_links:
+  version: 1
+  links:
+    - target: /metrics/monthly-revenue.md
+      relation: depends-on
+---
+```
+
+Filter by relation where links are read. On the CLI that is
+`okc traverse`; the MCP tools expose `relation`/`relations` inputs on
+`get_links`, `get_backlinks`, and `traverse_graph`:
+
+```bash
+okc traverse metrics/monthly-revenue.md --relations depends-on,imports
+```
+
+```yaml
+# MCP: get_links / get_backlinks accept { path, relation }
+{"path": "metrics/monthly-revenue.md", "relation": "depends-on"}
+```
+
+Unfiltered calls return all edges, so existing consumers see no change.
+MCP tools expose the same filters via optional `relation`/`relations`
+inputs.
+
 ## Repository Validation
 
-`okc validate` checks 8 categories of structural problems — broken links, malformed YAML, circular references, duplicate content, missing index files, and more. Supports `--json` for machine-parseable output:
+`okc validate` checks structural problems — broken links (including
+missing typed-link targets), malformed YAML, circular references,
+duplicate content, missing index files, and mixed untyped/typed edges to
+the same target (`typed_link_conflict`). Supports `--json` for
+machine-parseable output:
 
 ```bash
 okc validate --json
