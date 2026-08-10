@@ -18,7 +18,7 @@ impl RepositoryIndex {
     pub fn get_links(&self, doc_path: &str) -> Result<Vec<LinkInfo>> {
         let conn = self.pool().get()?;
         let mut stmt = conn.prepare(
-            "SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository
+            "SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository, l.target_root_id
              FROM links l
              JOIN documents d ON d.id = l.source_document_id
              WHERE d.path = ?1",
@@ -31,6 +31,7 @@ impl RepositoryIndex {
                     target_anchor: row.get(1)?,
                     external_url: row.get(2)?,
                     exists_in_repository: row.get::<_, i32>(3)? != 0,
+                    target_root_id: row.get(4)?,
                 })
             })?
             .filter_map(|r| r.ok())
@@ -45,7 +46,7 @@ impl RepositoryIndex {
     pub fn get_backlinks(&self, doc_path: &str, limit: usize) -> Result<Vec<LinkInfo>> {
         let conn = self.pool().get()?;
         let mut stmt = conn.prepare(
-            "SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository
+            "SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository, l.target_root_id
              FROM links l
              WHERE l.target_path = ?1
              LIMIT ?2",
@@ -58,6 +59,7 @@ impl RepositoryIndex {
                     target_anchor: row.get(1)?,
                     external_url: row.get(2)?,
                     exists_in_repository: row.get::<_, i32>(3)? != 0,
+                    target_root_id: row.get(4)?,
                 })
             })?
             .filter_map(|r| r.ok())

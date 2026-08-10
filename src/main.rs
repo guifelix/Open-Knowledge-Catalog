@@ -6,7 +6,7 @@
 //!
 //! See the library crate documentation for architecture details.
 
-use crate::config::OkcConfig;
+use crate::config::{OkcConfig, RootConfig};
 use crate::transport::cli::{Cli, Command, TransportType};
 use clap::Parser;
 use std::net::SocketAddr;
@@ -40,7 +40,10 @@ fn main() -> anyhow::Result<()> {
 
     if let Command::Serve { root, .. } = &cli.command {
         if root.is_empty() && config.roots.is_empty() {
-            config.roots = vec![std::env::current_dir()?];
+            config.roots = vec![RootConfig {
+                id: None,
+                path: std::env::current_dir()?,
+            }];
         }
     }
 
@@ -169,6 +172,7 @@ fn main() -> anyhow::Result<()> {
                 limit,
                 max_headings,
                 heading_depth,
+                None, // root_id
             )?;
             println!("Search results for '{}':", query);
             println!("  Total matches: {}", result.total_matches);
@@ -317,7 +321,10 @@ fn main() -> anyhow::Result<()> {
             port,
         } => {
             if !root.is_empty() {
-                config.roots = root;
+                config.roots = root
+                    .into_iter()
+                    .map(|p| RootConfig { id: None, path: p })
+                    .collect();
             }
 
             let server = crate::transport::mcp::McpServer::new(&config)?;
@@ -350,7 +357,10 @@ fn apply_cli_overrides(config: &mut OkcConfig, command: &Command) {
         _ => vec![],
     };
     if !roots.is_empty() {
-        config.roots = roots;
+        config.roots = roots
+            .into_iter()
+            .map(|p| RootConfig { id: None, path: p })
+            .collect();
     }
 
     // Apply watcher config overrides from CLI

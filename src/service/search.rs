@@ -41,6 +41,7 @@ impl OkcService {
     /// - `limit`: Maximum results to return
     /// - `max_headings`: Maximum headings per result (uses config default if None)
     /// - `heading_depth`: Maximum heading depth to include (uses config default if None)
+    /// - `root_id`: Optional root ID to filter by (for multi-root repositories)
     #[allow(clippy::too_many_arguments)]
     pub fn search(
         &self,
@@ -51,12 +52,15 @@ impl OkcService {
         limit: usize,
         max_headings: Option<usize>,
         heading_depth: Option<u32>,
+        root_id: Option<i64>,
     ) -> Result<SearchResponse> {
         // Apply fallback chain: per-request > config > hard default (1)
         let max_headings = max_headings.unwrap_or(self.index.config.search.max_headings);
         let heading_depth = heading_depth.unwrap_or(self.index.config.search.heading_depth);
 
-        let mut response = self.index.search(query, path_prefix, types, tags, limit)?;
+        let mut response = self
+            .index
+            .search(query, path_prefix, types, tags, limit, root_id)?;
 
         // Populate headings for each result
         for result in &mut response.results {

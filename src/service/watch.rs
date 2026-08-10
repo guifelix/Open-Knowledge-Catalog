@@ -47,12 +47,15 @@ impl OkcService {
         let debounce_ms = self.index.config.watcher_debounce_ms;
         let reconcile_secs = self.index.config.watcher_reconcile_secs;
 
+        // Extract paths from RootConfig for the watcher
+        let root_paths: Vec<std::path::PathBuf> = roots.iter().map(|r| r.path.clone()).collect();
+
         info!(
             "Starting file watcher (debounce={debounce_ms}ms, reconcile={reconcile_secs}s): {:?}",
-            roots
+            root_paths
         );
 
-        let watcher = FileWatcher::new(roots.clone(), debounce_ms, reconcile_secs);
+        let watcher = FileWatcher::new(root_paths, debounce_ms, reconcile_secs);
         let rx = watcher.start()?;
 
         loop {
@@ -90,38 +93,49 @@ impl OkcService {
     /// Determines which files were added/modified vs deleted, then processes
     /// them through the index.
     fn handle_watch_changes(&mut self, changed: &HashSet<std::path::PathBuf>) -> Result<()> {
-        let canonical_roots: Vec<std::path::PathBuf> = self
+        let canonical_roots: Vec<(String, std::path::PathBuf)> = self
             .index
             .config
             .roots
             .iter()
-            .filter_map(|r| std::fs::canonicalize(r).ok())
+            .filter_map(|r| {
+                std::fs::canonicalize(&r.path)
+                    .ok()
+                    .map(|c| (r.root_id(), c))
+            })
             .collect();
 
         // Separate changes into added/modified (still on disk) vs deleted (gone).
         let mut added_or_modified: Vec<FileRecord> = Vec::new();
-        let mut deleted: Vec<String> = Vec::new();
+        let mut deleted: Vec<FileRecord> = Vec::new();
 
         for pb in changed {
             let canonical = std::fs::canonicalize(pb).unwrap_or_else(|_| pb.clone());
 
             // Compute the relative path used in the index
             let full_path_str = canonical.to_string_lossy().to_string();
-            let rel_path = canonical_roots
+            let (rel_path, root_id) = canonical_roots
                 .iter()
-                .find_map(|root| canonical.strip_prefix(root).ok())
-                .and_then(|rel| rel.to_str())
-                .unwrap_or(&full_path_str)
-                .to_string();
+                .find_map(|(root_id, root)| {
+                    canonical.strip_prefix(root).ok().map(|rel| (rel, root_id))
+                })
+                .and_then(|(rel, root_id)| rel.to_str().map(|s| (s.to_string(), root_id.clone())))
+                .unwrap_or_else(|| (full_path_str, String::new()));
 
             if canonical.exists() {
-                match Self::stat_file(pb, &rel_path) {
+                match Self::stat_file(pb, &rel_path, &root_id) {
                     Ok(record) => added_or_modified.push(record),
                     Err(e) => warn!("Cannot stat changed file {rel_path}: {e}"),
                 }
             } else {
                 info!("Detected deleted file: {rel_path}");
-                deleted.push(rel_path);
+                deleted.push(FileRecord {
+                    path: rel_path,
+                    absolute_path: String::new(),
+                    size: 0,
+                    modified_at: 0,
+                    root_id,
+                });
             }
         }
 
@@ -153,7 +167,7 @@ impl OkcService {
         Ok(())
     }
 
-    fn stat_file(path: &Path, rel_path: &str) -> Result<FileRecord> {
+    fn stat_file(path: &Path, rel_path: &str, root_id: &str) -> Result<FileRecord> {
         let meta = std::fs::metadata(path)?;
         Ok(FileRecord {
             path: rel_path.to_string(),
@@ -167,6 +181,7 @@ impl OkcService {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or(Duration::ZERO)
                 .as_secs() as i64,
+            root_id: root_id.to_string(),
         })
     }
 }

@@ -182,7 +182,7 @@ pub fn get_document(
 
     let links = if includes(include, "links") {
         let mut link_stmt = conn.prepare(
-            "SELECT target_path, target_anchor, external_url, exists_in_repository
+            "SELECT target_path, target_anchor, external_url, exists_in_repository, target_root_id
              FROM links WHERE source_document_id = ?1
              ORDER BY COALESCE(target_path, external_url), COALESCE(target_anchor, '')",
         )?;
@@ -193,6 +193,7 @@ pub fn get_document(
                     target_anchor: row.get(1)?,
                     external_url: row.get(2)?,
                     exists_in_repository: row.get::<_, i32>(3)? != 0,
+                    target_root_id: row.get(4)?,
                 })
             })?
             .map(|r| r.map_err(crate::error::OkfError::from))

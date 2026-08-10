@@ -41,7 +41,9 @@ impl GraphStore for SqliteGraphStore {
             CREATE TABLE IF NOT EXISTS links (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 source_document_id INTEGER NOT NULL,
+                source_root_id INTEGER NOT NULL DEFAULT 1,
                 target_path TEXT,
+                target_root_id INTEGER,
                 target_anchor TEXT,
                 external_url TEXT,
                 exists_in_repository INTEGER NOT NULL DEFAULT 1,
@@ -49,6 +51,8 @@ impl GraphStore for SqliteGraphStore {
             );
             CREATE INDEX IF NOT EXISTS idx_links_source ON links(source_document_id);
             CREATE INDEX IF NOT EXISTS idx_links_target_path ON links(target_path);
+            CREATE INDEX IF NOT EXISTS idx_links_source_root ON links(source_root_id);
+            CREATE INDEX IF NOT EXISTS idx_links_target_root ON links(target_root_id);
             "#,
         )?;
         Ok(())
@@ -56,17 +60,38 @@ impl GraphStore for SqliteGraphStore {
 
     fn store_links(&self, source_path: &str, links: &[Link]) -> Result<()> {
         let mut conn = self.get_conn()?;
-        let source_id = conn
+        let source = conn
             .query_row(
-                "SELECT id FROM documents WHERE path = ?1",
+                "SELECT id, root_id FROM documents WHERE path = ?1",
                 params![source_path],
-                |row| row.get::<_, i64>(0),
+                |row| {
+                    let id: i64 = row.get(0)?;
+                    let root_id: i64 = row.get(1)?;
+                    Ok((id, root_id))
+                },
             )
             .optional()?;
 
-        let Some(source_id) = source_id else {
+        let Some((source_id, source_root_id)) = source else {
             return Ok(());
         };
+
+        // Pre-fetch target root_ids before starting transaction to avoid borrow checker issues
+        let mut link_data = Vec::new();
+        for link in links {
+            let target_root_id = if link.is_external {
+                None
+            } else {
+                // Try to find target document to get its root_id
+                conn.query_row(
+                    "SELECT root_id FROM documents WHERE path = ?1",
+                    params![&link.target],
+                    |row| row.get::<_, i64>(0),
+                )
+                .optional()?
+            };
+            link_data.push((link, target_root_id));
+        }
 
         let tx = conn.transaction()?;
         tx.execute(
@@ -74,15 +99,17 @@ impl GraphStore for SqliteGraphStore {
             params![source_id],
         )?;
 
-        for link in links {
+        for (link, target_root_id) in link_data {
             tx.execute(
                 r#"
-                INSERT INTO links (source_document_id, target_path, target_anchor, external_url, exists_in_repository)
-                VALUES (?1, ?2, ?3, ?4, ?5)
+                INSERT INTO links (source_document_id, source_root_id, target_path, target_root_id, target_anchor, external_url, exists_in_repository)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
                 "#,
                 params![
                     source_id,
+                    source_root_id,
                     if link.is_external { None } else { Some(&link.target) },
+                    target_root_id,
                     link.target_anchor.clone(),
                     if link.is_external { Some(&link.target) } else { None },
                     if link.is_external { 1 } else { link.exists_in_repository as i32 },
@@ -111,15 +138,19 @@ impl GraphStore for SqliteGraphStore {
     }
 
     fn store_links_tx(&self, tx: &Transaction, source_path: &str, links: &[Link]) -> Result<()> {
-        let source_id = tx
+        let source = tx
             .query_row(
-                "SELECT id FROM documents WHERE path = ?1",
+                "SELECT id, root_id FROM documents WHERE path = ?1",
                 params![source_path],
-                |row| row.get::<_, i64>(0),
+                |row| {
+                    let id: i64 = row.get(0)?;
+                    let root_id: i64 = row.get(1)?;
+                    Ok((id, root_id))
+                },
             )
             .optional()?;
 
-        let Some(source_id) = source_id else {
+        let Some((source_id, source_root_id)) = source else {
             return Ok(());
         };
 
@@ -129,14 +160,27 @@ impl GraphStore for SqliteGraphStore {
         )?;
 
         for link in links {
+            let target_root_id = if link.is_external {
+                None
+            } else {
+                tx.query_row(
+                    "SELECT root_id FROM documents WHERE path = ?1",
+                    params![&link.target],
+                    |row| row.get::<_, i64>(0),
+                )
+                .optional()?
+            };
+
             tx.execute(
                 r#"
-                INSERT INTO links (source_document_id, target_path, target_anchor, external_url, exists_in_repository)
-                VALUES (?1, ?2, ?3, ?4, ?5)
+                INSERT INTO links (source_document_id, source_root_id, target_path, target_root_id, target_anchor, external_url, exists_in_repository)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
                 "#,
                 params![
                     source_id,
+                    source_root_id,
                     if link.is_external { None } else { Some(&link.target) },
+                    target_root_id,
                     link.target_anchor.clone(),
                     if link.is_external { Some(&link.target) } else { None },
                     if link.is_external { 1 } else { link.exists_in_repository as i32 },
@@ -150,7 +194,7 @@ impl GraphStore for SqliteGraphStore {
         let conn = self.get_conn()?;
         let mut stmt = conn.prepare(
             r#"
-            SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository
+            SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository, l.target_root_id
             FROM links l
             JOIN documents d ON d.id = l.source_document_id
             WHERE d.path = ?1
@@ -164,6 +208,7 @@ impl GraphStore for SqliteGraphStore {
                     target_anchor: row.get(1)?,
                     external_url: row.get(2)?,
                     exists_in_repository: row.get::<_, i32>(3)? != 0,
+                    target_root_id: row.get(4)?,
                 })
             })?
             .filter_map(|r| r.ok())
@@ -176,7 +221,7 @@ impl GraphStore for SqliteGraphStore {
         let conn = self.get_conn()?;
         let mut stmt = conn.prepare(
             r#"
-            SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository
+            SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository, l.target_root_id
             FROM links l
             WHERE l.target_path = ?1
             LIMIT ?2
@@ -190,6 +235,7 @@ impl GraphStore for SqliteGraphStore {
                     target_anchor: row.get(1)?,
                     external_url: row.get(2)?,
                     exists_in_repository: row.get::<_, i32>(3)? != 0,
+                    target_root_id: row.get(4)?,
                 })
             })?
             .filter_map(|r| r.ok())
@@ -220,6 +266,15 @@ impl GraphStore for SqliteGraphStore {
                 continue;
             }
 
+            // Get current document's root_id
+            let current_root_id: Option<i64> = conn
+                .query_row(
+                    "SELECT root_id FROM documents WHERE path = ?1",
+                    params![current_path],
+                    |row| row.get(0),
+                )
+                .optional()?;
+
             let title = conn
                 .query_row(
                     "SELECT title, type FROM documents WHERE path = ?1",
@@ -246,9 +301,10 @@ impl GraphStore for SqliteGraphStore {
                 continue;
             }
 
+            // Get forward links (same-root and cross-root with target_root_id)
             let mut stmt = conn.prepare(
                 r#"
-                SELECT l.target_path
+                SELECT l.target_path, l.target_root_id
                 FROM links l
                 JOIN documents d ON d.id = l.source_document_id
                 WHERE d.path = ?1 AND l.target_path IS NOT NULL AND l.target_path != ''
@@ -256,22 +312,34 @@ impl GraphStore for SqliteGraphStore {
                 "#,
             )?;
 
-            if let Ok(rows) = stmt.query_map(
+            let rows = stmt.query_map(
                 params![current_path, (max_nodes - visited.len()) as i64],
-                |row| row.get::<_, String>(0),
-            ) {
-                for target in rows.flatten() {
-                    if !visited.contains(&target) {
-                        edges.push(GraphEdge {
-                            source: current_path.clone(),
-                            target: target.clone(),
-                            relation: "links_to".to_string(),
-                        });
-                        queue.push_back((target, depth + 1));
-                    }
+                |row| {
+                    let target: String = row.get(0)?;
+                    let target_root_id: Option<i64> = row.get(1)?;
+                    Ok((target, target_root_id))
+                },
+            )?;
+
+            for (target, target_root_id) in rows.flatten() {
+                if !visited.contains(&target) {
+                    // Check if cross-root traversal should be allowed
+                    let allow_cross_root = target_root_id != current_root_id;
+                    edges.push(GraphEdge {
+                        source: current_path.clone(),
+                        target: target.clone(),
+                        relation: if allow_cross_root {
+                            "links_to_cross_root"
+                        } else {
+                            "links_to"
+                        }
+                        .to_string(),
+                    });
+                    queue.push_back((target, depth + 1));
                 }
             }
 
+            // Get backlinks
             let mut stmt = conn.prepare(
                 r#"
                 SELECT d.path

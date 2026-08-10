@@ -39,6 +39,7 @@ pub struct ParsedDocument {
     pub description: Option<String>,
     pub tags: Vec<String>,
     pub custom_fields: BTreeMap<String, serde_json::Value>,
+    pub root_id: String,
 }
 
 /// Document parser that coordinates front-matter, markdown, and link parsing.
@@ -85,6 +86,7 @@ impl DocumentParser {
                     description: None,
                     tags: vec![],
                     custom_fields: BTreeMap::new(),
+                    root_id: file.root_id.clone(),
                 };
             }
         };
@@ -100,7 +102,7 @@ impl DocumentParser {
                     front_matter: None,
                     parse_status: ParseStatus::Failed,
                     parse_errors: vec![ParseError {
-                        stage: "utf8".to_string(),
+                        stage: "read".to_string(),
                         message: e.to_string(),
                         line: None,
                     }],
@@ -115,6 +117,7 @@ impl DocumentParser {
                     description: None,
                     tags: vec![],
                     custom_fields: BTreeMap::new(),
+                    root_id: file.root_id.clone(),
                 };
             }
         };
@@ -165,6 +168,7 @@ impl DocumentParser {
                     } else {
                         l.exists_in_repository
                     },
+                    target_root_id: None, // Will be populated during storage
                 }
             })
             .collect();
@@ -209,6 +213,7 @@ impl DocumentParser {
             description,
             tags,
             custom_fields,
+            root_id: file.root_id.clone(),
         }
     }
 

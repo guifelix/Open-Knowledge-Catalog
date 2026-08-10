@@ -39,8 +39,10 @@ use serde::Serialize;
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-use crate::config::OkcConfig;
+use crate::config::{OkcConfig, RootConfig};
 use crate::service::OkcService;
+use crate::transport::mcp::types::RootConfig as McpRootConfig;
+use std::path::PathBuf;
 
 use self::types::{
     BacklinkParams, BrowseParams, BrowseResultOutput, DirectoryDocumentOutput,
@@ -169,10 +171,35 @@ impl McpServer {
     )]
     async fn scan(
         &self,
-        Parameters(ScanParams { roots, db_path }): Parameters<ScanParams>,
+        Parameters(ScanParams {
+            roots,
+            root_configs,
+            db_path,
+        }): Parameters<ScanParams>,
     ) -> Result<Json<ScanResultOutput>, String> {
+        // Convert MCP RootConfig to config RootConfig
+        let mcp_root_configs: Vec<crate::config::RootConfig> = root_configs
+            .into_iter()
+            .map(|rc| crate::config::RootConfig {
+                id: rc.id,
+                path: rc.path,
+            })
+            .collect();
+
+        // Merge explicit root_configs with simple roots
+        let mut root_configs: Vec<crate::config::RootConfig> = mcp_root_configs;
+        for path in roots {
+            // Check if this path is already covered by root_configs
+            if !root_configs.iter().any(|rc| rc.path == path) {
+                root_configs.push(crate::config::RootConfig {
+                    id: None,
+                    path: PathBuf::from(path),
+                });
+            }
+        }
+
         let config = OkcConfig {
-            roots: roots.into_iter().map(std::path::PathBuf::from).collect(),
+            roots: root_configs,
             db_path: db_path.map_or_else(
                 || std::path::PathBuf::from("okc_index.db"),
                 std::path::PathBuf::from,
@@ -274,6 +301,7 @@ impl McpServer {
                                 target_anchor: link.target_anchor,
                                 external_url: link.external_url,
                                 exists_in_repository: link.exists_in_repository,
+                                target_root_id: link.target_root_id,
                             })
                             .collect()
                     }),
@@ -373,6 +401,7 @@ impl McpServer {
             limit,
             max_headings,
             heading_depth,
+            root_id,
         }): Parameters<SearchParams>,
     ) -> Result<Json<SearchResponseOutput>, String> {
         let limit = limit.unwrap_or(20);
@@ -386,6 +415,7 @@ impl McpServer {
             limit,
             max_headings,
             heading_depth,
+            root_id,
         ) {
             Ok(r) => Ok(Json(SearchResponseOutput {
                 results: r
@@ -450,6 +480,7 @@ impl McpServer {
                         target_anchor: l.target_anchor,
                         external_url: l.external_url,
                         exists_in_repository: l.exists_in_repository,
+                        target_root_id: l.target_root_id,
                     })
                     .collect::<Vec<_>>();
                 let legacy_text = serde_json::to_string(&links)
@@ -479,6 +510,7 @@ impl McpServer {
                         target_anchor: l.target_anchor,
                         external_url: l.external_url,
                         exists_in_repository: l.exists_in_repository,
+                        target_root_id: l.target_root_id,
                     })
                     .collect::<Vec<_>>();
                 let legacy_text = serde_json::to_string(&links)

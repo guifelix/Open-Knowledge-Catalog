@@ -18,6 +18,8 @@ pub struct FileRecord {
     pub size: u64,
     /// Last modified timestamp (Unix epoch seconds).
     pub modified_at: i64,
+    /// Root identifier for multi-root repositories.
+    pub root_id: String,
 }
 
 /// Lightweight document summary for listings.

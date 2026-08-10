@@ -15,34 +15,35 @@ pub struct FileChanges {
     /// Files with changed size or modification time.
     pub modified: Vec<FileRecord>,
     /// Files present in previous scan but not current.
-    pub deleted: Vec<String>,
+    pub deleted: Vec<FileRecord>,
     /// Files unchanged since previous scan (paths only).
     pub unchanged: Vec<String>,
 }
 
 /// Detects file system changes between scans.
 ///
-/// Compares current and previous file records by path, using size and
-/// modification time to detect modifications.
+/// Compares current and previous file records by (root_id, path). A file is considered modified if either
+/// its size or modification timestamp differs from the previous scan.
 pub struct ChangeDetector;
 
 impl ChangeDetector {
     /// Detect changes between current and previous file listings.
     ///
-    /// Files are matched by path. A file is considered modified if either
+    /// Files are matched by (root_id, path). A file is considered modified if either
     /// its size or modification timestamp differs from the previous scan.
     pub fn detect(current: &[FileRecord], previous: &[FileRecord]) -> FileChanges {
-        let prev_map: std::collections::HashMap<&str, &FileRecord> =
-            previous.iter().map(|f| (f.path.as_str(), f)).collect();
-
-        let current_paths: HashSet<&str> = current.iter().map(|f| f.path.as_str()).collect();
+        let prev_map: std::collections::HashMap<String, &FileRecord> = previous
+            .iter()
+            .map(|f| (format!("{}::{}", f.root_id, f.path), f))
+            .collect();
 
         let mut added = Vec::new();
         let mut modified = Vec::new();
         let mut unchanged = Vec::new();
 
         for file in current {
-            match prev_map.get(file.path.as_str()) {
+            let key = format!("{}::{}", file.root_id, file.path);
+            match prev_map.get(&key) {
                 Some(prev) => {
                     if prev.modified_at == file.modified_at && prev.size == file.size {
                         unchanged.push(file.path.clone());
@@ -56,10 +57,15 @@ impl ChangeDetector {
             }
         }
 
-        let deleted: Vec<String> = previous
+        let current_keys: HashSet<String> = current
             .iter()
-            .map(|f| f.path.clone())
-            .filter(|p| !current_paths.contains(p.as_str()))
+            .map(|f| format!("{}::{}", f.root_id, f.path))
+            .collect();
+
+        let deleted: Vec<FileRecord> = previous
+            .iter()
+            .filter(|f| !current_keys.contains(&format!("{}::{}", f.root_id, f.path)))
+            .cloned()
             .collect();
 
         FileChanges {

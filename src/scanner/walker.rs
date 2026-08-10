@@ -16,7 +16,7 @@ use std::time::SystemTime;
 use ignore::{WalkBuilder, WalkState};
 use tracing::info;
 
-use crate::config::OkcConfig;
+use crate::config::{OkcConfig, RootConfig};
 use crate::model::document::{FileRecord, LimitError};
 
 /// Discovers markdown files in configured repository roots.
@@ -38,9 +38,11 @@ impl Scanner {
         let roots = config.roots.clone();
 
         thread::spawn(move || {
-            for root in roots {
-                info!("Scanning root: {:?}", root);
-                let mut builder = WalkBuilder::new(&root);
+            for root_config in roots {
+                let root_path = &root_config.path;
+                let root_id = root_config.root_id();
+                info!("Scanning root: {:?} (id: {})", root_path, root_id);
+                let mut builder = WalkBuilder::new(root_path);
                 builder
                     .standard_filters(true)
                     .hidden(false)
@@ -51,10 +53,12 @@ impl Scanner {
                     builder.add_ignore(pattern);
                 }
 
-                let root_clone = root.clone();
+                let root_clone = root_path.clone();
+                let root_id_clone = root_id.clone();
                 builder.build_parallel().run(|| {
                     let tx = tx.clone();
                     let root_clone = root_clone.clone();
+                    let root_id_clone = root_id_clone.clone();
                     Box::new(move |entry| {
                         match entry {
                             Ok(entry) => {
@@ -92,6 +96,7 @@ impl Scanner {
                                                 absolute_path: path.to_string_lossy().to_string(),
                                                 size,
                                                 modified_at,
+                                                root_id: root_id_clone.clone(),
                                             }));
                                         }
                                     }

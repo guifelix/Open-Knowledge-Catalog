@@ -23,6 +23,8 @@ use std::collections::{BTreeMap, HashMap};
 pub struct SearchableDocument {
     /// Document path (relative to repository root)
     pub path: String,
+    /// Root identifier for multi-root repositories
+    pub root_id: i64,
     /// Optional document title from front-matter
     pub title: Option<String>,
     /// Optional description from front-matter
@@ -43,6 +45,8 @@ pub struct SearchFilters {
     pub concept_types: Option<Vec<String>>,
     /// Optional tags to filter by
     pub tags: Option<Vec<String>>,
+    /// Optional root ID to filter by (for multi-root repositories)
+    pub root_id: Option<i64>,
 }
 
 /// Type alias for storage operation results.
@@ -58,15 +62,16 @@ pub trait DocumentStore: Send + Sync {
 
     /// Insert or update a document record.
     fn upsert_document(&self, doc: &DocumentRecord) -> Result<()>;
-    /// Retrieve a document by path.
-    fn get_document(&self, path: &str) -> Result<Option<DocumentRecord>>;
-    /// Delete a document by path.
-    fn delete_document(&self, path: &str) -> Result<()>;
-    /// List documents with optional path prefix filter.
+    /// Retrieve a document by path and optional root_id (default: 1).
+    fn get_document(&self, path: &str, root_id: Option<i64>) -> Result<Option<DocumentRecord>>;
+    /// Delete a document by path and optional root_id (default: 1).
+    fn delete_document(&self, path: &str, root_id: Option<i64>) -> Result<()>;
+    /// List documents with optional path prefix filter and root_id filter.
     fn list_documents(
         &self,
         path_prefix: Option<&str>,
         limit: usize,
+        root_id: Option<i64>,
     ) -> Result<Vec<DocumentRecord>>;
 
     /// Insert tags for a document.
@@ -123,7 +128,7 @@ pub trait DocumentStore: Send + Sync {
     fn delete_scan_errors(&self, path: &str) -> Result<()>;
 
     /// Transactional versions for atomic batch operations
-    fn delete_document_tx(&self, tx: &Transaction, path: &str) -> Result<()>;
+    fn delete_document_tx(&self, tx: &Transaction, path: &str, root_id: Option<i64>) -> Result<()>;
     fn upsert_document_tx(&self, tx: &Transaction, doc: &DocumentRecord) -> Result<()>;
     fn insert_tags_tx(&self, tx: &Transaction, doc_id: i64, tags: &[String]) -> Result<()>;
     fn insert_headings_tx(
@@ -145,7 +150,7 @@ pub trait DocumentStore: Send + Sync {
         path: &str,
         errors: &[ParseError],
     ) -> Result<()>;
-    fn get_doc_id_tx(&self, tx: &Transaction, path: &str) -> Result<i64>;
+    fn get_doc_id_tx(&self, tx: &Transaction, path: &str, root_id: Option<i64>) -> Result<i64>;
 
     /// Query metadata with filters.
     fn query_metadata(
@@ -163,6 +168,8 @@ pub trait DocumentStore: Send + Sync {
 pub struct DocumentRecord {
     /// Primary key
     pub id: i64,
+    /// Root identifier for multi-root repositories
+    pub root_id: i64,
     /// Document path (relative to repository root)
     pub path: String,
     /// Parent directory path
@@ -193,13 +200,13 @@ pub trait SearchIndex: Send + Sync {
     /// Index a document for full-text search.
     fn index_document(&self, doc: &SearchableDocument) -> Result<()>;
     /// Remove a document from the search index.
-    fn remove_document(&self, path: &str) -> Result<()>;
+    fn remove_document(&self, path: &str, root_id: Option<i64>) -> Result<()>;
     /// Search the index with query and filters.
     fn search(&self, query: &str, filters: &SearchFilters, limit: usize) -> Result<SearchResponse>;
 
     /// Transactional versions for atomic batch operations
     fn index_document_tx(&self, tx: &Transaction, doc: &SearchableDocument) -> Result<()>;
-    fn remove_document_tx(&self, tx: &Transaction, path: &str) -> Result<()>;
+    fn remove_document_tx(&self, tx: &Transaction, path: &str, root_id: Option<i64>) -> Result<()>;
 
     /// Get search index statistics.
     fn stats(&self) -> Result<IndexStats>;

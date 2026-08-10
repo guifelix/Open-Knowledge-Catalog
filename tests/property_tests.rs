@@ -372,6 +372,7 @@ fn prop_change_detector_identical_files_unchanged(
             absolute_path: path.clone(),
             size: *size,
             modified_at: *modified_at,
+            root_id: "test".to_string(),
         })
         .collect();
     let previous = current.clone();
@@ -409,6 +410,7 @@ fn prop_change_detector_new_files_added(
             absolute_path: path.clone(),
             size: *size,
             modified_at: *modified_at,
+            root_id: "test".to_string(),
         })
         .collect();
 
@@ -419,6 +421,7 @@ fn prop_change_detector_new_files_added(
             absolute_path: path.clone(),
             size: *size,
             modified_at: *modified_at,
+            root_id: "test".to_string(),
         });
     }
 
@@ -452,6 +455,7 @@ fn prop_change_detector_deleted_files(
             absolute_path: path.clone(),
             size: *size,
             modified_at: *modified_at,
+            root_id: "test".to_string(),
         };
         if i < delete_count {
             previous.push(record);
@@ -498,6 +502,7 @@ fn prop_change_detector_modified_files(
             absolute_path: path.clone(),
             size: *size,
             modified_at: *modified_at,
+            root_id: "test".to_string(),
         };
         previous.push(record.clone());
 
@@ -508,6 +513,7 @@ fn prop_change_detector_modified_files(
                 absolute_path: path.clone(),
                 size: size + 1,               // Change size
                 modified_at: modified_at + 1, // Change mtime
+                root_id: "test".to_string(),
             });
         } else {
             current.push(record);
@@ -533,6 +539,7 @@ fn prop_change_detector_deterministic(
             absolute_path: path.clone(),
             size: *size,
             modified_at: *modified_at,
+            root_id: "test".to_string(),
         })
         .collect();
     let previous_records: Vec<FileRecord> = previous
@@ -542,6 +549,7 @@ fn prop_change_detector_deterministic(
             absolute_path: path.clone(),
             size: *size,
             modified_at: *modified_at,
+            root_id: "test".to_string(),
         })
         .collect();
 
@@ -563,6 +571,7 @@ fn prop_change_detector_empty_current(previous: Vec<(String, u64, i64)>) -> Test
             absolute_path: path.clone(),
             size: *size,
             modified_at: *modified_at,
+            root_id: "test".to_string(),
         })
         .collect();
 
@@ -583,6 +592,7 @@ fn prop_change_detector_empty_previous(current: Vec<(String, u64, i64)>) -> Test
             absolute_path: path.clone(),
             size: *size,
             modified_at: *modified_at,
+            root_id: "test".to_string(),
         })
         .collect();
 
@@ -609,12 +619,14 @@ fn prop_change_detector_size_only_change(files: Vec<(String, u64, i64)>) -> Test
             absolute_path: path.clone(),
             size: *size,
             modified_at: *modified_at,
+            root_id: "test".to_string(),
         });
         current.push(FileRecord {
             path: path.clone(),
             absolute_path: path.clone(),
             size: *size + 100,         // Only size changes
             modified_at: *modified_at, // Same mtime
+            root_id: "test".to_string(),
         });
     }
 
@@ -640,12 +652,14 @@ fn prop_change_detector_mtime_only_change(files: Vec<(String, u64, i64)>) -> Tes
             absolute_path: path.clone(),
             size: *size,
             modified_at: *modified_at,
+            root_id: "test".to_string(),
         });
         current.push(FileRecord {
             path: path.clone(),
             absolute_path: path.clone(),
             size: *size,                      // Same size
             modified_at: *modified_at + 3600, // Only mtime changes (1 hour)
+            root_id: "test".to_string(),
         });
     }
 

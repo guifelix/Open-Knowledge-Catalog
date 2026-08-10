@@ -50,7 +50,9 @@ fn test_load_config_from_file() {
     let config_path = dir.path().join("okc.toml");
     let config_content = format!(
         r#"
-roots = ["{}"]
+roots = [{{
+    path = "{}"
+}}]
 max_file_size = 1048576
 max_graph_depth = 3
 "#,
@@ -60,7 +62,7 @@ max_graph_depth = 3
 
     let config = OkcConfig::load(Some(&config_path)).expect("load config");
     assert_eq!(config.roots.len(), 1);
-    assert_eq!(config.roots[0], dir.path().to_path_buf());
+    assert_eq!(config.roots[0].path, dir.path().to_path_buf());
     assert_eq!(config.max_file_size, 1048576);
     assert_eq!(config.max_graph_depth, 3);
 }
@@ -109,8 +111,8 @@ fn test_env_overrides_roots() {
     let mut config = OkcConfig::default();
     config.apply_env_overrides().expect("apply env");
     assert_eq!(config.roots.len(), 2);
-    assert_eq!(config.roots[0], PathBuf::from("/path/one"));
-    assert_eq!(config.roots[1], PathBuf::from("/path/two"));
+    assert_eq!(config.roots[0].path, PathBuf::from("/path/one"));
+    assert_eq!(config.roots[1].path, PathBuf::from("/path/two"));
     unsafe { env::remove_var("OKC_ROOTS") };
 }
 

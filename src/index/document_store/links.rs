@@ -54,7 +54,7 @@ pub fn insert_links_tx(tx: &Transaction, doc_id: i64, links: &[LinkInfo]) -> Res
 
 pub fn get_links(conn: &Connection, doc_id: i64) -> Result<Vec<LinkInfo>> {
     let mut stmt = conn.prepare(
-        "SELECT target_path, target_anchor, external_url, exists_in_repository FROM links WHERE source_document_id = ?1"
+        "SELECT target_path, target_anchor, external_url, exists_in_repository, target_root_id FROM links WHERE source_document_id = ?1"
     )?;
     let links = stmt
         .query_map(params![doc_id], |row| {
@@ -63,6 +63,7 @@ pub fn get_links(conn: &Connection, doc_id: i64) -> Result<Vec<LinkInfo>> {
                 target_anchor: row.get(1)?,
                 external_url: row.get(2)?,
                 exists_in_repository: row.get::<_, i32>(3)? != 0,
+                target_root_id: row.get(4)?,
             })
         })?
         .filter_map(|r| r.ok())

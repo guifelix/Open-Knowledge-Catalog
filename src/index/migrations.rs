@@ -1,6 +1,7 @@
 //! Database schema migrations for the repository index.
 //!
 //! This module manages the SQLite schema for the OKC index, including:
+//! - `roots` - Configured repository roots with stable identities
 //! - `documents` - Core document metadata and content
 //! - `document_tags` - Document tag associations
 //! - `headings` - Heading hierarchy for each document
@@ -26,9 +27,17 @@ pub fn run(conn: &Connection) -> Result<(), rusqlite::Error> {
             applied_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
+        CREATE TABLE IF NOT EXISTS roots (
+            id INTEGER PRIMARY KEY,
+            root_id TEXT NOT NULL UNIQUE,
+            path TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
         CREATE TABLE IF NOT EXISTS documents (
             id INTEGER PRIMARY KEY,
-            path TEXT NOT NULL UNIQUE,
+            root_id INTEGER NOT NULL DEFAULT 1,
+            path TEXT NOT NULL,
             parent_path TEXT NOT NULL DEFAULT '',
             title TEXT,
             type TEXT,
@@ -37,7 +46,9 @@ pub fn run(conn: &Connection) -> Result<(), rusqlite::Error> {
             file_size INTEGER NOT NULL DEFAULT 0,
             modified_at INTEGER NOT NULL DEFAULT 0,
             content_hash TEXT,
-            parse_status TEXT NOT NULL DEFAULT 'ok'
+            parse_status TEXT NOT NULL DEFAULT 'ok',
+            UNIQUE(root_id, path),
+            FOREIGN KEY(root_id) REFERENCES roots(id) ON DELETE CASCADE
         );
 
         CREATE TABLE IF NOT EXISTS document_tags (
@@ -56,11 +67,14 @@ pub fn run(conn: &Connection) -> Result<(), rusqlite::Error> {
         );
 
         CREATE TABLE IF NOT EXISTS links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             source_document_id INTEGER NOT NULL,
+            source_root_id INTEGER NOT NULL DEFAULT 1,
             target_path TEXT,
+            target_root_id INTEGER,
             target_anchor TEXT,
             external_url TEXT,
-            exists_in_repository INTEGER NOT NULL DEFAULT 0,
+            exists_in_repository INTEGER NOT NULL DEFAULT 1,
             FOREIGN KEY(source_document_id) REFERENCES documents(id) ON DELETE CASCADE
         );
 
@@ -104,10 +118,13 @@ pub fn run(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_documents_parent ON documents(parent_path);
          CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(type);
+         CREATE INDEX IF NOT EXISTS idx_documents_root ON documents(root_id);
          CREATE INDEX IF NOT EXISTS idx_document_tags_tag ON document_tags(tag);
          CREATE INDEX IF NOT EXISTS idx_headings_doc ON headings(document_id);
          CREATE INDEX IF NOT EXISTS idx_links_source ON links(source_document_id);
          CREATE INDEX IF NOT EXISTS idx_links_target ON links(target_path);
+         CREATE INDEX IF NOT EXISTS idx_links_source_root ON links(source_root_id);
+         CREATE INDEX IF NOT EXISTS idx_links_target_root ON links(target_root_id);
          CREATE INDEX IF NOT EXISTS idx_metadata_fields_doc ON metadata_fields(document_id);
          CREATE INDEX IF NOT EXISTS idx_metadata_fields_key ON metadata_fields(key);
          CREATE INDEX IF NOT EXISTS idx_tables_doc ON tables(document_id);
@@ -116,11 +133,13 @@ pub fn run(conn: &Connection) -> Result<(), rusqlite::Error> {
 
     conn.execute_batch(
         "CREATE VIRTUAL TABLE IF NOT EXISTS document_search USING fts5(
-            path,
+            root_id UNINDEXED,
+            path UNINDEXED,
             title,
             description,
             headings,
             body,
+            concept_type,
             tokenize='porter unicode61'
         );",
     )?;
@@ -153,6 +172,77 @@ pub fn run(conn: &Connection) -> Result<(), rusqlite::Error> {
             );",
         )?;
         conn.execute("INSERT INTO schema_version (version) VALUES (2)", [])?;
+    }
+
+    // Migration 3: Add roots table and root_id column to documents for multi-root support
+    if version < 3 {
+        // Create roots table if not exists (idempotent)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS roots (
+                id INTEGER PRIMARY KEY,
+                root_id TEXT NOT NULL UNIQUE,
+                path TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )",
+            [],
+        )?;
+
+        // Check if root_id column exists in documents
+        let has_root_id: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('documents') WHERE name = 'root_id'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        // Add root_id column to documents if not exists
+        if has_root_id == 0 {
+            conn.execute(
+                "ALTER TABLE documents ADD COLUMN root_id INTEGER DEFAULT 1",
+                [],
+            )?;
+        }
+
+        // Update unique constraint from path to (root_id, path)
+        // SQLite doesn't support dropping unique constraint directly,
+        // so we need to recreate the table. But for migration we'll handle this carefully.
+        // First, populate root_id for existing documents
+        conn.execute("UPDATE documents SET root_id = 1 WHERE root_id IS NULL", [])?;
+
+        // Create index on root_id
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_documents_root ON documents(root_id)",
+            [],
+        )?;
+
+        // Recreate document_search with root_id if needed (FTS5 can't be altered)
+        // Check if root_id column exists in document_search
+        let has_root_id_search: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('document_search') WHERE name = 'root_id'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        if has_root_id_search == 0 {
+            conn.execute("DROP TABLE IF EXISTS document_search", [])?;
+            conn.execute_batch(
+                "CREATE VIRTUAL TABLE document_search USING fts5(
+                    root_id UNINDEXED,
+                    path UNINDEXED,
+                    title,
+                    description,
+                    headings,
+                    body,
+                    concept_type,
+                    tokenize='porter unicode61'
+                );",
+            )?;
+        }
+
+        conn.execute("INSERT INTO schema_version (version) VALUES (3)", [])?;
     }
 
     Ok(())
