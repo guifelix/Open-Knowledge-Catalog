@@ -7,13 +7,16 @@
 //! - `title` -> `title`
 //! - `description` -> `description`
 //! - `tags` -> `tags` (sequence of strings)
+//! - `typed_links` -> `typed_links` (versioned extension; see `parse_typed_links`)
 //!
 //! All other keys are stored in `custom` as a `BTreeMap` for round-trip preservation.
+//! A `typed_links` block with an unknown version or malformed shape is preserved
+//! verbatim in `custom` and never causes a parse failure.
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-use crate::model::document::{FrontMatter, ParseError};
+use crate::model::document::{FrontMatter, ParseError, TypedLink};
 use saphyr::{LoadableYamlNode, Yaml};
 
 /// Parses YAML front-matter into structured data.
@@ -99,9 +102,10 @@ impl YamlParser {
         let mut title = None;
         let mut description = None;
         let mut tags = vec![];
+        let mut typed_links = Vec::new();
         let mut custom = BTreeMap::new();
 
-        let known_keys = ["type", "title", "description", "tags"];
+        let known_keys = ["type", "title", "description", "tags", "typed_links"];
 
         for (key, value) in &mapping {
             let key_str = yaml_key_to_string(key);
@@ -116,6 +120,16 @@ impl YamlParser {
                         tags = arr.iter().map(yaml_value_to_string).collect();
                     }
                 }
+                "typed_links" => match parse_typed_links(value) {
+                    Some(links) => typed_links = links,
+                    None => {
+                        eprintln!(
+                            "okc: typed_links block preserved verbatim (unknown version or malformed shape); \
+                             see docs/references/okc-typed-links.md"
+                        );
+                        custom.insert(key_str.clone(), yaml_to_json_value(value));
+                    }
+                },
                 _ => {
                     let json_val = yaml_to_json_value(value);
                     custom.insert(key_str.clone(), json_val);
@@ -133,6 +147,7 @@ impl YamlParser {
             title,
             description,
             tags,
+            typed_links,
             custom,
             raw_yaml: raw.to_string(),
         })
@@ -145,6 +160,77 @@ fn yaml_key_to_string(key: &Yaml) -> String {
         Yaml::Representation(s, _, _) => s.to_string(),
         other => format!("{:?}", other),
     }
+}
+
+/// Extract a scalar (string/number/bool) value as a string, rejecting
+/// sequences, mappings, and other composite values.
+fn yaml_scalar_to_string(value: &Yaml) -> Option<String> {
+    match value {
+        Yaml::Value(s) => Some(s.as_str().unwrap_or_default().to_string()),
+        Yaml::Representation(s, _, _) => Some(s.to_string()),
+        _ => None,
+    }
+}
+
+/// Parse a `typed_links` front-matter block into [`TypedLink`] entries.
+///
+/// The block must be a mapping with `version: 1` and a `links` sequence of
+/// `{ target, relation, anchor? }` mappings. Any deviation (unknown version,
+/// missing `links`, non-mapping entries, or a missing `target`/`relation`)
+/// returns `None`, in which case the caller preserves the whole block
+/// verbatim in `custom` so the document still parses.
+fn parse_typed_links(value: &Yaml) -> Option<Vec<TypedLink>> {
+    let block = match value {
+        Yaml::Mapping(m) => m,
+        _ => return None,
+    };
+
+    let version = block
+        .iter()
+        .find(|(k, _)| yaml_key_to_string(k) == "version")
+        .map(|(_, v)| v)?;
+    let version_num = match version {
+        Yaml::Value(s) => s.as_integer()?,
+        Yaml::Representation(s, _, _) => s.as_ref().parse::<i64>().ok()?,
+        _ => return None,
+    };
+    if version_num != 1 {
+        return None;
+    }
+
+    let links = block
+        .iter()
+        .find(|(k, _)| yaml_key_to_string(k) == "links")
+        .map(|(_, v)| v)?;
+    let items = match links {
+        Yaml::Sequence(arr) => arr,
+        _ => return None,
+    };
+
+    let mut out = Vec::with_capacity(items.len());
+    for item in items {
+        let entry = match item {
+            Yaml::Mapping(m) => m,
+            _ => return None,
+        };
+        let mut target = None;
+        let mut relation = None;
+        let mut anchor = None;
+        for (k, v) in entry {
+            match yaml_key_to_string(k).as_str() {
+                "target" => target = yaml_scalar_to_string(v),
+                "relation" => relation = yaml_scalar_to_string(v),
+                "anchor" => anchor = yaml_scalar_to_string(v),
+                _ => {}
+            }
+        }
+        out.push(TypedLink {
+            target: target?,
+            relation: relation?,
+            anchor,
+        });
+    }
+    Some(out)
 }
 
 fn yaml_value_to_string(value: &Yaml) -> String {
@@ -255,5 +341,91 @@ mod tests {
                 "for input {input:?}"
             );
         }
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn typed_links_version_one_populates_fields() {
+        let input = "\
+typed_links:
+  version: 1
+  links:
+    - target: /data/metrics.md
+      relation: depends-on
+      anchor: section-a
+    - target: /concepts/base.md
+      relation: references
+";
+        let fm = YamlParser::parse(input, 8 * 1024 * 1024)
+            .expect("well-formed v1 typed_links must parse");
+        assert_eq!(fm.typed_links.len(), 2);
+        assert_eq!(fm.typed_links[0].target, "/data/metrics.md");
+        assert_eq!(fm.typed_links[0].relation, "depends-on");
+        assert_eq!(fm.typed_links[0].anchor.as_deref(), Some("section-a"));
+        assert_eq!(fm.typed_links[1].relation, "references");
+        assert_eq!(fm.typed_links[1].anchor, None);
+        assert!(
+            !fm.custom.contains_key("typed_links"),
+            "consumed block must not be preserved in custom"
+        );
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn typed_links_unknown_version_preserved_in_custom() {
+        let input = "\
+typed_links:
+  version: 2
+  links:
+    - target: /x.md
+      relation: future-rel
+";
+        let fm = YamlParser::parse(input, 8 * 1024 * 1024)
+            .expect("unknown typed_links version must not fail the document");
+        assert!(fm.typed_links.is_empty());
+        assert!(
+            fm.custom.contains_key("typed_links"),
+            "unknown version block must be preserved verbatim"
+        );
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn typed_links_missing_version_preserved_in_custom() {
+        let input = "\
+typed_links:
+  links:
+    - target: /x.md
+      relation: references
+";
+        let fm = YamlParser::parse(input, 8 * 1024 * 1024)
+            .expect("typed_links without version must not fail the document");
+        assert!(fm.typed_links.is_empty());
+        assert!(fm.custom.contains_key("typed_links"));
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn typed_links_missing_target_preserved_in_custom() {
+        let input = "\
+typed_links:
+  version: 1
+  links:
+    - relation: depends-on
+";
+        let fm = YamlParser::parse(input, 8 * 1024 * 1024)
+            .expect("missing target must be tolerated, not fatal");
+        assert!(fm.typed_links.is_empty());
+        assert!(fm.custom.contains_key("typed_links"));
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn typed_links_not_a_mapping_preserved_in_custom() {
+        let input = "typed_links: oops-not-a-block\n";
+        let fm = YamlParser::parse(input, 8 * 1024 * 1024)
+            .expect("non-mapping typed_links must be tolerated");
+        assert!(fm.typed_links.is_empty());
+        assert!(fm.custom.contains_key("typed_links"));
     }
 }

@@ -6,6 +6,29 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+/// A typed relationship declared in front-matter via the `typed_links` extension.
+///
+/// This is a portable, versioned extension over canonical markdown links.
+/// The format is:
+///
+/// ```yaml
+/// typed_links:
+///   version: 1
+///   links:
+///     - target: path/to/target.md
+///       relation: depends-on
+///       anchor: optional-anchor
+/// ```
+#[derive(Debug, Clone)]
+pub struct TypedLink {
+    /// Repository-relative target path (internal links only).
+    pub target: String,
+    /// Optional anchor fragment.
+    pub anchor: Option<String>,
+    /// Relationship from the documented vocabulary (e.g., "depends-on").
+    pub relation: String,
+}
+
 /// Parsed front-matter metadata from a document.
 #[derive(Debug, Clone)]
 pub struct FrontMatter {
@@ -17,6 +40,11 @@ pub struct FrontMatter {
     pub description: Option<String>,
     /// User-defined tags.
     pub tags: Vec<String>,
+    /// Typed relationships declared in front-matter (`typed_links` extension).
+    /// Populated from the `typed_links` top-level key when `version` is 1
+    /// and the block is well-formed; otherwise preserved verbatim in `custom`
+    /// so unknown versions never cause a parse failure.
+    pub typed_links: Vec<TypedLink>,
     /// Custom front-matter fields not recognized as standard keys.
     pub custom: BTreeMap<String, serde_json::Value>,
     /// Raw YAML content for debugging/re-processing.

@@ -16,6 +16,7 @@ status: published
 ## OKF Specification
 
 - [Open Knowledge Format](https://github.com/open-knowledge-format/spec) — Human-readable, git-versionable knowledge representation
+- [OKC Typed Links Extension](./references/okc-typed-links.md) — Versioned typed relationship layer over OKF §4.1 Extensions / §6.1 cross-linking
 
 ## Key Libraries
 

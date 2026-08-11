@@ -274,6 +274,7 @@ impl McpServer {
                                 target_anchor: link.target_anchor,
                                 external_url: link.external_url,
                                 exists_in_repository: link.exists_in_repository,
+                                relation: link.relation,
                             })
                             .collect()
                     }),
@@ -438,10 +439,10 @@ impl McpServer {
     )]
     async fn get_links(
         &self,
-        Parameters(LinkParams { path }): Parameters<LinkParams>,
+        Parameters(LinkParams { path, relation }): Parameters<LinkParams>,
     ) -> Result<CallToolResult, String> {
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
-        match svc.get_links(&path) {
+        match svc.get_links(&path, relation.as_deref()) {
             Ok(links) => {
                 let links = links
                     .into_iter()
@@ -450,6 +451,7 @@ impl McpServer {
                         target_anchor: l.target_anchor,
                         external_url: l.external_url,
                         exists_in_repository: l.exists_in_repository,
+                        relation: l.relation,
                     })
                     .collect::<Vec<_>>();
                 let legacy_text = serde_json::to_string(&links)
@@ -466,11 +468,15 @@ impl McpServer {
     )]
     async fn get_backlinks(
         &self,
-        Parameters(BacklinkParams { path, limit }): Parameters<BacklinkParams>,
+        Parameters(BacklinkParams {
+            path,
+            limit,
+            relation,
+        }): Parameters<BacklinkParams>,
     ) -> Result<CallToolResult, String> {
         let limit = limit.unwrap_or(50);
         let svc = self.service.lock().unwrap_or_else(|e| e.into_inner());
-        match svc.get_backlinks(&path, limit) {
+        match svc.get_backlinks(&path, limit, relation.as_deref()) {
             Ok(links) => {
                 let links = links
                     .into_iter()
@@ -479,6 +485,7 @@ impl McpServer {
                         target_anchor: l.target_anchor,
                         external_url: l.external_url,
                         exists_in_repository: l.exists_in_repository,
+                        relation: l.relation,
                     })
                     .collect::<Vec<_>>();
                 let legacy_text = serde_json::to_string(&links)

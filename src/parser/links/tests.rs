@@ -278,6 +278,7 @@ fn test_broken_link_warning_and_marked() {
             target_anchor: None,
             is_external: false,
             exists_in_repository: false,
+            relation: None,
         },
         Link {
             raw: "nonexistent.md".to_string(),
@@ -285,6 +286,7 @@ fn test_broken_link_warning_and_marked() {
             target_anchor: None,
             is_external: false,
             exists_in_repository: false,
+            relation: None,
         },
     ];
     let known_files = vec!["metrics/revenue.md".into(), "metrics/costs.md".into()];
@@ -309,6 +311,7 @@ fn test_filter_self_references() {
             target_anchor: None,
             is_external: false,
             exists_in_repository: true,
+            relation: None,
         },
         Link {
             raw: "revenue.md".to_string(),
@@ -316,6 +319,7 @@ fn test_filter_self_references() {
             target_anchor: None,
             is_external: false,
             exists_in_repository: true,
+            relation: None,
         },
         Link {
             raw: "revenue.md#section".to_string(),
@@ -323,6 +327,7 @@ fn test_filter_self_references() {
             target_anchor: Some("section".to_string()),
             is_external: false,
             exists_in_repository: true,
+            relation: None,
         },
     ];
 

@@ -193,6 +193,7 @@ pub fn get_document(
                     target_anchor: row.get(1)?,
                     external_url: row.get(2)?,
                     exists_in_repository: row.get::<_, i32>(3)? != 0,
+                    relation: None,
                 })
             })?
             .map(|r| r.map_err(crate::error::OkfError::from))

@@ -135,6 +135,7 @@ impl LinkResolver {
                     target_anchor,
                     is_external: false,
                     exists_in_repository: exists,
+                    relation: None,
                 }
             })
             .collect()

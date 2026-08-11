@@ -269,6 +269,7 @@ impl RepositoryIndex {
                         target_anchor: l.target_anchor.clone(),
                         is_external: l.external_url.is_some(),
                         exists_in_repository: l.exists_in_repository,
+                        relation: l.relation.clone(),
                     })
                     .collect();
                 gs.store_links(&parsed.path, &links)?;
@@ -365,6 +366,7 @@ impl RepositoryIndex {
                         target_anchor: l.target_anchor.clone(),
                         is_external: l.external_url.is_some(),
                         exists_in_repository: l.exists_in_repository,
+                        relation: l.relation.clone(),
                     })
                     .collect();
                 gs.store_links_tx(tx, &parsed.path, &links)?;

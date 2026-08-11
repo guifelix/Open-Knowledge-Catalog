@@ -6,7 +6,7 @@
 //! - Link validation and circular reference detection
 //! - Thread-safe access via connection pool (r2d2)
 
-use crate::index::traits::{GraphStore, Result};
+use crate::index::traits::{relation_condition, GraphStore, Result};
 use crate::model::document::{Link, LinkInfo, ValidationIssue};
 use crate::model::graph::{GraphEdge, TraverseNode, TraverseResponse};
 use rusqlite::{params, OptionalExtension, Transaction};
@@ -45,6 +45,7 @@ impl GraphStore for SqliteGraphStore {
                 target_anchor TEXT,
                 external_url TEXT,
                 exists_in_repository INTEGER NOT NULL DEFAULT 1,
+                relation TEXT,
                 FOREIGN KEY (source_document_id) REFERENCES documents(id) ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS idx_links_source ON links(source_document_id);
@@ -77,8 +78,8 @@ impl GraphStore for SqliteGraphStore {
         for link in links {
             tx.execute(
                 r#"
-                INSERT INTO links (source_document_id, target_path, target_anchor, external_url, exists_in_repository)
-                VALUES (?1, ?2, ?3, ?4, ?5)
+                INSERT INTO links (source_document_id, target_path, target_anchor, external_url, exists_in_repository, relation)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                 "#,
                 params![
                     source_id,
@@ -86,6 +87,7 @@ impl GraphStore for SqliteGraphStore {
                     link.target_anchor.clone(),
                     if link.is_external { Some(&link.target) } else { None },
                     if link.is_external { 1 } else { link.exists_in_repository as i32 },
+                    &link.relation,
                 ],
             )?;
         }
@@ -131,8 +133,8 @@ impl GraphStore for SqliteGraphStore {
         for link in links {
             tx.execute(
                 r#"
-                INSERT INTO links (source_document_id, target_path, target_anchor, external_url, exists_in_repository)
-                VALUES (?1, ?2, ?3, ?4, ?5)
+                INSERT INTO links (source_document_id, target_path, target_anchor, external_url, exists_in_repository, relation)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                 "#,
                 params![
                     source_id,
@@ -140,6 +142,7 @@ impl GraphStore for SqliteGraphStore {
                     link.target_anchor.clone(),
                     if link.is_external { Some(&link.target) } else { None },
                     if link.is_external { 1 } else { link.exists_in_repository as i32 },
+                    &link.relation,
                 ],
             )?;
         }
@@ -150,7 +153,7 @@ impl GraphStore for SqliteGraphStore {
         let conn = self.get_conn()?;
         let mut stmt = conn.prepare(
             r#"
-            SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository
+            SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository, l.relation
             FROM links l
             JOIN documents d ON d.id = l.source_document_id
             WHERE d.path = ?1
@@ -164,6 +167,7 @@ impl GraphStore for SqliteGraphStore {
                     target_anchor: row.get(1)?,
                     external_url: row.get(2)?,
                     exists_in_repository: row.get::<_, i32>(3)? != 0,
+                    relation: row.get(4)?,
                 })
             })?
             .filter_map(|r| r.ok())
@@ -176,7 +180,7 @@ impl GraphStore for SqliteGraphStore {
         let conn = self.get_conn()?;
         let mut stmt = conn.prepare(
             r#"
-            SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository
+            SELECT l.target_path, l.target_anchor, l.external_url, l.exists_in_repository, l.relation
             FROM links l
             WHERE l.target_path = ?1
             LIMIT ?2
@@ -190,6 +194,7 @@ impl GraphStore for SqliteGraphStore {
                     target_anchor: row.get(1)?,
                     external_url: row.get(2)?,
                     exists_in_repository: row.get::<_, i32>(3)? != 0,
+                    relation: row.get(4)?,
                 })
             })?
             .filter_map(|r| r.ok())
@@ -201,7 +206,7 @@ impl GraphStore for SqliteGraphStore {
     fn traverse(
         &self,
         start: &str,
-        _relations: &[String],
+        relations: &[String],
         max_depth: usize,
         max_nodes: usize,
     ) -> Result<TraverseResponse> {
@@ -211,6 +216,8 @@ impl GraphStore for SqliteGraphStore {
         let mut edges = Vec::new();
         let mut queue = VecDeque::new();
         queue.push_back((start.to_string(), 0usize));
+
+        let relation_filter = relation_condition(relations);
 
         while let Some((current_path, depth)) = queue.pop_front() {
             if visited.len() >= max_nodes {
@@ -246,15 +253,16 @@ impl GraphStore for SqliteGraphStore {
                 continue;
             }
 
-            let mut stmt = conn.prepare(
+            let forward_sql = format!(
                 r#"
                 SELECT l.target_path
                 FROM links l
                 JOIN documents d ON d.id = l.source_document_id
-                WHERE d.path = ?1 AND l.target_path IS NOT NULL AND l.target_path != ''
+                WHERE d.path = ?1 AND l.target_path IS NOT NULL AND l.target_path != '' {relation_filter}
                 LIMIT ?2
-                "#,
-            )?;
+                "#
+            );
+            let mut stmt = conn.prepare(&forward_sql)?;
 
             if let Ok(rows) = stmt.query_map(
                 params![current_path, (max_nodes - visited.len()) as i64],
@@ -272,15 +280,16 @@ impl GraphStore for SqliteGraphStore {
                 }
             }
 
-            let mut stmt = conn.prepare(
+            let backlink_sql = format!(
                 r#"
                 SELECT d.path
                 FROM links l
                 JOIN documents d ON d.id = l.source_document_id
-                WHERE l.target_path = ?1
+                WHERE l.target_path = ?1 {relation_filter}
                 LIMIT ?2
-                "#,
-            )?;
+                "#
+            );
+            let mut stmt = conn.prepare(&backlink_sql)?;
             let rows: Vec<String> = stmt
                 .query_map(
                     params![current_path, (max_nodes - visited.len()) as i64],
@@ -329,6 +338,39 @@ impl GraphStore for SqliteGraphStore {
                 severity: "warning".to_string(),
                 category: "broken_link".to_string(),
                 message: format!("Broken internal link to '{}'", row.get::<_, String>(1)?),
+                line: None,
+            })
+        })? {
+            issues.push(row?);
+        }
+
+        // Typed-link conflicts: the same source targets the same path both as
+        // an untyped Markdown edge (relation IS NULL) and as a typed edge. Both
+        // edges are retained as separate rows; the deterministic resolution rule
+        // is that relation-filtered queries isolate each edge, so consumers
+        // disambiguate by filtering. Emitted as a portability diagnostic rather
+        // than dropping or overriding either edge.
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT d.path, l.target_path
+            FROM links l
+            JOIN documents d ON d.id = l.source_document_id
+            WHERE l.target_path IS NOT NULL
+            GROUP BY d.path, l.target_path
+            HAVING SUM(CASE WHEN l.relation IS NULL THEN 1 ELSE 0 END) > 0
+               AND SUM(CASE WHEN l.relation IS NOT NULL THEN 1 ELSE 0 END) > 0
+            "#,
+        )?;
+        for row in stmt.query_map([], |row| {
+            Ok(ValidationIssue {
+                path: row.get(0)?,
+                severity: "warning".to_string(),
+                category: "typed_link_conflict".to_string(),
+                message: format!(
+                    "Target '{}' is declared both as a Markdown link and a typed edge; \
+                     both are retained — filter by relation to resolve",
+                    row.get::<_, String>(1)?
+                ),
                 line: None,
             })
         })? {

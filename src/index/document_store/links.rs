@@ -13,8 +13,8 @@ pub fn insert_links(conn: &Connection, doc_id: i64, links: &[LinkInfo]) -> Resul
         let is_external = link.external_url.is_some();
         conn.execute(
             r#"
-            INSERT INTO links (source_document_id, target_path, target_anchor, external_url, exists_in_repository)
-            VALUES (?1, ?2, ?3, ?4, ?5)
+            INSERT INTO links (source_document_id, target_path, target_anchor, external_url, exists_in_repository, relation)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             "#,
             params![
                 doc_id,
@@ -22,6 +22,7 @@ pub fn insert_links(conn: &Connection, doc_id: i64, links: &[LinkInfo]) -> Resul
                 link.target_anchor.clone(),
                 if is_external { link.target_path.clone() } else { link.external_url.clone() },
                 if is_external { 1 } else { link.exists_in_repository as i32 },
+                &link.relation,
             ],
         )?;
     }
@@ -37,8 +38,8 @@ pub fn insert_links_tx(tx: &Transaction, doc_id: i64, links: &[LinkInfo]) -> Res
         let is_external = link.external_url.is_some();
         tx.execute(
             r#"
-            INSERT INTO links (source_document_id, target_path, target_anchor, external_url, exists_in_repository)
-            VALUES (?1, ?2, ?3, ?4, ?5)
+            INSERT INTO links (source_document_id, target_path, target_anchor, external_url, exists_in_repository, relation)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             "#,
             params![
                 doc_id,
@@ -46,6 +47,7 @@ pub fn insert_links_tx(tx: &Transaction, doc_id: i64, links: &[LinkInfo]) -> Res
                 link.target_anchor.clone(),
                 if is_external { link.target_path.clone() } else { link.external_url.clone() },
                 if is_external { 1 } else { link.exists_in_repository as i32 },
+                &link.relation,
             ],
         )?;
     }
@@ -54,7 +56,7 @@ pub fn insert_links_tx(tx: &Transaction, doc_id: i64, links: &[LinkInfo]) -> Res
 
 pub fn get_links(conn: &Connection, doc_id: i64) -> Result<Vec<LinkInfo>> {
     let mut stmt = conn.prepare(
-        "SELECT target_path, target_anchor, external_url, exists_in_repository FROM links WHERE source_document_id = ?1"
+        "SELECT target_path, target_anchor, external_url, exists_in_repository, relation FROM links WHERE source_document_id = ?1"
     )?;
     let links = stmt
         .query_map(params![doc_id], |row| {
@@ -63,6 +65,7 @@ pub fn get_links(conn: &Connection, doc_id: i64) -> Result<Vec<LinkInfo>> {
                 target_anchor: row.get(1)?,
                 external_url: row.get(2)?,
                 exists_in_repository: row.get::<_, i32>(3)? != 0,
+                relation: row.get(4)?,
             })
         })?
         .filter_map(|r| r.ok())

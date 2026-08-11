@@ -199,7 +199,7 @@ fn test_relationship_reasoning() {
 
     // Get links from monthly revenue
     let links = service
-        .get_links("metrics/monthly-revenue.md")
+        .get_links("metrics/monthly-revenue.md", None)
         .expect("get links");
 
     // Should link to customer-orders dataset
@@ -434,6 +434,367 @@ fn test_circular_links_handled() {
 
     // Should not exceed max nodes
     assert!(traverse.nodes.len() <= 50);
+}
+
+#[test]
+fn test_traverse_filters_by_relation() {
+    let repo = TempDir::new().expect("temp dir for typed links");
+    std::fs::create_dir_all(repo.path().join("docs")).expect("create docs dir");
+
+    // parent -> child via "depends-on", parent -> other via plain markdown link
+    std::fs::write(
+        repo.path().join("docs/parent.md"),
+        r#"---
+typed_links:
+  version: 1
+  links:
+    - target: "docs/child.md"
+      relation: "depends-on"
+---
+# Parent
+
+See [Other](/docs/other.md).
+"#,
+    )
+    .expect("write parent");
+    std::fs::write(
+        repo.path().join("docs/child.md"),
+        "# Child\n\nChild body.\n",
+    )
+    .expect("write child");
+    std::fs::write(
+        repo.path().join("docs/other.md"),
+        "# Other\n\nOther body.\n",
+    )
+    .expect("write other");
+
+    let config = mkconfig(&repo);
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
+
+    // Traversing with only "depends-on" should reach child but not other
+    let depends = service
+        .traverse("docs/parent.md", &["depends-on".to_string()], 2, 50)
+        .expect("traverse depends-on");
+    let paths: Vec<_> = depends.nodes.iter().map(|n| n.path.clone()).collect();
+    assert!(paths.contains(&"docs/child.md".to_string()));
+    assert!(
+        !paths.contains(&"docs/other.md".to_string()),
+        "plain markdown links must not appear under a depends-on filter"
+    );
+
+    // Traversing with only "links_to" should reach other (markdown) but not child
+    let links_to = service
+        .traverse("docs/parent.md", &["links_to".to_string()], 2, 50)
+        .expect("traverse links_to");
+    let paths: Vec<_> = links_to.nodes.iter().map(|n| n.path.clone()).collect();
+    assert!(paths.contains(&"docs/other.md".to_string()));
+    assert!(
+        !paths.contains(&"docs/child.md".to_string()),
+        "depends-on typed link must not appear under a links_to filter"
+    );
+
+    // No filter should reach both
+    let all = service
+        .traverse("docs/parent.md", &[], 2, 50)
+        .expect("traverse no filter");
+    let paths: Vec<_> = all.nodes.iter().map(|n| n.path.clone()).collect();
+    assert!(paths.contains(&"docs/child.md".to_string()));
+    assert!(paths.contains(&"docs/other.md".to_string()));
+}
+
+#[test]
+fn test_get_links_filters_by_relation() {
+    let repo = TempDir::new().expect("temp dir for typed links");
+    std::fs::create_dir_all(repo.path().join("docs")).expect("create docs dir");
+
+    std::fs::write(
+        repo.path().join("docs/parent.md"),
+        r#"---
+typed_links:
+  version: 1
+  links:
+    - target: "docs/child.md"
+      relation: "depends-on"
+    - target: "docs/sibling.md"
+      relation: "related-to"
+---
+# Parent
+
+See [Other](/docs/other.md).
+"#,
+    )
+    .expect("write parent");
+    std::fs::write(
+        repo.path().join("docs/child.md"),
+        "# Child\n\nChild body.\n",
+    )
+    .expect("write child");
+    std::fs::write(
+        repo.path().join("docs/sibling.md"),
+        "# Sibling\n\nSibling body.\n",
+    )
+    .expect("write sibling");
+    std::fs::write(
+        repo.path().join("docs/other.md"),
+        "# Other\n\nOther body.\n",
+    )
+    .expect("write other");
+
+    let config = mkconfig(&repo);
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
+
+    // Unfiltered: both typed links and the markdown link are returned.
+    let all = service
+        .get_links("docs/parent.md", None)
+        .expect("get all links");
+    let all_targets: Vec<_> = all
+        .iter()
+        .filter_map(|l| l.target_path.as_deref())
+        .collect();
+    assert!(all_targets.contains(&"docs/child.md"));
+    assert!(all_targets.contains(&"docs/sibling.md"));
+    assert!(all_targets.contains(&"docs/other.md"));
+
+    // Filtered by "depends-on": only the typed child edge, relation populated.
+    let depends = service
+        .get_links("docs/parent.md", Some("depends-on"))
+        .expect("get depends-on links");
+    assert_eq!(depends.len(), 1);
+    assert_eq!(depends[0].target_path.as_deref(), Some("docs/child.md"));
+    assert_eq!(depends[0].relation.as_deref(), Some("depends-on"));
+
+    // Filtered by "related-to": only the sibling edge.
+    let related = service
+        .get_links("docs/parent.md", Some("related-to"))
+        .expect("get related-to links");
+    assert_eq!(related.len(), 1);
+    assert_eq!(related[0].target_path.as_deref(), Some("docs/sibling.md"));
+
+    // A relation with no matching edges returns an empty list.
+    let none = service
+        .get_links("docs/parent.md", Some("references"))
+        .expect("get references links");
+    assert!(none.is_empty());
+
+    // Backlinks to child: only the "depends-on" edge points at it.
+    let child_backlinks = service
+        .get_backlinks("docs/child.md", 50, Some("depends-on"))
+        .expect("get depends-on backlinks for child");
+    assert_eq!(child_backlinks.len(), 1);
+    assert_eq!(child_backlinks[0].relation.as_deref(), Some("depends-on"));
+
+    // Backlinks to child filtered by an absent relation are empty.
+    let child_none = service
+        .get_backlinks("docs/child.md", 50, Some("references"))
+        .expect("get references backlinks for child");
+    assert!(child_none.is_empty());
+
+    // Unfiltered backlinks to child still include the typed edge.
+    let child_all = service
+        .get_backlinks("docs/child.md", 50, None)
+        .expect("get all backlinks for child");
+    assert_eq!(child_all.len(), 1);
+
+    // Backlinks to other (markdown target) filtered by a typed relation are
+    // empty, since the markdown edge carries no relation.
+    let other_typed = service
+        .get_backlinks("docs/other.md", 50, Some("depends-on"))
+        .expect("get depends-on backlinks for other");
+    assert!(other_typed.is_empty());
+    let other_all = service
+        .get_backlinks("docs/other.md", 50, None)
+        .expect("get all backlinks for other");
+    assert_eq!(other_all.len(), 1);
+    assert_eq!(other_all[0].relation.as_deref(), None);
+}
+
+#[test]
+fn test_validate_reports_typed_link_conflict() {
+    let repo = TempDir::new().expect("temp dir for typed link conflict");
+    std::fs::create_dir_all(repo.path().join("docs")).expect("create docs dir");
+
+    // parent targets both a typed edge (depends-on) and a Markdown link at child.
+    std::fs::write(
+        repo.path().join("docs/parent.md"),
+        r#"---
+typed_links:
+  version: 1
+  links:
+    - target: "docs/child.md"
+      relation: "depends-on"
+---
+# Parent
+
+See [Child](/docs/child.md).
+"#,
+    )
+    .expect("write parent");
+    std::fs::write(
+        repo.path().join("docs/child.md"),
+        "# Child\n\nChild body.\n",
+    )
+    .expect("write child");
+    // Only a Markdown link (no conflict) toward other.
+    std::fs::write(
+        repo.path().join("docs/plain.md"),
+        "# Plain\n\nSee [Other](/docs/other.md).\n",
+    )
+    .expect("write plain");
+    std::fs::write(
+        repo.path().join("docs/other.md"),
+        "# Other\n\nOther body.\n",
+    )
+    .expect("write other");
+
+    let config = mkconfig(&repo);
+    let mut service = OkcService::open(&config).expect("open service");
+    service.scan().expect("scan");
+
+    let issues = service.validate().expect("validate");
+    let conflicts: Vec<_> = issues
+        .iter()
+        .filter(|i| i.category == "typed_link_conflict")
+        .collect();
+
+    // Exactly one conflict (parent -> child). The sibling that only has a
+    // Markdown edge must not be flagged.
+    assert_eq!(conflicts.len(), 1, "one typed/untyped conflict expected");
+    assert_eq!(conflicts[0].path, "docs/parent.md");
+    assert_eq!(conflicts[0].severity, "warning");
+    assert!(
+        conflicts[0].message.contains("docs/child.md"),
+        "message names the conflicting target"
+    );
+
+    // Both edges remain queryable and the resolution rule holds: filtering by
+    // relation isolates the typed edge, unfiltered returns both.
+    let depends = service
+        .get_links("docs/parent.md", Some("depends-on"))
+        .expect("get depends-on links");
+    assert_eq!(depends.len(), 1);
+    assert_eq!(depends[0].target_path.as_deref(), Some("docs/child.md"));
+
+    let all = service
+        .get_links("docs/parent.md", None)
+        .expect("get all links");
+    let targets: Vec<_> = all
+        .iter()
+        .filter_map(|l| l.target_path.as_deref())
+        .collect();
+    assert_eq!(
+        targets.iter().filter(|t| **t == "docs/child.md").count(),
+        2,
+        "typed and untyped edges both retained"
+    );
+}
+
+#[test]
+fn test_rescan_does_not_duplicate_typed_links() {
+    let repo = TempDir::new().expect("temp dir for typed link rescan");
+    std::fs::create_dir_all(repo.path().join("docs")).expect("create docs dir");
+
+    std::fs::write(
+        repo.path().join("docs/parent.md"),
+        r#"---
+typed_links:
+  version: 1
+  links:
+    - target: "docs/child.md"
+      relation: "depends-on"
+---
+# Parent
+
+See [Other](/docs/other.md).
+"#,
+    )
+    .expect("write parent");
+    std::fs::write(
+        repo.path().join("docs/child.md"),
+        "# Child\n\nChild body.\n",
+    )
+    .expect("write child");
+    std::fs::write(
+        repo.path().join("docs/other.md"),
+        "# Other\n\nOther body.\n",
+    )
+    .expect("write other");
+
+    let config = mkconfig(&repo);
+    let mut service = OkcService::open(&config).expect("open service");
+
+    service.scan().expect("first scan");
+    let first = service
+        .get_links("docs/parent.md", None)
+        .expect("get links after first scan");
+    let first_targets: Vec<_> = first
+        .iter()
+        .filter_map(|l| l.target_path.as_deref())
+        .collect();
+    assert!(first_targets.contains(&"docs/child.md"));
+    assert!(first_targets.contains(&"docs/other.md"));
+    assert_eq!(
+        first
+            .iter()
+            .filter(|l| l.relation.as_deref() == Some("depends-on"))
+            .count(),
+        1
+    );
+
+    // A second rescan of the same content must not duplicate any edges.
+    service.scan().expect("rescan");
+    let second = service
+        .get_links("docs/parent.md", None)
+        .expect("get links after rescan");
+    assert_eq!(
+        second.len(),
+        first.len(),
+        "rescan must not add duplicate links"
+    );
+    let second_child: Vec<_> = second
+        .iter()
+        .filter(|l| l.target_path.as_deref() == Some("docs/child.md"))
+        .collect();
+    assert_eq!(second_child.len(), 1, "typed edge must not be duplicated");
+    assert_eq!(
+        second_child[0].relation.as_deref(),
+        Some("depends-on"),
+        "typed relation preserved across rescan"
+    );
+
+    // Editing the doc changes the typed relation: the rewritten scan must
+    // replace the old edge (depends-on) without keeping stale rows.
+    std::fs::write(
+        repo.path().join("docs/parent.md"),
+        r#"---
+typed_links:
+  version: 1
+  links:
+    - target: "docs/child.md"
+      relation: "imports"
+---
+# Parent
+"#,
+    )
+    .expect("rewrite parent");
+    service.scan().expect("scan after edit");
+    let after_edit = service
+        .get_links("docs/parent.md", None)
+        .expect("get links after edit");
+    assert_eq!(
+        after_edit.len(),
+        1,
+        "editing the doc must produce an exact rewrite, not an accumulation"
+    );
+    assert_eq!(after_edit[0].target_path.as_deref(), Some("docs/child.md"));
+    assert_eq!(after_edit[0].relation.as_deref(), Some("imports"));
+    assert!(
+        after_edit
+            .iter()
+            .all(|l| l.relation.as_deref() != Some("depends-on")),
+        "stale depends-on edge must be removed after rewrite"
+    );
 }
 
 #[test]
@@ -820,7 +1181,7 @@ fn test_backlinks() {
     service.scan().expect("scan");
 
     let _backlinks = service
-        .get_backlinks("metrics/monthly-revenue.md", 50)
+        .get_backlinks("metrics/monthly-revenue.md", 50, None)
         .expect("get backlinks");
 
     // Should find backlinks from datasets that link to it
